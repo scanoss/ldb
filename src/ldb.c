@@ -35,7 +35,6 @@
 #include "ldb.h"
 #include "config.c"
 #include "pointer.c"
-#include "convert.c"
 #include "file.c"
 #include "hex.c"  
 #include "lock.c"
