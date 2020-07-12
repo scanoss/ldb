@@ -1,0 +1,21 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.2",
+  "version": 1,
+  "serialNumber": "scanner:1594067462",
+  "components": [
+    {
+      "type": "application",
+      "publisher": "scanoss",
+      "group": "scanoss",
+      "name": "ldb",
+      "url": "https://github.com/scanoss/ldb",
+      "licenses": [
+        {
+            "id": "GPL-2.0-or-later"
+          }
+      ]
+    }
+  ]
+}
+

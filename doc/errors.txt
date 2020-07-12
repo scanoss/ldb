@@ -1,0 +1,24 @@
+E050 Cannot create root LDB directory
+E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)
+E052 Concurrent ldb writing is not supported. (check /dev/shm/ldb.lock)
+E053 Data record size exceeded
+E054 Data corruption
+E055 Data corruption
+E056 Data sector corrupted, with %lu below map_size
+E057 Map location 
+E059 LDB root directory %s is not accessible
+E060 Table name format should be dbname/tablename
+E061 db/table name is too long
+E062 Database does not exist
+E063 Table does not exist
+E064 Invalid characters or name is too long
+E065 Cannot create
+E066 Syntax error
+E067 Command not implemented
+E068 Database already exists
+E069 Table already exists
+E070 Cannot open LDB root directory
+E071 Key length cannot be less than 32 bits
+E072 Cannot access table
+E073 Provided key is longer than table key
+E074 Corrupted node
