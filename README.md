@@ -18,44 +18,46 @@ Some of the features of the LLDB are:
 * C library for native development
 * LDB shell allows interaction with external languages
 
-## LDB Shell
+## LDB Shell Commands
 
-* create database DBNAME
+```
+create database DBNAME
     Creates an empty database
 
-* create table DBNAME/TABLENAME keylen N reclen N
+create table DBNAME/TABLENAME keylen N reclen N
     Creates an empty table in the given database with
     the specified key length (>= 4) and record length (0=variable)
 
-* show databases
+show databases
     Lists databases
 
-* show tables from DBNAME
+show tables from DBNAME
     Lists tables from given database
 
-* insert into DBNAME/TABLENAME key KEY hex DATA
+insert into DBNAME/TABLENAME key KEY hex DATA
     Inserts data (hex) into given db/table for the given hex key
 
-* insert into DBNAME/TABLENAME key KEY ascii DATA
+insert into DBNAME/TABLENAME key KEY ascii DATA
     Inserts data (ASCII) into db/table for the given hex key
 
-* select from DBNAME/TABLENAME key KEY
+select from DBNAME/TABLENAME key KEY
     Retrieves all records from db/table for the given hex key (hexdump output)
 
-* select from DBNAME/TABLENAME key KEY ascii
+select from DBNAME/TABLENAME key KEY ascii
     Retrieves all records from db/table for the given hex key (ascii output)
 
-* delete KEY from DBNAME/TABLENAME
+delete KEY from DBNAME/TABLENAME
     Deletes all records for the given hex key in the db/table
 
-* unlink list from DBNAME/TABLENAME key KEY
+unlink list from DBNAME/TABLENAME key KEY
     Unlinks the given list (32-bit KEY) from the sector map
 
-* drop DBNAME/TABLENAME
+drop DBNAME/TABLENAME
     Erases the table
 
-* drop DBNAME
+drop DBNAME
     Erases the database
+```
 
 # Using the shell
 
@@ -77,8 +79,8 @@ THIS_IS_A_TEST
 
 The LDB is released under the GPL 2.0 license. See the LICENSE.txt file for more infomation.
  
-Copyright (C) 2018-2020 SCANOSS LTD.
-http://scanoss.co.uk
+Copyright (C) 2018-2020 SCANOSS.COM
+http://scanoss.com
 
 
 
