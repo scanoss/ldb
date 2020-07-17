@@ -4,7 +4,7 @@ The LDB (Linked-list database) is a headless database management system focused 
 
 # Features
 
-Some of the features of the LLDB are:
+Some of the features of the LDB are:
  
 * Single, fixed size, numeric key (32-bit)
 * Single-field records
@@ -77,7 +77,7 @@ THIS_IS_A_TEST
 
 # License
 
-The LDB is released under the GPL 2.0 license. See the LICENSE.txt file for more infomation.
+The LDB is released under the GPL 2.0 license. See the LICENSE file for more infomation.
  
 Copyright (C) 2018-2020 SCANOSS.COM
 http://scanoss.com
