@@ -20,8 +20,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "blacklist_ext.h"
-
 int ldb_collate_cmp(const void * a, const void * b)
 {
 	const uint8_t *va = a;
