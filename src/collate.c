@@ -91,7 +91,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		/* If record is duplicated, skip it */
 		if (rec_size == last_rec_size) if (!memcmp(data, last_data, rec_size)) continue;
 
-		/* Update last record checksum */
+		/* Update last record */
 		memcpy(last_data, data, rec_size);
 		last_rec_size = rec_size;
 
@@ -108,10 +108,9 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 			rec_group_size   = 0;
 			new_subkey = true;
 		}
-		else
-		{
-			new_subkey = (memcmp(rec_key, last_key, out_table.key_ln) != 0);
-		}
+
+		/* Check if key is different than the last one */
+		if (!new_subkey) new_subkey = (memcmp(rec_key, last_key, collate->table_key_ln) != 0);
 
 		/* New file id, start a new record group */
 		if (new_subkey)
@@ -121,7 +120,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 			rec_group_start  = buffer_ptr;
 
 			/* K: Add remaining part of key to buffer */
-			memcpy (buffer + buffer_ptr, rec_key + LDB_KEY_LN, subkey_ln);
+			memcpy(buffer + buffer_ptr, rec_key + LDB_KEY_LN, subkey_ln);
 			buffer_ptr += subkey_ln;
 
 			/* GS: Add record group size (zeroed) */
@@ -130,7 +129,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 			buffer_ptr += 2;
 
 			/* Update last_key */
-			memcpy (last_key, rec_key, collate->table_key_ln);
+			memcpy(last_key, rec_key, collate->table_key_ln);
 
 			/* Update variables */
 			rec_group_size   = 0;
@@ -146,7 +145,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		rec_group_size += (2 + rec_size);
 	}
 
-	/* Flush buffer */
+	/* Write buffer to disk */
 	if (rec_group_size > 0) uint16_write(buffer + rec_group_start + subkey_ln, rec_group_size);
 	if (buffer_ptr) ldb_node_write(out_table, new_sector, last_key, buffer, buffer_ptr, 0);
 
@@ -333,7 +332,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec
 			collate.tmp_sector = ldb_open(tmp_table, &k0, "r+");
 
 			/* Read each one of the (256 ^ 3) list pointers from the map */
-			uint8_t k[4];
+			uint8_t k[LDB_KEY_LN];
 			k[0] = k0;
 			for (int k1 = 0; k1 < 256; k1++)
 				for (int k2 = 0; k2 < 256; k2++)
