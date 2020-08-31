@@ -124,9 +124,9 @@ void ldb_command_collate(char *command)
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
 			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
 		else if (max < ldbtable.key_ln)
-			printf("E076 Sort key cannot be smaller than table key\n");
+			printf("E076 Max record length cannot be smaller than table key\n");
 		else
-			ldb_collate(ldbtable, tmptable, max);
+			ldb_collate(ldbtable, tmptable, max, false);
 	}
 
 	/* Unlock DB */
@@ -134,6 +134,48 @@ void ldb_command_collate(char *command)
 
 	/* Free memory */
 	free(dbtable);
+}
+
+void ldb_command_merge(char *command)
+{
+	/* Lock DB */
+	ldb_lock();
+
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(2, command);
+	char *totable = ldb_extract_word(4, command);
+	char *max_ln  = ldb_extract_word(6, command);
+	int max = atoi(max_ln);
+	free(max_ln);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		struct ldb_table outtable = ldb_read_cfg(totable);
+
+		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		else if (max < ldbtable.key_ln)
+			printf("E076 Max record length cannot be smaller than table key\n");
+		else if (ldbtable.key_ln != outtable.key_ln)
+			printf("E076 Merge requires tables with equal key length\n");
+		else if (ldbtable.rec_ln != outtable.rec_ln)
+			printf("E076 Merge requires tables with equal record types\n");
+		else
+		{
+			outtable.tmp = false;
+			outtable.key_ln = LDB_KEY_LN;
+			ldb_collate(ldbtable, outtable, max, true);
+		}
+	}
+
+	/* Unlock DB */
+	ldb_unlock ();
+
+	/* Free memory */
+	free(dbtable);
+	free(totable);
 }
 
 void ldb_command_unlink_list(char *command)

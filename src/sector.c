@@ -160,6 +160,22 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 	ldb_error("E074 Error replacing sector with .tmp");
 }
 
+/* Erases sector.ldb */
+void ldb_sector_erase(struct ldb_table table, uint8_t *key)
+{
+	char sector_ldb[LDB_MAX_PATH] = "\0";
+	sprintf(sector_ldb, "%s/%s/%s/%02x.ldb", ldb_root, table.db, table.table, key[0]);
+
+	if (!ldb_file_exists(sector_ldb))
+	{
+		ldb_error("E074 Cannot erase sector");
+	}
+
+	if (!unlink(sector_ldb)) return;
+
+	ldb_error("E074 Error erasing sector");
+}
+
 /* Returns the sector path for a given table_path and key */
 char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp)
 {

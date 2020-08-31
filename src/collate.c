@@ -37,7 +37,7 @@ int ldb_collate_cmp(const void * a, const void * b)
 
 bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 {
-	FILE * new_sector = collate->tmp_sector;
+	FILE * new_sector = collate->out_sector;
 	int max_per_node = (LDB_MAX_REC_LN - collate->rec_width) / collate->rec_width;
 
 	struct ldb_table out_table = collate->out_table;
@@ -64,10 +64,10 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 
 bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 {
-	FILE * new_sector = collate->tmp_sector;
+	FILE * new_sector = collate->out_sector;
 	uint8_t *buffer = malloc(LDB_MAX_NODE_LN);
 	uint16_t buffer_ptr = 0;
-	uint8_t *rec_key  = calloc(collate->table_key_ln,1);
+	uint8_t *rec_key;
 	uint8_t *last_key = calloc(collate->table_key_ln,1);
 	uint16_t rec_group_start = 0;
 	uint16_t rec_group_size = 0;
@@ -224,6 +224,8 @@ bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint
 
 void ldb_collate_sort(struct ldb_collate_data *collate, int subkey_ln)
 {
+		if (collate->merge) return;
+
 		/* Sort records */
 		size_t items = 0;
 		size_t size = 0;
@@ -288,7 +290,7 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	return false;
 }
 
-void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln)
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge)
 {
 	/* Read each DB sector */
 	uint8_t k0 = 0;
@@ -309,9 +311,10 @@ void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec
 			collate.table_rec_ln = table.rec_ln;
 			collate.max_rec_ln = max_rec_ln;
 			collate.rec_count = 0;
-			collate.out_table = tmp_table;
+			collate.out_table = out_table;
 			memcpy(collate.last_key, "\0\0\0\0", 4);
 			collate.last_report = 0;
+			collate.merge = merge;
 
 			if (collate.table_rec_ln)
 			{
@@ -328,8 +331,8 @@ void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec
 			/* Set global cmp width (for qsort) */
 			ldb_cmp_width = max_rec_ln;
 
-			/* Open tmp (out) sector */
-			collate.tmp_sector = ldb_open(tmp_table, &k0, "r+");
+			/* Open (out) sector */
+			collate.out_sector = ldb_open(out_table, &k0, "r+");
 
 			/* Read each one of the (256 ^ 3) list pointers from the map */
 			uint8_t k[LDB_KEY_LN];
@@ -358,9 +361,12 @@ void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec
 
 			total_records += collate.rec_count;
 
-			/* Close .tmp sector and update .ldb */
-			fclose(collate.tmp_sector);
-			ldb_sector_update(tmp_table, k);
+			/* Close .out sector */
+			fclose(collate.out_sector);
+
+			/* Move or erase sector */
+			if (collate.merge) ldb_sector_erase(table, k);
+			else ldb_sector_update(out_table, k);
 
 			free(collate.data);
 			free(sector);

@@ -63,8 +63,7 @@ char *ldb_commands[] =
 	"select from {ascii} key {hex}",
 	"delete from {ascii} key {hex}",
 	"collate {ascii} max {ascii}",
-	"drop database {ascii}",
-	"drop table {ascii}",
+	"merge {ascii} into {ascii} max {ascii}",
 	"version",
 	"unlink list from {ascii} key {hex}"
 };

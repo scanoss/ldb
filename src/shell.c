@@ -60,12 +60,10 @@ void help()
 	printf("    Deletes all records for the given hex key in the db/table\n\n");
 	printf("collate DBNAME/TABLENAME max LENGTH\n");
 	printf("    Collates all lists in a table, removing duplicates and records greater than LENGTH bytes\n\n");
+	printf("merge DBNAME/TABLENAME1 into DBNAME/TABLENAME2 max LENGTH\n");
+	printf("    Merges tables erasing tablename1 when done. Tables must have the same configuration\n\n");
 	printf("unlink list from DBNAME/TABLENAME key KEY\n");
 	printf("    Unlinks the given list (32-bit KEY) from the sector map\n\n");
-	printf("drop DBNAME/TABLENAME\n");
-	printf("    Erases the table\n\n");
-	printf("drop DBNAME\n");
-	printf("    Erases the database\n\n");
 
 }
 
@@ -133,6 +131,10 @@ bool execute(char *command)
 
 		case COLLATE:
 			ldb_command_collate(command);
+			break;
+
+		case MERGE:
+			ldb_command_merge(command);
 			break;
 
 		case VERSION:
