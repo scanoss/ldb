@@ -5,7 +5,7 @@ SHELLFLAGS=-O -g -Wall -lm -lpthread
 all: lib shell
 
 lib: src/ldb.c src/ldb.h 
-	@$(CC) $(CFLAGS) -c src/ldb.c 
+	@$(CC) $(CCFLAGS) -c src/ldb.c 
 	@echo Library is built
 
 shell: src/shell.c src/command.c 
