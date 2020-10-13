@@ -1,5 +1,5 @@
 CC=gcc
-CCFLAGS=-O -g -Wall
+CCFLAGS=-O -g -Wall -std=gnu99
 SHELLFLAGS=-O -g -Wall -lm -lpthread
 
 all: lib shell
