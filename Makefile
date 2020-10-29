@@ -2,7 +2,7 @@ CC=gcc
 CCFLAGS=-O -g -Wall
 SHELLFLAGS=-O -g -Wall -lm -lpthread
 
-all: lib shell
+all: clean lib shell
 
 lib: src/ldb.c src/ldb.h 
 	@$(CC) $(CFLAGS) -c src/ldb.c 
@@ -20,6 +20,7 @@ static: src/ldb.c src/ldb.h src/shell.c
 distclean: clean
 
 clean:
+	@echo Cleaning...
 	@rm -f *.o *.a ldb
 
 install:

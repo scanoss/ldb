@@ -46,17 +46,23 @@ select from DBNAME/TABLENAME key KEY
 select from DBNAME/TABLENAME key KEY ascii
     Retrieves all records from db/table for the given hex key (ascii output)
 
+select from DBNAME/TABLENAME key KEY csv hex N
+    Retrieves all records from db/table for the given hex key (csv output, with first N bytes in hex)
+
 delete KEY from DBNAME/TABLENAME
     Deletes all records for the given hex key in the db/table
+
+collate DBNAME/TABLENAME max LENGTH
+    Collates all lists in a table, removing duplicates and records greater than LENGTH bytes
+
+merge DBNAME/TABLENAME1 into DBNAME/TABLENAME2 max LENGTH
+    Merges tables erasing tablename1 when done. Tables must have the same configuration
 
 unlink list from DBNAME/TABLENAME key KEY
     Unlinks the given list (32-bit KEY) from the sector map
 
-drop DBNAME/TABLENAME
-    Erases the table
-
-drop DBNAME
-    Erases the database
+dump DBNAME/TABLENAME hex N
+    Dumps table contents with first N bytes in hex
 ```
 
 # Using the shell

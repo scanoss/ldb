@@ -76,6 +76,34 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 	return false;
 }
 
+bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+{
+	/* Print key in hex (first CSV field) */
+	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
+	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+
+	/* Print remaining hex bytes (if any, as a second CSV field) */
+	int *hex_bytes = ptr;
+	int remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
+	if (remaining_hex < 0) remaining_hex = 0;
+	if (remaining_hex)
+	{
+		printf(",");
+		for (int i = 0; i < remaining_hex; i++)  printf("%02x", data[i]);
+	}
+
+	/* Print remaining CSV data */
+	printf(",");
+	for (int i = remaining_hex; i < size; i++)
+		if (data[i] >= 32 && data[i] <= 126)
+			fwrite(data + i, 1, 1, stdout);
+		else
+			fwrite(".", 1, 1, stdout);
+
+	fwrite("\n", 1, 1, stdout);
+	return false;
+}
+
 int ldb_word_len(char *text)
 {
 	for (int i=0; i<strlen(text); i++) if (text[i] == ' ') return i;

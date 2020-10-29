@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LDB_VERSION "2.04"
+#define LDB_VERSION "2.05"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -56,6 +56,12 @@ extern char *ldb_commands[];
 extern int ldb_commands_count;
 extern int ldb_cmp_width;
 
+typedef enum {
+HEX,
+ASCII,
+CSV
+} select_format;
+
 typedef enum { 
 HELP, 
 CREATE_DATABASE, 
@@ -65,12 +71,14 @@ SHOW_TABLES,
 INSERT_ASCII, 
 INSERT_HEX, 
 SELECT_ASCII,
+SELECT_CSV,
 SELECT, 
 DELETE,
 COLLATE,
 MERGE,
 VERSION,
-UNLINK_LIST
+UNLINK_LIST,
+DUMP
 } commandtype;
 
 struct ldb_stats
@@ -172,7 +180,7 @@ void ldb_command_create_database(char *command);
 void ldb_command_normalize(char *text);
 void ldb_command_show_tables(char *command);
 void ldb_command_show_databases();
-void ldb_command_select(char *command, bool ascii);
+void ldb_command_select(char *command, select_format format);
 void ldb_command_telect(char *command);
 void ldb_command_insert(char *command, commandtype type);
 void ldb_command_create_table(char *command);
@@ -191,7 +199,9 @@ bool ldb_key_exists(struct ldb_table table, uint8_t *key);
 bool ldb_key_in_recordset(uint8_t *rs, uint32_t rs_len, uint8_t *subkey, uint8_t subkey_ln);
 uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr);
 bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
+bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
+void ldb_dump(struct ldb_table table, int hex_bytes);

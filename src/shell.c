@@ -56,6 +56,8 @@ void help()
 	printf("    Retrieves all records from db/table for the given hex key (hexdump output)\n\n");
 	printf("select from DBNAME/TABLENAME key KEY ascii\n");
 	printf("    Retrieves all records from db/table for the given hex key (ascii output)\n\n");
+	printf("select from DBNAME/TABLENAME key KEY csv hex N\n");
+	printf("    Retrieves all records from db/table for the given hex key (csv output, with first N bytes in hex)\n\n");
 	printf("delete KEY from DBNAME/TABLENAME\n");
 	printf("    Deletes all records for the given hex key in the db/table\n\n");
 	printf("collate DBNAME/TABLENAME max LENGTH\n");
@@ -64,6 +66,8 @@ void help()
 	printf("    Merges tables erasing tablename1 when done. Tables must have the same configuration\n\n");
 	printf("unlink list from DBNAME/TABLENAME key KEY\n");
 	printf("    Unlinks the given list (32-bit KEY) from the sector map\n\n");
+	printf("dump DBNAME/TABLENAME hex N\n");
+	printf("    Dumps table contents with first N bytes in hex\n\n");
 
 }
 
@@ -110,11 +114,15 @@ bool execute(char *command)
 			break;
 
 		case SELECT:
-			ldb_command_select(command, false);
+			ldb_command_select(command, HEX);
 			break;
 
 		case SELECT_ASCII:
-			ldb_command_select(command, true);
+			ldb_command_select(command, ASCII);
+			break;
+
+		case SELECT_CSV:
+			ldb_command_select(command, CSV);
 			break;
 
 		case CREATE_DATABASE:
@@ -139,6 +147,10 @@ bool execute(char *command)
 
 		case VERSION:
 			ldb_version();
+			break;
+
+		case DUMP:
+			ldb_command_dump(command);
 			break;
 
 		default:

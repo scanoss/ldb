@@ -34,6 +34,7 @@
 
 #include "ldb.h"
 #include "collate.c"
+#include "dump.c"
 #include "config.c"
 #include "pointer.c"
 #include "file.c"
@@ -60,12 +61,14 @@ char *ldb_commands[] =
 	"insert into {ascii} key {hex} ascii {ascii}",
 	"insert into {ascii} key {hex} hex {hex}",
 	"select from {ascii} key {hex} ascii",
-	"select from {ascii} key {hex}",
+	"select from {ascii} key {hex} csv hex {ascii}",
+	"select from {ascii} key {hex} hex",
 	"delete from {ascii} key {hex}",
 	"collate {ascii} max {ascii}",
 	"merge {ascii} into {ascii} max {ascii}",
 	"version",
-	"unlink list from {ascii} key {hex}"
+	"unlink list from {ascii} key {hex}",
+	"dump {ascii} hex {ascii}"
 };
 int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 

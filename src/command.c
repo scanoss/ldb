@@ -68,7 +68,6 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 	// Recurse known commands
 	for (int i = 0; i < ldb_commands_count; i++)
 	{
-
 		int known_words = ldb_word_count(ldb_commands[i]);
 		int limit = known_words;
 		if (command_words < limit) limit = command_words;
@@ -131,6 +130,25 @@ void ldb_command_collate(char *command)
 
 	/* Unlock DB */
 	ldb_unlock ();
+
+	/* Free memory */
+	free(dbtable);
+}
+
+void ldb_command_dump(char *command)
+{
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(2, command);
+	char *hex_n  = ldb_extract_word(4, command);
+	int hex = atoi(hex_n);
+	free(hex_n);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		ldb_dump(ldbtable, hex);
+	}
 
 	/* Free memory */
 	free(dbtable);
@@ -287,7 +305,7 @@ void ldb_command_create_table(char *command)
 	free(dbtable);
 }
 
-void ldb_command_select(char *command, bool ascii)
+void ldb_command_select(char *command, select_format format)
 {
 
 	/* Extract values from command */
@@ -295,6 +313,14 @@ void ldb_command_select(char *command, bool ascii)
 	char *key   = ldb_extract_word(5, command);
 	uint8_t *keybin = malloc(LDB_MAX_NODE_LN);
 	char *rs = malloc(LDB_MAX_NODE_DATA_LN);
+	char *hexbytes = NULL;
+	int hex_bytes = 0;
+
+	if (format == CSV)
+	{
+		hexbytes = ldb_extract_word(8, command);
+		if (hexbytes) hex_bytes = atoi(hexbytes);
+	}
 
 	if (ldb_valid_table(dbtable))
 	{
@@ -314,13 +340,27 @@ void ldb_command_select(char *command, bool ascii)
 			if ((key_ln != ldbtable.key_ln) && (key_ln != LDB_KEY_LN))
 				printf("E073 Provided key length is invalid\n");
 
-			else if (ascii)
-				ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_asciiprint, NULL);
 			else
-				ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_hexprint16, NULL);
+			{
+				switch (format)
+				{
+					case HEX:
+						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_hexprint16, NULL);
+						break;
+
+					case ASCII:
+						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_asciiprint, NULL);
+						break;
+
+					case CSV:
+						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_csvprint, &hex_bytes);
+						break;
+				}
+			}
 		}
 	}
 	/* Free memory */
+	free(hexbytes);
 	free(dbtable);
 	free(key);
 	free(keybin);
