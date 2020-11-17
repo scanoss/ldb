@@ -1,20 +1,20 @@
 CC=gcc
-CCFLAGS=-O -g -Wall
+CCFLAGS=-O -g -Wall -std=gnu99
 SHELLFLAGS=-O -g -Wall -lm -lpthread
 
 all: clean lib shell
 
 lib: src/ldb.c src/ldb.h 
-	@$(CC) $(CFLAGS) -c src/ldb.c 
+	@$(CC) $(CCFLAGS) -c src/ldb.c 
 	@echo Library is built
 
 shell: src/shell.c src/command.c 
-	@$(CC) $(CFLAGS) $(SHELLFLAGS) -c src/shell.c 
+	@$(CC) $(CCFLAGS) $(SHELLFLAGS) -c src/shell.c 
 	@$(CC) -o ldb ldb.o shell.o
 	@echo Shell is built
 
 static: src/ldb.c src/ldb.h src/shell.c
-	@$(CC) $(CFLAGS) $(SHELLFLAGS) -o ldb -O -g -Wall -lm -lpthread src/ldb.c src/ldb.h src/shell.c
+	@$(CC) $(CCFLAGS) $(SHELLFLAGS) -o ldb -O -g -Wall -lm -lpthread src/ldb.c src/ldb.h src/shell.c
 	@echo Shell is built
 
 distclean: clean
