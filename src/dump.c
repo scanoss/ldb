@@ -24,7 +24,6 @@ void ldb_dump(struct ldb_table table, int hex_bytes)
 {
 	/* Read each DB sector */
 	uint8_t k0 = 0;
-	long total_records = 0;
 	setlocale(LC_NUMERIC, "");
 
 	do {

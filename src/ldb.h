@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LDB_VERSION "2.05"
+#define LDB_VERSION "3.0.0"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -116,8 +116,9 @@ struct ldb_recordset
 
 struct ldb_collate_data
 {
-    void *data;
-    long data_ptr;
+	void *data;
+	void *tmp_data;
+	long data_ptr;
 	int table_key_ln;
 	int table_rec_ln;
 	int max_rec_ln;

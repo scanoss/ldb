@@ -35,6 +35,41 @@ int ldb_collate_cmp(const void * a, const void * b)
     return 0;
 }
 
+/* Checks if two blocks of memory contain the same data, from last to first byte */
+bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
+{
+	for (int i = (bytes - 1); i >= 0; i--)
+		if (*(a + i) != *(b + i)) return false;
+	return true;
+}
+
+/* Eliminate duplicated records from data into tmp_data, returns new data size */
+int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int size)
+{
+	int new_size = 0;
+	int rec_ln = collate->table_rec_ln;
+	bool skip = false;
+
+	/* Recurse every record in collate->data + ptr */
+	for (long i = 0; i < size; i += collate->table_rec_ln)
+	{
+		uint8_t *a = collate->data + ptr + i;
+		uint8_t *b = collate->tmp_data + new_size;
+
+		/* Check if duplicate */
+		if (new_size) if (ldb_reverse_memcmp(a, b - rec_ln, rec_ln)) skip = true;
+
+		/* Copy record */
+		if (!skip)
+		{
+			memcpy(b, a, rec_ln);
+			new_size += rec_ln;
+		}
+		skip = false;
+	}
+	return new_size;
+}
+
 bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 {
 	FILE * new_sector = collate->out_sector;
@@ -53,9 +88,9 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 		}
 
 		/* Write node */
-		uint16_t block_records = block_size / collate->table_rec_ln;
-		ldb_node_write(out_table, new_sector, collate->last_key, collate->data + data_ptr, block_size, block_records);
-
+		int new_block_size = ldb_eliminate_duplicates(collate, data_ptr, block_size);
+		uint16_t block_records = new_block_size / collate->table_rec_ln;
+		ldb_node_write(out_table, new_sector, collate->last_key, collate->tmp_data, new_block_size, block_records);
 		data_ptr += block_size;
 	}
 
@@ -222,13 +257,14 @@ bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint
 	return ldb_collate_add_variable_record(collate, key, subkey, subkey_ln, data, size);
 }
 
-void ldb_collate_sort(struct ldb_collate_data *collate, int subkey_ln)
+void ldb_collate_sort(struct ldb_collate_data *collate)
 {
 		if (collate->merge) return;
 
 		/* Sort records */
 		size_t items = 0;
 		size_t size = 0;
+		int subkey_ln = collate->table_key_ln - LDB_KEY_LN;
 
 		if (collate->table_rec_ln)
 		{
@@ -253,7 +289,7 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	if (collate->data_ptr) if (memcmp(key, collate->last_key, LDB_KEY_LN))
 	{
 		/* Sort records */
-		ldb_collate_sort(collate, subkey_ln);
+		ldb_collate_sort(collate);
 
 		/* Import records */
 		ldb_import_list(collate);
@@ -327,6 +363,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 			/* Reserve space for collate data */
 			collate.data = (char *) calloc(LDB_MAX_RECORDS * collate.rec_width, 1);
+			collate.tmp_data = (char *) calloc(LDB_MAX_RECORDS * collate.rec_width, 1);
 
 			/* Set global cmp width (for qsort) */
 			ldb_cmp_width = max_rec_ln;
@@ -355,7 +392,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			/* Process last record/s */
 			if (collate.data_ptr)
 			{
-				ldb_collate_sort(&collate, collate.table_rec_ln - collate.table_key_ln);
+				ldb_collate_sort(&collate);
 				ldb_import_list(&collate);
 			}
 
@@ -370,6 +407,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			else ldb_sector_update(out_table, k);
 
 			free(collate.data);
+			free(collate.tmp_data);
 			free(sector);
 		}
 	} while (k0++ < 255);
