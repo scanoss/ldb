@@ -203,6 +203,8 @@ bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *ke
 	/* Size should be = N x rec_ln */
 	if (size % collate->table_rec_ln) return false;
 
+	int boundary = LDB_MAX_RECORDS * collate->rec_width;
+
 	/* Iterate through recordset */
 	for (int i = 0; i < size; i += collate->table_rec_ln)
 	{
@@ -212,6 +214,9 @@ bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *ke
 			memcpy(collate->data + collate->data_ptr, subkey, subkey_ln);
 			collate->data_ptr += subkey_ln;
 		}
+
+		/* Exit if boundary reached */
+		if (collate->data_ptr + collate->table_rec_ln >= boundary) break;
 
 		/* Copy record */
 		memcpy(collate->data + collate->data_ptr, data + i, collate->table_rec_ln);
