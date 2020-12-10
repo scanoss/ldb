@@ -1,11 +1,13 @@
 CC=gcc
 CCFLAGS=-O -g -Wall -std=gnu99
+LIBFLAGS=-O -g -Wall -std=gnu99 -fPIC -c
 SHELLFLAGS=-O -g -Wall -lm -lpthread
 
 all: clean lib shell
 
 lib: src/ldb.c src/ldb.h 
-	@$(CC) $(CCFLAGS) -c src/ldb.c 
+	@$(CC) $(LIBFLAGS) src/ldb.c 
+	@$(CC) -shared -Wl,-soname,libldb.so -o ../libldb.so ldb.o
 	@echo Library is built
 
 shell: src/shell.c src/command.c 
@@ -21,7 +23,7 @@ distclean: clean
 
 clean:
 	@echo Cleaning...
-	@rm -f *.o *.a ldb
+	@rm -f *.o *.a ldb .*so
 
 install:
 	@cp ldb /usr/bin
