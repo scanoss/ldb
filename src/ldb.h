@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LDB_VERSION "3.0.0"
+#define LDB_VERSION "3.0.1"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -78,7 +78,8 @@ COLLATE,
 MERGE,
 VERSION,
 UNLINK_LIST,
-DUMP
+DUMP,
+DUMP_KEYS
 } commandtype;
 
 struct ldb_stats
@@ -95,6 +96,8 @@ struct ldb_table
 	int  rec_ln; // data record length, otherwise 0 for variable-length data
     int  ts_ln;  // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 	bool tmp; // is this a .tmp sector instead of a .ldb?
+	uint8_t *current_key;
+	uint8_t *last_key;
 };
 
 struct ldb_recordset
@@ -206,3 +209,4 @@ void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes);
+void ldb_dump_keys(struct ldb_table table);

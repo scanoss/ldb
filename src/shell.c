@@ -68,6 +68,8 @@ void help()
 	printf("    Unlinks the given list (32-bit KEY) from the sector map\n\n");
 	printf("dump DBNAME/TABLENAME hex N\n");
 	printf("    Dumps table contents with first N bytes in hex\n\n");
+	printf("dump keys from DBNAME/TABLENAME\n");
+	printf("    Dumps a unique list of existing keys (binary output)\n\n");
 
 }
 
@@ -143,6 +145,10 @@ bool execute(char *command)
 
 		case MERGE:
 			ldb_command_merge(command);
+			break;
+
+		case DUMP_KEYS:
+			ldb_command_dump_keys(command);
 			break;
 
 		case VERSION:

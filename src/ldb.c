@@ -44,6 +44,7 @@
 #include "recordset.c"
 #include "sector.c"
 #include "string.c"
+#include "keys.c"
 
 
 /* Global */
@@ -68,7 +69,8 @@ char *ldb_commands[] =
 	"merge {ascii} into {ascii} max {ascii}",
 	"version",
 	"unlink list from {ascii} key {hex}",
-	"dump {ascii} hex {ascii}"
+	"dump {ascii} hex {ascii}",
+	"dump keys from {ascii}"
 };
 int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 

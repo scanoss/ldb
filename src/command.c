@@ -470,4 +470,18 @@ void print_record(uint8_t *ptr, int keyln, int hex)
 	if (printf("%s\n", (char *) ptr + keyln + hex));
 }
 
+void ldb_command_dump_keys(char *command)
+{
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(4, command);
 
+	if (ldb_valid_table(dbtable))
+	{
+			/* Assembly ldb table structure */
+			struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+			ldb_dump_keys(ldbtable);
+	}
+
+	/* Free memory */
+	free(dbtable);
+}
