@@ -58,8 +58,8 @@ void help()
 	printf("    Retrieves all records from db/table for the given hex key (ascii output)\n\n");
 	printf("select from DBNAME/TABLENAME key KEY csv hex N\n");
 	printf("    Retrieves all records from db/table for the given hex key (csv output, with first N bytes in hex)\n\n");
-	printf("delete KEY from DBNAME/TABLENAME\n");
-	printf("    Deletes all records for the given hex key in the db/table\n\n");
+	printf("delete from DBNAME/TABLENAME max LENGTH keys KEY_LIST\n");
+	printf("    Deletes all records for the given comma separated hex key list from the db/table. Max record length expected\n\n");
 	printf("collate DBNAME/TABLENAME max LENGTH\n");
 	printf("    Collates all lists in a table, removing duplicates and records greater than LENGTH bytes\n\n");
 	printf("merge DBNAME/TABLENAME1 into DBNAME/TABLENAME2 max LENGTH\n");
@@ -73,10 +73,10 @@ void help()
 
 }
 
-bool execute(char *command)
+bool execute(char *raw_command)
 {
 
-	ldb_command_normalize(command);
+	char *command = ldb_command_normalize(raw_command);
 
 	// Empty command does nothing
 	if (!strlen(command)) return true;
@@ -90,6 +90,7 @@ bool execute(char *command)
 	if (!ldb_syntax_check(command, &command_nr, &word_nr)) 
 	{
 		printf("E066 Syntax error\n");
+		free(command);
 		return true;
 	}
 
@@ -143,6 +144,10 @@ bool execute(char *command)
 			ldb_command_collate(command);
 			break;
 
+		case DELETE:
+			ldb_command_delete(command);
+			break;
+
 		case MERGE:
 			ldb_command_merge(command);
 			break;
@@ -164,6 +169,7 @@ bool execute(char *command)
 			break;
 	}
 
+	free(command);
 	return true;
 }
 

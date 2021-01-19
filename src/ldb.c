@@ -64,7 +64,7 @@ char *ldb_commands[] =
 	"select from {ascii} key {hex} ascii",
 	"select from {ascii} key {hex} csv hex {ascii}",
 	"select from {ascii} key {hex} hex",
-	"delete from {ascii} key {hex}",
+	"delete from {ascii} max {ascii} keys {ascii}",
 	"collate {ascii} max {ascii}",
 	"merge {ascii} into {ascii} max {ascii}",
 	"version",

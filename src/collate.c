@@ -285,6 +285,33 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
 		qsort(collate->data, items, size, ldb_collate_cmp);
 }
 
+/* Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
+	to speed up the search */
+bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln)
+{
+	/* Position pointer to start of second byte in the sorted del_key array */
+	long key_ptr = collate->del_map[key[1]];
+	int step = LDB_KEY_LN + subkey_ln;
+
+	/* Travel through del_keys */
+	while (key_ptr < collate->del_ln && collate->del_keys[key_ptr + 1] == key[1])
+	{
+		/* First byte is always the same, second too inside this loop. Compare bytes 3 and 4 */
+		int mainkey = memcmp(collate->del_keys + key_ptr + 2, key + 2, 2);
+		if (mainkey > 0) break;
+
+		if (!mainkey) if (!memcmp(subkey, collate->del_keys + key_ptr + LDB_KEY_LN, subkey_ln))
+		{
+			/* Increment del_count and return true */
+			collate->del_count++;
+			return true;
+		}
+
+		key_ptr += step;
+	}
+	return false;
+}
+
 bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 
@@ -310,6 +337,13 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 		return false;
 	}
 
+	/* Skip key if found among del_keys (DELETE command only) */
+	if (collate->del_ln)
+	{
+		if (key_in_delete_list(collate, key, subkey, subkey_ln)) return false;
+	}
+
+	/* Keep record */
 	if (ldb_collate_add_record(collate, key, subkey, subkey_ln, data, size))
 	{
 		/* Show progress */
@@ -331,13 +365,44 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	return false;
 }
 
-void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge)
+/*	Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
+	(the first byte is the same in all keys)
+*/
+long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 {
-	/* Read each DB sector */
+	int step = LDB_KEY_LN + subkey_ln;
+	long *map = calloc(sizeof(long), 256);
+	uint8_t last_k = 0;
+
+	/* Travel through del_keys and fill up map with pointers based on second byte of the key */
+	long key_ptr = 0;
+	while (key_ptr < del_ln)
+	{
+		if (del_keys[key_ptr + 1] != last_k)
+		{
+			last_k = del_keys[key_ptr + 1];
+			map[last_k] = key_ptr;
+		}
+		key_ptr += step;
+	}
+	return map;
+}
+
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln)
+{
+
+	long *del_map = NULL;
+
+	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
+
+	/* Otherwise use the first byte of the first key */
+	if (del_ln) k0 = *del_keys;
+
 	long total_records = 0;
 	setlocale(LC_NUMERIC, "");
 
+	/* Read each DB sector */
 	do {
 		printf("Reading sector %02x\n", k0);
 		uint8_t *sector = ldb_load_sector(table, &k0);
@@ -352,10 +417,17 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			collate.table_rec_ln = table.rec_ln;
 			collate.max_rec_ln = max_rec_ln;
 			collate.rec_count = 0;
+			collate.del_count = 0;
 			collate.out_table = out_table;
 			memcpy(collate.last_key, "\0\0\0\0", 4);
 			collate.last_report = 0;
 			collate.merge = merge;
+
+			/* Load delete keys map to speed up key lookup */
+			if (del_ln) del_map = load_del_map(del_keys, del_ln, table.key_ln - LDB_KEY_LN);
+			collate.del_keys = del_keys;
+			collate.del_ln = del_ln;
+			collate.del_map = del_map;
 
 			if (collate.table_rec_ln)
 			{
@@ -411,12 +483,20 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			if (collate.merge) ldb_sector_erase(table, k);
 			else ldb_sector_update(out_table, k);
 
+			if (collate.del_count) printf("%'ld records deleted\n", collate.del_count);
+
 			free(collate.data);
 			free(collate.tmp_data);
 			free(sector);
 		}
-	} while (k0++ < 255);
 
+		/* Exit here if it is a delete command, otherwise move to the next sector */
+	} while (k0++ < 255 && !del_ln);
+
+	/* Show processed totals */
 	printf("Collate completed with %'ld records\n", total_records);
+
 	fflush(stdout);
+
+	if (del_map) free(del_map);
 }

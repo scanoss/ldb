@@ -33,27 +33,28 @@
 #include <unistd.h>
 #include "ldb.h"
 
-void ldb_command_normalize(char *text)
+char *ldb_command_normalize(char *text)
 {
-	char *tmp = calloc(LDB_MAX_COMMAND_SIZE, 1);
+	int strln = strlen(text);
+	char *tmp = calloc(strln + 1, 1);
+	int tmpln = 0;
 
-	for (int i = 0; i < strlen(text); i++)
+	for (int i = 0; i < strln; i++)
 	{
 		// Add interesting characters
-		if (text[i] > ' ') tmp[strlen(tmp)] = text[i];
+		if (text[i] > ' ') tmp[tmpln++] = text[i];
 		else if (text[i] <= ' ')
 		{
 			// Add space only if not in the beginning and if previous char is not a space
-			if (strlen(tmp))
-				if (tmp[strlen(tmp)-1] != ' ') tmp[strlen(tmp)] = ' ';
+			if (tmpln)
+				if (tmp[tmpln-1] != ' ') tmp[tmpln++] = ' ';
 		}
 	}
 
 	// Right trim
-	if (strlen(tmp)) if (tmp[strlen(tmp)-1] == ' ') tmp[strlen(tmp)-1] = 0;
+	if (tmpln) if (tmp[tmpln - 1] == ' ') tmp[tmpln - 1] = 0;
 
-	strcpy(text, tmp);
-	free(tmp);
+	return tmp;
 }
 
 /*	Checks command against list of known command and returns number
@@ -101,6 +102,119 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 	return false;
 }
 
+/* Return pointer to start of keys in a delete command */
+char *keys_start(char *command)
+{
+	char keyword[] = " keys ";
+	char *keys_word = strstr(command, keyword);
+	if (keys_word) return keys_word + strlen(keyword);
+	return NULL;
+}
+
+bool valid_hex_ln(char *str, int ln)
+{
+	for (int i = 0; i < ln; i++)
+	{
+		char h = str[i];
+		if (h < '0' || (h > '9' && h < 'a') || h > 'f') return false;
+	}
+	return true;
+}
+
+void key_to_bin(char *hex, int len, uint8_t *out)
+{
+	uint32_t ptr = 0;
+	for (uint32_t i = 0; i < len; i += 2)
+		out[ptr++] = 16 * ldb_h2d(hex[i]) + ldb_h2d(hex[i + 1]);
+}
+
+/* Converts keys to binary, making sure they are valid and share the same first byte */
+uint8_t *fetch_keys(char *keys, long *size, int key_ln)
+{
+	long  keys_ln = strlen(keys);
+	uint8_t *keyblob = calloc(keys_ln / 2, 1);
+	*size = 0;
+
+	/* Read each key from keys */
+	char *key = keys;
+	while (*key && key < (keys + keys_ln))
+	{
+		/* Skip commas and spaces */
+		if (*key == ' ' || *key == ',') key++;
+
+		/* Validate key */
+		else if (valid_hex_ln(key, key_ln))
+		{
+			key_to_bin(key, key_ln * 2, keyblob + *size);
+
+			/* Make sure first byte is same as the first key */
+			if (key != keys) if (*keyblob != keyblob[*size])
+			{
+				*size = 0;
+				return keyblob;
+			}
+
+			*size += key_ln;
+			key += (key_ln * 2);
+		}
+
+		/* Bad input detected */
+		else
+		{
+			*size = 0;
+			return keyblob;
+		}
+	}
+
+	return keyblob;
+}
+
+void ldb_command_delete(char *command)
+{
+	/* Lock DB */
+	ldb_lock();
+
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(3, command);
+	char *max_ln  = ldb_extract_word(5, command);
+	int max = atoi(max_ln);
+	free(max_ln);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		struct ldb_table tmptable = ldb_read_cfg(dbtable);
+
+		tmptable.tmp = true;
+		tmptable.key_ln = LDB_KEY_LN;
+
+		long keys_ln = 0;
+		uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
+
+		if (ldbtable.key_ln > keys_ln)
+			printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
+		else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		else if (max < ldbtable.key_ln)
+			printf("E076 Max record length cannot be smaller than table key\n");
+		else
+		{
+			qsort(keys, keys_ln / ldbtable.key_ln, ldbtable.key_ln, ldb_collate_cmp);
+			printf("Removing %ld keys\n", keys_ln / ldbtable.key_ln);
+			ldb_collate(ldbtable, tmptable, max, false, keys, keys_ln);
+		}
+
+		free(keys);
+	}
+
+	/* Unlock DB */
+	ldb_unlock ();
+
+	/* Free memory */
+	free(dbtable);
+}
+
 void ldb_command_collate(char *command)
 {
 	/* Lock DB */
@@ -125,7 +239,7 @@ void ldb_command_collate(char *command)
 		else if (max < ldbtable.key_ln)
 			printf("E076 Max record length cannot be smaller than table key\n");
 		else
-			ldb_collate(ldbtable, tmptable, max, false);
+			ldb_collate(ldbtable, tmptable, max, false, NULL, 0);
 	}
 
 	/* Unlock DB */
@@ -184,7 +298,7 @@ void ldb_command_merge(char *command)
 		{
 			outtable.tmp = false;
 			outtable.key_ln = LDB_KEY_LN;
-			ldb_collate(ldbtable, outtable, max, true);
+			ldb_collate(ldbtable, outtable, max, true, NULL, 0);
 		}
 	}
 

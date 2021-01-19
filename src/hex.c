@@ -80,7 +80,6 @@ bool ldb_valid_hex(char *str)
 	return true;
 }
 
-
 /* Write an unsigned long integer (40-bit) in the provided ldb_sector at the current location */
 void ldb_uint40_write(FILE *ldb_sector, uint64_t value)
 {

@@ -181,12 +181,14 @@ char *ldb_extract_word(int n, char *wordlist)
 {
 	int word_start = 0;
 	char *out = calloc(LDB_MAX_COMMAND_SIZE + 1, 1);
+	int limit = strlen(wordlist);
+	if (limit > LDB_MAX_COMMAND_SIZE) limit = LDB_MAX_COMMAND_SIZE;
 
 	// Look for word start
 	if (n>1)
 	{
 		int c = 2;
-		for (int i = 1; i < strlen(wordlist); i++)
+		for (int i = 1; i < limit; i++)
 		{
 			if (wordlist[i] == ' ') 
 			{
@@ -201,7 +203,10 @@ char *ldb_extract_word(int n, char *wordlist)
 	}
 
 	// Copy desired word to out
-	memcpy(out, wordlist + word_start, ldb_word_len(wordlist + word_start));
+	int bytes = ldb_word_len(wordlist + word_start);
+	if (bytes > LDB_MAX_COMMAND_SIZE) bytes = LDB_MAX_COMMAND_SIZE;
+
+	memcpy(out, wordlist + word_start, bytes);
 	return out;
 
 }

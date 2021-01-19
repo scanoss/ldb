@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define LDB_VERSION "3.0.1"
+#define LDB_VERSION "3.0.2"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -132,6 +132,10 @@ struct ldb_collate_data
 	uint8_t last_key[LDB_KEY_LN];
 	time_t last_report;
 	bool merge;
+	uint8_t *del_keys;
+	long del_ln;
+	long del_count;
+	long *del_map;
 };
 
 #endif
@@ -181,7 +185,7 @@ bool ldb_valid_table(char *table);
 int ldb_word_len(char *text);
 commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_command_create_database(char *command);
-void ldb_command_normalize(char *text);
+char *ldb_command_normalize(char *text);
 void ldb_command_show_tables(char *command);
 void ldb_command_show_databases();
 void ldb_command_select(char *command, select_format format);
@@ -205,8 +209,9 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
-void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge);
+void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes);
 void ldb_dump_keys(struct ldb_table table);
+int ldb_collate_cmp(const void * a, const void * b);
