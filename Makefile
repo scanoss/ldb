@@ -7,7 +7,7 @@ all: clean lib shell
 
 lib: src/ldb.c src/ldb.h 
 	@$(CC) $(LIBFLAGS) src/ldb.c 
-	@$(CC) -shared -Wl,-soname,libldb.so -o ../libldb.so ldb.o
+	@$(CC) -shared -Wl,-soname,libldb.so -o libldb.so ldb.o
 	@echo Library is built
 
 shell: src/shell.c src/command.c 

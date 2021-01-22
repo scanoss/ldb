@@ -134,9 +134,14 @@ uint8_t *ldb_load_new_sector(struct ldb_table table, uint8_t *key) {
 /* Create an empty data sector (empty map) */
 void ldb_create_sector(char *sector_path)
 {
-	uint8_t *ldb_empty_map = calloc (LDB_MAP_SIZE, 1);
+	uint8_t *ldb_empty_map = calloc(LDB_MAP_SIZE, 1);
 
-	FILE *ldb_map = fopen (sector_path, "w");
+	FILE *ldb_map = fopen(sector_path, "w");
+	if (!ldb_map)
+	{
+		ldb_error("E065 Cannot access ldb table. Check permissions.");
+		exit(EXIT_FAILURE);
+	}
 	fwrite(ldb_empty_map, LDB_MAP_SIZE, 1, ldb_map);
 	fclose(ldb_map);
 
