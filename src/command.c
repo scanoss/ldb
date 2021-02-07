@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <openssl/md5.h>
 #include "ldb.h"
 
 char *ldb_command_normalize(char *text)
@@ -121,13 +122,6 @@ bool valid_hex_ln(char *str, int ln)
 	return true;
 }
 
-void key_to_bin(char *hex, int len, uint8_t *out)
-{
-	uint32_t ptr = 0;
-	for (uint32_t i = 0; i < len; i += 2)
-		out[ptr++] = 16 * ldb_h2d(hex[i]) + ldb_h2d(hex[i + 1]);
-}
-
 /* Converts keys to binary, making sure they are valid and share the same first byte */
 uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 {
@@ -145,7 +139,7 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 		/* Validate key */
 		else if (valid_hex_ln(key, key_ln))
 		{
-			key_to_bin(key, key_ln * 2, keyblob + *size);
+			ldb_hex_to_bin(key, key_ln * 2, keyblob + *size);
 
 			/* Make sure first byte is same as the first key */
 			if (key != keys) if (*keyblob != keyblob[*size])
@@ -326,7 +320,7 @@ void ldb_command_unlink_list(char *command)
 		else
 		{
 			/* Convert key to binary */
-			ldb_hex_to_bin(key, keybin);
+			ldb_hex_to_bin(key, strlen(key), keybin);
 
 			/* Assembly ldb table structure */
 			struct ldb_table ldbtable = ldb_read_cfg(dbtable);
@@ -365,10 +359,10 @@ void ldb_command_insert(char *command, commandtype type)
 		else
 		{
 			/* Convert key and data to binary */
-			ldb_hex_to_bin(key, keybin);
+			ldb_hex_to_bin(key, strlen(key), keybin);
 			if (type == INSERT_HEX) 
 			{
-				ldb_hex_to_bin(data, databin);
+				ldb_hex_to_bin(data, strlen(key), databin);
 				dataln = (uint32_t) (strlen(data) / 2);
 			}
 			else dataln = strlen(data);
@@ -444,7 +438,7 @@ void ldb_command_select(char *command, select_format format)
 		else
 		{
 			/* Convert key to binary */
-			ldb_hex_to_bin(key, keybin);
+			ldb_hex_to_bin(key, strlen(key), keybin);
 			int key_ln = (int) strlen(key) / 2;
 
 			/* Assembly ldb table structure */
@@ -597,5 +591,38 @@ void ldb_command_dump_keys(char *command)
 	}
 
 	/* Free memory */
+	free(dbtable);
+}
+
+void ldb_mz_cat(char *command)
+{
+	/* Extract values from command */
+	char *key = ldb_extract_word(2, command);
+	char *dbtable = ldb_extract_word(4, command);
+
+	/* Reserve memory for compressed and uncompressed data */
+	char *src = calloc(MZ_MAX_FILE + 1, 1);
+	uint8_t *zsrc = calloc((MZ_MAX_FILE + 1) * 2, 1);
+
+	/* Define mz_job values */
+	struct mz_job job;
+	sprintf(job.path, "%s/%s", ldb_root, dbtable);
+	memset(job.mz_id, 0, 2);
+	job.mz = NULL;
+	job.mz_ln = 0;
+	job.id = NULL;
+	job.ln = 0;
+	job.data = src;        // Uncompressed data
+	job.data_ln = 0;
+	job.zdata = zsrc;      // Compressed data
+	job.zdata_ln = 0;
+	job.md5[MD5_LEN] = 0;
+	job.key = NULL;
+
+	if (ldb_valid_table(dbtable)) mz_cat(&job, key);
+
+	free(src);
+	free(zsrc);
+	free(key);
 	free(dbtable);
 }

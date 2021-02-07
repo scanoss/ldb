@@ -40,32 +40,33 @@ void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width)
 
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
-    for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-    for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
-    printf("\n");
+	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
+	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	printf("\n");
 	ldb_hexprint(data, len, 16);
-    printf("\n");
+	printf("\n");
 	return false;
 }
 
-/* Converts a hex nibble to int */
-uint8_t ldb_h2d(uint32_t h)
-{
-	if (h >= '0' && h <= '9')
-		return h - 48;
-	else if (h >= 'a' && h <= 'f')
-		return h - 97 + 10;
-	else if (h >= 'A' && h <= 'F')
-		return h - 65 + 10;
-	return 0;
-}
-
-void ldb_hex_to_bin(char *hex, uint8_t *out)
+/* Converts hex to bin */
+void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
 {
 	uint32_t ptr = 0;
-	int len = strlen(hex);
+	char pair[] = "\0\0\0";
 	for (uint32_t i = 0; i < len; i += 2)
-		out[ptr++] = 16 * ldb_h2d(hex[i]) + ldb_h2d(hex[i + 1]);
+	{
+		pair[0] = hex[i];
+		pair[1] = hex[i + 1];
+		out[ptr++] = strtol(pair, NULL, 16);
+	}
+}
+
+/* Converts bin to hex */
+void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
+{
+	*out = 0;
+	for (uint32_t i = 0; i < len; i++)
+		sprintf(out + strlen(out), "%02x", bin[i]);
 }
 
 bool ldb_valid_hex(char *str)

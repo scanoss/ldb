@@ -70,14 +70,16 @@ char *ldb_commands[] =
 	"version",
 	"unlink list from {ascii} key {hex}",
 	"dump {ascii} hex {ascii}",
-	"dump keys from {ascii}"
+	"dump keys from {ascii}",
+	"cat {hex} from {ascii}"
 };
 int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 
+/* Display LDB error and exit program */
 void ldb_error (char *txt)
 {
-	fprintf (stdout, "%s\n", txt);
-	exit (EXIT_FAILURE);
+	fprintf(stdout, "%s\n", txt);
+	exit(EXIT_FAILURE);
 }
 
 void ldb_version()

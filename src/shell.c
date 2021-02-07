@@ -31,8 +31,10 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
+#include <openssl/md5.h>
 
 #include "ldb.h"
+#include "mz.c"
 #include "command.c"
 
 void help()
@@ -70,6 +72,8 @@ void help()
 	printf("    Dumps table contents with first N bytes in hex\n\n");
 	printf("dump keys from DBNAME/TABLENAME\n");
 	printf("    Dumps a unique list of existing keys (binary output)\n\n");
+	printf("cat KEY from DBNAME/MZTABLE\n");
+	printf("		Shows the contents for KEY in MZ archive\n");
 
 }
 
@@ -154,6 +158,10 @@ bool execute(char *raw_command)
 
 		case DUMP_KEYS:
 			ldb_command_dump_keys(command);
+			break;
+
+		case CAT_MZ:
+			ldb_mz_cat(command);
 			break;
 
 		case VERSION:
