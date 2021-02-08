@@ -262,7 +262,8 @@ uint8_t *file_read(char *filename, uint64_t *size)
 	fseeko64(f, 0, SEEK_SET);
 
 	uint8_t *tmp = calloc(*size, 1);
-	fread(tmp, *size, 1, f);
+	if (1 != fread(tmp, *size, 1, f)) *tmp = 0;
+
 	fclose(f);
 
 	return tmp;
