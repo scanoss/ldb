@@ -64,6 +64,9 @@ unlink list from DBNAME/TABLENAME key KEY
 dump DBNAME/TABLENAME hex N
     Dumps table contents with first N bytes in hex
 ```
+# Requirements
+
+Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
 
 # Using the shell
 
