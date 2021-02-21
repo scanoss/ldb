@@ -164,6 +164,16 @@ void mz_list(struct mz_job *job)
 	free(job->mz);
 }
 
+bool mz_key_exists_handler(struct mz_job *job)
+{
+	if (!memcmp(job->id, job->key + 2, MZ_MD5))
+	{
+		job->key_found = true;
+		return false;
+	}
+	return true;
+}
+
 bool mz_cat_handler(struct mz_job *job)
 {
 	if (!memcmp(job->id, job->key + 2, MZ_MD5))
@@ -177,6 +187,29 @@ bool mz_cat_handler(struct mz_job *job)
 		return false;
 	}
 	return true;
+}
+
+bool mz_key_exists(struct mz_job *job, uint8_t *key)
+{
+	/* Calculate mz file path */
+	char mz_path[LDB_MAX_PATH + MD5_LEN] = "\0";
+	char mz_file_id[5] = "\0\0\0\0\0";
+	ldb_bin_to_hex(key, 2, mz_file_id);
+	sprintf(mz_path, "%s/%s.mz", job->path, mz_file_id);
+
+	/* Save path and key on job */
+	job->key_found = false;
+	job->key = key;
+
+	/* Read source mz file into memory */
+	job->mz = file_read(mz_path, &job->mz_ln);
+
+	/* Search and display "key" file contents */
+	mz_parse(job, mz_key_exists_handler);
+
+	free(job->mz);
+
+	return job->key_found;
 }
 
 void mz_cat(struct mz_job *job, char *key)
