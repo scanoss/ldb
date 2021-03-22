@@ -444,6 +444,10 @@ void ldb_command_select(char *command, select_format format)
 			/* Assembly ldb table structure */
 			struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 
+			/* Set hex dump width as fixed record length (default= 16) */
+			int width = ldbtable.rec_ln;
+			if (!width) width = 16;
+
 			/* Verify that provided key matches table key_ln (or main LDB_KEY_LEN) */
 			if ((key_ln != ldbtable.key_ln) && (key_ln != LDB_KEY_LN))
 				printf("E073 Provided key length is invalid\n");
@@ -453,7 +457,7 @@ void ldb_command_select(char *command, select_format format)
 				switch (format)
 				{
 					case HEX:
-						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_hexprint16, NULL);
+						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_hexprint_width, &width);
 						break;
 
 					case ASCII:
