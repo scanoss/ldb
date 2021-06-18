@@ -69,6 +69,7 @@ char *ldb_commands[] =
 	"merge {ascii} into {ascii} max {ascii}",
 	"version",
 	"unlink list from {ascii} key {hex}",
+	"dump {ascii} hex {ascii} sector {hex}",
 	"dump {ascii} hex {ascii}",
 	"dump keys from {ascii}",
 	"cat {hex} from {ascii}"

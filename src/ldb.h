@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <openssl/md5.h>
 
-#define LDB_VERSION "3.1.0"
+#define LDB_VERSION "3.1.1"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -82,6 +82,7 @@ COLLATE,
 MERGE,
 VERSION,
 UNLINK_LIST,
+DUMP_SECTOR,
 DUMP,
 DUMP_KEYS,
 CAT_MZ
@@ -264,7 +265,7 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
-void ldb_dump(struct ldb_table table, int hex_bytes);
+void ldb_dump(struct ldb_table table, int hex_bytes, int sector);
 void ldb_dump_keys(struct ldb_table table);
 int ldb_collate_cmp(const void * a, const void * b);
 

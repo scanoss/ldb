@@ -245,9 +245,19 @@ void ldb_command_collate(char *command)
 
 void ldb_command_dump(char *command)
 {
+	int sectorn = -1; //all sectors
+
 	/* Extract values from command */
 	char *dbtable = ldb_extract_word(2, command);
 	char *hex_n  = ldb_extract_word(4, command);
+	char *sector  = ldb_extract_word(5, command);
+	if (*sector)
+	{
+		char *sector_n  = ldb_extract_word(6, command);
+		sectorn = (int) strtol(sector_n, NULL, 16);
+		free(sector_n);
+		if (sectorn < 0 || sectorn > 256) sectorn = -1;
+	}
 	int hex = atoi(hex_n);
 	free(hex_n);
 
@@ -255,7 +265,7 @@ void ldb_command_dump(char *command)
 	{
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
-		ldb_dump(ldbtable, hex);
+		ldb_dump(ldbtable, hex, sectorn);
 	}
 
 	/* Free memory */

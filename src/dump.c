@@ -20,11 +20,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-void ldb_dump(struct ldb_table table, int hex_bytes)
+void ldb_dump(struct ldb_table table, int hex_bytes, int sector)
 {
 	/* Read each DB sector */
 	uint8_t k0 = 0;
 	setlocale(LC_NUMERIC, "");
+
+	if (sector >= 0) k0 = (uint8_t) sector;
 
 	do {
 		uint8_t *sector = ldb_load_sector(table, &k0);
@@ -49,6 +51,7 @@ void ldb_dump(struct ldb_table table, int hex_bytes)
 					}
 			free(sector);
 		}
+		if (sector >= 0) break;
 	} while (k0++ < 255);
 	fflush(stdout);
 }
