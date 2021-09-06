@@ -1,4 +1,6 @@
+ifeq ($(origin CC),default)
 CC=gcc
+endif
 CCFLAGS=-O -g -Wall -std=gnu99 -D_LARGEFILE64_SOURCE
 LIBFLAGS=-O -g -Wall -std=gnu99 -fPIC -c -D_LARGEFILE64_SOURCE
 SHELLFLAGS=-O -g -Wall
