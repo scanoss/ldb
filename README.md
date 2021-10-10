@@ -49,8 +49,8 @@ select from DBNAME/TABLENAME key KEY ascii
 select from DBNAME/TABLENAME key KEY csv hex N
     Retrieves all records from db/table for the given hex key (csv output, with first N bytes in hex)
 
-delete KEY from DBNAME/TABLENAME
-    Deletes all records for the given hex key in the db/table
+delete from DBNAME/TABLENAME max LENGTH keys KEY_LIST
+    Deletes all records for the given comma separated hex key list from the db/table. Max record length expected
 
 collate DBNAME/TABLENAME max LENGTH
     Collates all lists in a table, removing duplicates and records greater than LENGTH bytes
