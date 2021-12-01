@@ -23,18 +23,18 @@
 /**
   * @file collate.c
   * @date 19 Aug 2020 
-  * @brief // TODO
+  * @brief Implement de funtions used for collate ldb records
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
   */
 
 /**
- * @brief // TODO
+ * @brief Compare two blocks. Compare each byte until the end of the shorter record.
  * 
- * @param a // TODO
- * @param b // TODO
- * @return int // TODO
+ * @param a block a
+ * @param b block b
+ * @return 1 if a is bigger than b, -1 if b is bigger tha a, or 0 if they are equals.
  */
 int ldb_collate_cmp(const void * a, const void * b)
 {
@@ -54,11 +54,10 @@ int ldb_collate_cmp(const void * a, const void * b)
 /**
  * @brief Checks if two blocks of memory contain the same data, from last to first byte
  * 
- * @param a // TODO
- * @param b // TODO
- * @param bytes // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param a block a.
+ * @param b block b.
+ * @param bytes number of bytes to be compared
+ * @return true if they are equals, false otherwise.
  */
 bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 {
@@ -70,10 +69,10 @@ bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 /**
  * @brief Eliminate duplicated records from data into tmp_data, returns new data size
  * 
- * @param collate // TODO
- * @param ptr // TODO
- * @param size // TODO
- * @return int // TODO
+ * @param collate pointer to buffer to be collated
+ * @param ptr start position
+ * @param size block number
+ * @return int updated size after collate
  */
 int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int size)
 {
@@ -102,11 +101,10 @@ int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int siz
 }
 
 /**
- * @brief // TODO
+ * @brief import a list, collate and write to a file.
  * 
- * @param collate // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param collate pointer to collate data strcture.
+ * @return true succed
  */
 bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 {
@@ -136,11 +134,9 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 }
 
 /**
- * @brief // TODO
- * 
- * @param collate // TODO 
- * @return true // TODO
- * @return false // TODO
+ * @brief import a list, collate and write to a file.
+ * @param collate pointer to collate data strcture.
+ * @return true succed
  */
 bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 {
@@ -237,11 +233,9 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 }
 
 /**
- * @brief // TODO
- * 
- * @param collate // TODO
- * @return true // TODO
- * @return false // TODO
+ * @brief Import a list and write it in a file.
+ * @param collate pointer to collate data strcture.
+ * @return true succed
  */
 bool ldb_import_list(struct ldb_collate_data *collate)
 {
@@ -251,16 +245,15 @@ bool ldb_import_list(struct ldb_collate_data *collate)
 }
 
 /**
- * @brief // TODO
+ * @brief Add fixed records to a list
  * 
- * @param collate // TODO 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
  */
 bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
@@ -292,16 +285,15 @@ bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *ke
 }
 
 /**
- * @brief Add record to collate->data 
+ * @brief Add variable records to a list
  * 
- * @param collate // TODO
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
  */
 bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
@@ -329,16 +321,15 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 }
 
 /**
- * @brief // TODO
+ * @brief Add record to a list
  * 
- * @param collate // TODO
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
  */
 bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
@@ -350,9 +341,9 @@ bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint
 }
 
 /**
- * @brief // TODO
+ * @brief Sort a list
  * 
- * @param collate // TODO
+ * @param collate point to collate data structure
  */
 void ldb_collate_sort(struct ldb_collate_data *collate)
 {
@@ -381,12 +372,11 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
  * @brief Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
  * to speed up the search.
  * 
- * @param collate // TODO
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @return true
  */
 bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln)
 {
