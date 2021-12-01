@@ -20,9 +20,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Opens an LDB sector and returns the file descriptor. If read mode, returns NULL
-   in case it does not exist. Otherwise an empty sector file is created in case it
-   does not exist */
+/**
+  * @file sector.c
+  * @date 12 Jul 2020
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/sector.c
+  */
+
+/**
+ * @brief Opens an LDB sector and returns the file descriptor. If read mode, returns NULL
+ *  in case it does not exist. Otherwise an empty sector file is created in case it
+ *  does not exist
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ * @param mode // TODO
+ * @return FILE* // TODO
+ */
 FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 	/* Create sector (file) if it doesn't already exist */
@@ -36,6 +52,16 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 	return out;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param db // TODO
+ * @param table // TODO
+ * @param keylen // TODO
+ * @param reclen // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 {
 	bool out = false;
@@ -73,6 +99,13 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 	return out;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param database // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_create_database(char *database)
 {
 	bool out = false;
@@ -96,8 +129,14 @@ bool ldb_create_database(char *database)
 }
 
 
-/* Loads an entire LDB sector into memory and returns a pointer
-   (NULL if the sector does not exist) */
+/**
+ * @brief Loads an entire LDB sector into memory and returns a pointer
+   (NULL if the sector does not exist)
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ * @return uint8_t* // TODO
+ */
 uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 
 	FILE *ldb_sector = ldb_open(table, key, "r");
@@ -114,8 +153,14 @@ uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 	return out;
 }
 
-/* Reserves memory for storing a copy of an entire LDB sector
-   (returns NULL if the source sector does not exist) */
+/**
+ * @brief Reserves memory for storing a copy of an entire LDB sector
+ * (returns NULL if the source sector does not exist)
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ * @return uint8_t* // TODO
+ */
 uint8_t *ldb_load_new_sector(struct ldb_table table, uint8_t *key) {
 
 	FILE *ldb_sector = ldb_open(table, key, "r");
@@ -131,7 +176,11 @@ uint8_t *ldb_load_new_sector(struct ldb_table table, uint8_t *key) {
 	return out;
 }
 
-/* Create an empty data sector (empty map) */
+/**
+ * @brief Create an empty data sector (empty map)
+ * 
+ * @param sector_path // TODO
+ */
 void ldb_create_sector(char *sector_path)
 {
 	uint8_t *ldb_empty_map = calloc(LDB_MAP_SIZE, 1);
@@ -148,7 +197,12 @@ void ldb_create_sector(char *sector_path)
 	free(ldb_empty_map);
 }
 
-/* Moves sector.tmp into sector.ldb */
+/**
+ * @brief Moves sector.tmp into sector.ldb
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ */
 void ldb_sector_update(struct ldb_table table, uint8_t *key)
 {
 	char sector_ldb[LDB_MAX_PATH] = "\0";
@@ -166,7 +220,12 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 	ldb_error("E074 Error replacing sector with .tmp");
 }
 
-/* Erases sector.ldb */
+/**
+ * @brief Erases sector.ldb
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ */
 void ldb_sector_erase(struct ldb_table table, uint8_t *key)
 {
 	char sector_ldb[LDB_MAX_PATH] = "\0";
@@ -182,7 +241,15 @@ void ldb_sector_erase(struct ldb_table table, uint8_t *key)
 	ldb_error("E074 Error erasing sector");
 }
 
-/* Returns the sector path for a given table_path and key */
+/**
+ * @brief Returns the sector path for a given table_path and key
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ * @param mode // TODO
+ * @param tmp // TODO
+ * @return char* // TODO
+ */
 char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp)
 {
 	/* Create table (directory) if it doesn't already exist */

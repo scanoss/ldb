@@ -20,6 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file string.c
+  * @date 12 Jul 2020
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/string.c
+  */
+
+/**
+ * @brief // TODO
+ * 
+ * @param str // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_valid_ascii(char *str)
 {
 	if (strlen(str) < 1) return false;
@@ -28,6 +44,11 @@ bool ldb_valid_ascii(char *str)
 	return true;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param str // TODO
+ */
 void ldb_trim(char *str)
 {
 	int i = 0;
@@ -43,6 +64,13 @@ void ldb_trim(char *str)
 	str[i + 1] = 0;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param string // TODO
+ * @param separator // TODO
+ * @return int // TODO
+ */
 int ldb_split_string(char *string, char separator)
 {
 	int pos;
@@ -51,6 +79,13 @@ int ldb_split_string(char *string, char separator)
 	return pos + 1;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param str // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_valid_name(char *str)
 {
 	if (strlen(str) >= LDB_MAX_NAME) return false;
@@ -59,6 +94,19 @@ bool ldb_valid_name(char *str)
 	return true;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @param iteration // TODO
+ * @param ptr // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
@@ -76,6 +124,19 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 	return false;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @param iteration // TODO
+ * @param ptr // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	/* Print key in hex (first CSV field) */
@@ -104,12 +165,25 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 	return false;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param text // TODO
+ * @return int // TODO
+ */
 int ldb_word_len(char *text)
 {
 	for (int i=0; i<strlen(text); i++) if (text[i] == ' ') return i;
 	return strlen(text);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param table // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_valid_table(char *table)
 {
 
@@ -168,7 +242,12 @@ bool ldb_valid_table(char *table)
 }
 
 
-/* Counts number of words in normalized text */
+/**
+ * @brief Counts number of words in normalized text
+ * 
+ * @param text // TODO
+ * @return int // TODO
+ */
 int ldb_word_count(char *text)
 {
 	int words = 1;
@@ -176,7 +255,13 @@ int ldb_word_count(char *text)
 	return words;
 }
 
-/* Returns a pointer to a string containing the n word of the (normalized) list */
+/**
+ * @brief Returns a pointer to a string containing the n word of the (normalized) list
+ * 
+ * @param n // TODO
+ * @param wordlist // TODO
+ * @return char* // TODO
+ */
 char *ldb_extract_word(int n, char *wordlist)
 {
 	int word_start = 0;

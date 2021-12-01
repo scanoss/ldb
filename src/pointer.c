@@ -20,8 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Returns the map position for the given record ID, using only the last 3 bytes
-   of the key, since the sector name contains the first byte */
+/**
+  * @file pointer.c
+  * @date 12 Jul 2020
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/pointer.c
+  */
+
+/**
+ * @brief Returns the map position for the given record ID, using only the last 3 bytes
+ * of the key, since the sector name contains the first byte 
+ * 
+ * @param key // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t ldb_map_pointer_pos(uint8_t *key)
 {
 
@@ -38,14 +52,26 @@ uint64_t ldb_map_pointer_pos(uint8_t *key)
 	return out * LDB_PTR_LN;
 }
 
-/* Return pointer to the beginning of the given list */
+/**
+ * @brief Return pointer to the beginning of the given list
+ * 
+ * @param ldb_sector // TODO
+ * @param key // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t ldb_list_pointer(FILE *ldb_sector, uint8_t *key)
 {
 	fseeko64(ldb_sector, ldb_map_pointer_pos(key), SEEK_SET);
 	return ldb_uint40_read(ldb_sector);
 }
 
-/* Return pointer to the last node of the list */
+/**
+ * @brief Return pointer to the last node of the list
+ * 
+ * @param ldb_sector // TODO
+ * @param list_pointer // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t ldb_last_node_pointer(FILE *ldb_sector, uint64_t list_pointer)
 {
 	if (list_pointer == 0) return 0;
@@ -53,7 +79,14 @@ uint64_t ldb_last_node_pointer(FILE *ldb_sector, uint64_t list_pointer)
 	return ldb_uint40_read(ldb_sector);
 }
 
-/* Update list pointers */
+/**
+ * @brief Update list pointers
+ * 
+ * @param ldb_sector // TODO
+ * @param key // TODO
+ * @param list // TODO
+ * @param new_node // TODO
+ */
 void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uint64_t new_node)
 {
 	/* If this is the first node of the list, we update the map and leave */
@@ -90,6 +123,12 @@ void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uin
 	}
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param ldb_sector // TODO
+ * @param key // TODO
+ */
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key)
 {
 	fseeko64(ldb_sector, ldb_map_pointer_pos(key), SEEK_SET);

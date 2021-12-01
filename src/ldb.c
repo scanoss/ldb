@@ -20,6 +20,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file ldb.c
+  * @date 12 Jul 2020 
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
+  */
+
 #define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
@@ -76,13 +85,21 @@ char *ldb_commands[] =
 };
 int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 
-/* Display LDB error and exit program */
+/**
+ * @brief Display LDB error and exit program
+ * 
+ * @param txt // TODO
+ */
 void ldb_error (char *txt)
 {
 	fprintf(stdout, "%s\n", txt);
 	exit(EXIT_FAILURE);
 }
 
+/**
+ * @brief // TODO
+ * 
+ */
 void ldb_version()
 {
 	printf("ldb-%s\n", LDB_VERSION);

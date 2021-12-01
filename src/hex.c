@@ -20,6 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file hex.c
+  * @date 12 Jul 2020 
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/hex.c
+  */
+
+/**
+ * @brief // TODO
+ * 
+ * @param data // TODO
+ * @param len // TODO
+ * @param width // TODO
+ */
 void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width)
 {
 	uint8_t b16[] = "0123456789abcdef";
@@ -38,7 +54,19 @@ void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width)
 		}
 }
 
-/* Fixed width recordset handler for hexdump */
+/**
+ * @brief Fixed width recordset handler for hexdump
+ * 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param len // TODO
+ * @param iteration // TODO
+ * @param ptr // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
 	int *width = ptr;
@@ -50,7 +78,19 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 	return false;
 }
 
-/* Variable width recordset handler for hexdump */
+/**
+ * @brief Variable width recordset handler for hexdump
+ * 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param len // TODO
+ * @param iteration // TODO
+ * @param ptr // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
 	int *width = ptr;
@@ -62,7 +102,13 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
 	return false;
 }
 
-/* Converts hex to bin */
+/**
+ * @brief Converts hex to bin
+ * 
+ * @param hex // TODO
+ * @param len // TODO
+ * @param out // TODO
+ */
 void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
 {
 	uint32_t ptr = 0;
@@ -75,7 +121,13 @@ void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
 	}
 }
 
-/* Converts bin to hex */
+/**
+ * @brief Converts bin to hex
+ * 
+ * @param bin // TODO
+ * @param len // TODO
+ * @param out // TODO
+ */
 void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
 {
 	*out = 0;
@@ -83,6 +135,13 @@ void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
 		sprintf(out + strlen(out), "%02x", bin[i]);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param str // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_valid_hex(char *str)
 {
 	if (strlen(str) % 2) return false;
@@ -95,19 +154,34 @@ bool ldb_valid_hex(char *str)
 	return true;
 }
 
-/* Write an unsigned long integer (40-bit) in the provided ldb_sector at the current location */
+/**
+ * @brief Write an unsigned long integer (40-bit) in the provided ldb_sector at the current location
+ * 
+ * @param ldb_sector // TODO
+ * @param value // TODO
+ */
 void ldb_uint40_write(FILE *ldb_sector, uint64_t value)
 {
 	fwrite((uint8_t*)&value, 1, 5, ldb_sector);
 }
 
-/* Write an unsigned long integer (32-bit) in the provided ldb_sector at the current location */
+/**
+ * @brief Write an unsigned long integer (32-bit) in the provided ldb_sector at the current location
+ * 
+ * @param ldb_sector // TODO
+ * @param value // TODO
+ */
 void ldb_uint32_write(FILE *ldb_sector, uint32_t value)
 {
 	fwrite((uint8_t*)&value, 1, 4, ldb_sector);
 }
 
-/* Read an unsigned long integer (32-bit) from the provided ldb_sector at the current location */
+/**
+ * @brief Read an unsigned long integer (32-bit) from the provided ldb_sector at the current location
+ * 
+ * @param ldb_sector // TODO
+ * @return uint32_t // TODO
+ */
 uint32_t ldb_uint32_read(FILE *ldb_sector)
 {
 	uint32_t out = 0;
@@ -115,7 +189,12 @@ uint32_t ldb_uint32_read(FILE *ldb_sector)
 	return out;
 }
 
-/* Read an unsigned long integer (40-bit) from the provided ldb_sector at the current location */
+/**
+ * @brief Read an unsigned long integer (40-bit) from the provided ldb_sector at the current location
+ * 
+ * @param ldb_sector // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t ldb_uint40_read(FILE *ldb_sector)
 {
 	uint64_t out = 0;
@@ -123,7 +202,12 @@ uint64_t ldb_uint40_read(FILE *ldb_sector)
 	return out;
 }
 
-/* Read an unsigned integer (16-bit) from the provided ldb_sector at the current location */
+/**
+ * @brief Read an unsigned integer (16-bit) from the provided ldb_sector at the current location
+ * 
+ * @param ldb_sector // TODO
+ * @return uint16_t // TODO
+ */
 uint16_t ldb_uint16_read(FILE *ldb_sector)
 {
 	uint16_t out = 0;
@@ -131,7 +215,12 @@ uint16_t ldb_uint16_read(FILE *ldb_sector)
 	return out;
 }
 
-/* Read an unsigned integer (16-bit) from the provided pointer */
+/**
+ * @brief Read an unsigned integer (16-bit) from the provided pointer
+ * 
+ * @param pointer // TODO
+ * @return uint16_t // TODO
+ */
 uint16_t uint16_read(uint8_t *pointer)
 {
 	uint16_t out;
@@ -139,13 +228,23 @@ uint16_t uint16_read(uint8_t *pointer)
 	return out;
 }
 
-/* Write an unsigned integer (16-bit) in the provided location */
+/**
+ * @brief Write an unsigned integer (16-bit) in the provided location
+ * 
+ * @param pointer // TODO
+ * @param value // TODO
+ */
 void uint16_write(uint8_t *pointer, uint16_t value)
 {
 	memcpy(pointer, (uint8_t*)&value, 2);
 }
 
-/* Read an unsigned integer (16-bit) from the provided pointer */
+/**
+ * @brief Read an unsigned integer (16-bit) from the provided pointer
+ * 
+ * @param pointer // TODO
+ * @return uint32_t // TODO
+ */
 uint32_t uint32_read(uint8_t *pointer)
 {
 	uint32_t out;
@@ -153,13 +252,23 @@ uint32_t uint32_read(uint8_t *pointer)
 	return out;
 }
 
-/* Write an unsigned integer (32-bit) in the provided location */
+/**
+ * @brief  Write an unsigned integer (32-bit) in the provided location
+ * 
+ * @param pointer // TODO
+ * @param value // TODO
+ */
 void uint32_write(uint8_t *pointer, uint32_t value)
 {
 	memcpy(pointer, (uint8_t*)&value, 4);
 }
 
-/* Read an unsigned integer (40-bit) from the provided pointer */
+/**
+ * @brief Read an unsigned integer (40-bit) from the provided pointer
+ * 
+ * @param pointer // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t uint40_read(uint8_t *pointer)
 {
 	uint64_t out = 0;
@@ -167,12 +276,24 @@ uint64_t uint40_read(uint8_t *pointer)
 	return out;
 }
 
-/* Write an unsigned integer (40-bit) in the provided location */
+/**
+ * @brief Write an unsigned integer (40-bit) in the provided location
+ * 
+ * @param pointer // TODO
+ * @param value // TODO
+ */
 void uint40_write(uint8_t *pointer, uint64_t value)
 {
 	memcpy(pointer, (uint8_t*)&value, 5);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param n // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool uint32_is_zero(uint8_t *n)
 {
 	if (*n == 0)

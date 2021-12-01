@@ -20,6 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file dump.c
+  * @date 12 Jul 2020 
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/dump.c
+  */
+
+/**
+ * @brief // TODO
+ * 
+ * @param table // TODO
+ * @param hex_bytes // TODO
+ * @param sectorn // TODO
+ */
 void ldb_dump(struct ldb_table table, int hex_bytes, int sectorn)
 {
 	/* Read each DB sector */

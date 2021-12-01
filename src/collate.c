@@ -20,6 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+  * @file collate.c
+  * @date 19 Aug 2020 
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
+  */
+
+/**
+ * @brief // TODO
+ * 
+ * @param a // TODO
+ * @param b // TODO
+ * @return int // TODO
+ */
 int ldb_collate_cmp(const void * a, const void * b)
 {
 	const uint8_t *va = a;
@@ -35,7 +51,15 @@ int ldb_collate_cmp(const void * a, const void * b)
     return 0;
 }
 
-/* Checks if two blocks of memory contain the same data, from last to first byte */
+/**
+ * @brief Checks if two blocks of memory contain the same data, from last to first byte
+ * 
+ * @param a // TODO
+ * @param b // TODO
+ * @param bytes // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 {
 	for (int i = (bytes - 1); i >= 0; i--)
@@ -43,7 +67,14 @@ bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 	return true;
 }
 
-/* Eliminate duplicated records from data into tmp_data, returns new data size */
+/**
+ * @brief Eliminate duplicated records from data into tmp_data, returns new data size
+ * 
+ * @param collate // TODO
+ * @param ptr // TODO
+ * @param size // TODO
+ * @return int // TODO
+ */
 int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int size)
 {
 	int new_size = 0;
@@ -70,6 +101,13 @@ int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int siz
 	return new_size;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 {
 	FILE * new_sector = collate->out_sector;
@@ -97,6 +135,13 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 	return true;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO 
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 {
 	FILE * new_sector = collate->out_sector;
@@ -191,6 +236,13 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	return true;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_import_list(struct ldb_collate_data *collate)
 {
 	if (collate->table_rec_ln) return ldb_import_list_fixed_records(collate);
@@ -198,6 +250,18 @@ bool ldb_import_list(struct ldb_collate_data *collate)
 	return ldb_import_list_variable_records(collate);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	/* Size should be = N x rec_ln */
@@ -227,7 +291,18 @@ bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *ke
 	return true;
 }
 
-/* Add record to collate->data */
+/**
+ * @brief Add record to collate->data 
+ * 
+ * @param collate // TODO
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	/* Add record exceeds limit, skip it */
@@ -253,6 +328,18 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	return true;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	if (collate->table_rec_ln)
@@ -262,6 +349,11 @@ bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint
 	return ldb_collate_add_variable_record(collate, key, subkey, subkey_ln, data, size);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param collate // TODO
+ */
 void ldb_collate_sort(struct ldb_collate_data *collate)
 {
 		if (collate->merge) return;
@@ -285,8 +377,17 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
 		qsort(collate->data, items, size, ldb_collate_cmp);
 }
 
-/* Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
-	to speed up the search */
+/**
+ * @brief Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
+ * to speed up the search.
+ * 
+ * @param collate // TODO
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln)
 {
 	/* Position pointer to start of second byte in the sorted del_key array */
@@ -312,6 +413,19 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 	return false;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param key // TODO
+ * @param subkey // TODO
+ * @param subkey_ln // TODO
+ * @param data // TODO
+ * @param size // TODO
+ * @param iteration // TODO
+ * @param ptr // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 
@@ -365,9 +479,16 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	return false;
 }
 
-/*	Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
-	(the first byte is the same in all keys)
-*/
+
+/**
+ * @brief Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
+ *	(the first byte is the same in all keys)
+ * 
+ * @param del_keys //TODO
+ * @param del_ln //TODO
+ * @param subkey_ln //TODO
+ * @return long* //TODO
+ */
 long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 {
 	int step = LDB_KEY_LN + subkey_ln;
@@ -388,6 +509,16 @@ long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 	return map;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param table // TODO
+ * @param out_table // TODO
+ * @param max_rec_ln // TODO
+ * @param merge // TODO
+ * @param del_keys // TODO
+ * @param del_ln // TODO
+ */
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln)
 {
 

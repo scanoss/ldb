@@ -20,6 +20,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+  * @file shell.c
+  * @date 12 Jul 2020
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/shell.c
+  */
+
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -37,6 +46,10 @@
 #include "mz.c"
 #include "command.c"
 
+/**
+ * @brief // TODO
+ * 
+ */
 void help()
 {
 	printf("LDB stores information using single, 32-bit keys and single data records. Data records could be fixed in size (drastically footprint for large amounts of short, fixed-sized records). The LDB console accepts the following commands:\n");
@@ -77,6 +90,13 @@ void help()
 
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param raw_command // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool execute(char *raw_command)
 {
 
@@ -185,7 +205,12 @@ bool execute(char *raw_command)
 	return true;
 }
 
-
+/**
+ * @brief // TODO
+ * 
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool stdin_handle()
 {
 
@@ -201,23 +226,42 @@ bool stdin_handle()
 	return stay;
 }
 
+/**
+ * @brief // TODO
+ * 
+ */
 void welcome()
 {
 	printf("Welcome to LDB %s\n", LDB_VERSION);
 	printf("Use help for a command list and quit for leaving this session\n\n"); 
 }
 
+/**
+ * @brief // TODO
+ * 
+ */
 void ldb_prompt()
 {
 	printf("ldb> ");
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool is_stdin_off()
 {
 	struct termios t;
 	return (tcgetattr(STDIN_FILENO, &t) == 0);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @return int // TODO
+ */
 int main()
 {
 	bool stdin_off = is_stdin_off();

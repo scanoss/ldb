@@ -39,6 +39,21 @@
  * d = is the data record
  */
 
+/**
+  * @file node.c
+  * @date 12 Jul 2020
+  * @brief // TODO
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/node.c
+  */
+
+/**
+ * @brief // TODO
+ * 
+ * @param rs // TODO
+ * @param header // TODO
+ */
 void ldb_load_node_header(struct ldb_recordset *rs, uint8_t *header)
 {
 
@@ -50,6 +65,11 @@ void ldb_load_node_header(struct ldb_recordset *rs, uint8_t *header)
 	if (rs->rec_ln) rs->node_ln = rs->rec_ln * rs->node_ln;
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param rs // TODO
+ */
 void ldb_load_node(struct ldb_recordset *rs)
 {
 	if (rs->node) free(rs->node);
@@ -62,10 +82,16 @@ void ldb_load_node(struct ldb_recordset *rs)
 	rs->node[rs->node_ln] = 0;
 
 }
-
-/*
-   Writes a data node and updates pointers
-   */
+/**
+ * @brief Writes a data node and updates pointers
+ * 
+ * @param table // TODO
+ * @param ldb_sector // TODO
+ * @param key // TODO
+ * @param data // TODO
+ * @param dataln // TODO
+ * @param records // TODO
+ */
 void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records)
 {
 	uint8_t subkey_ln = table.key_ln - LDB_KEY_LN;
@@ -144,11 +170,21 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 	free(node);
 }
 
-/*
-   Reads a node from the given location (ptr) for a 32-bit key. If ptr is set to zero, the location is
-   obtained from the sector map. The function returns a pointer to the next node, which is zero if it 
-   is the last node in the list.
-   */
+/**
+ * @brief Reads a node from the given location (ptr) for a 32-bit key. If ptr is set to zero, the location is
+ * obtained from the sector map. The function returns a pointer to the next node, which is zero if it 
+ * is the last node in the list.
+ * 
+ * @param sector // TODO
+ * @param table // TODO
+ * @param ldb_sector // TODO
+ * @param ptr // TODO
+ * @param key // TODO
+ * @param bytes_read // TODO
+ * @param out // TODO
+ * @param max_node_size // TODO
+ * @return uint64_t // TODO
+ */
 uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size)
 {
 	*bytes_read = 0;
@@ -221,9 +257,12 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 	return next_node;
 }
 
-/* 
-   Unlinks a first node found for the given table and key
-   */
+/**
+ * @brief Unlinks a first node found for the given table and key
+ * 
+ * @param table // TODO
+ * @param key // TODO
+ */
 void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 {
 
@@ -339,6 +378,15 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 	if (ldb_sector) fclose(ldb_sector);
 }
 
+/**
+ * @brief // TODO
+ * 
+ * @param node // TODO
+ * @param node_size // TODO
+ * @param subkey_ln // TODO
+ * @return true // TODO
+ * @return false // TODO
+ */
 bool ldb_validate_node(uint8_t *node, uint32_t node_size, int subkey_ln)
 {
 
