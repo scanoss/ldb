@@ -23,18 +23,17 @@
  /**
   * @file string.c
   * @date 12 Jul 2020
-  * @brief // TODO
+  * @brief String utils
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/string.c
   */
 
 /**
- * @brief // TODO
+ * @brief Verifies if a buffer contains printable characters
  * 
- * @param str // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param str String to verify
+ * @return true String contains printable characters, false otherwise.
  */
 bool ldb_valid_ascii(char *str)
 {
@@ -45,9 +44,9 @@ bool ldb_valid_ascii(char *str)
 }
 
 /**
- * @brief // TODO
+ * @brief remove whitespace characters from the start and end of a string
  * 
- * @param str // TODO
+ * @param str String to work on.
  */
 void ldb_trim(char *str)
 {
@@ -65,11 +64,13 @@ void ldb_trim(char *str)
 }
 
 /**
- * @brief // TODO
+ * @brief Divides a string into two when the first occurrence of a delimiter is found.
+ * In the position where the delimiter was found, a null character is added. This means that the first part of the string is in the input buffer.
+ * To obtain the position of the second part use the return value.
  * 
- * @param string // TODO
- * @param separator // TODO
- * @return int // TODO
+ * @param string The string to be split.
+ * @param separator The delimiter to split the string on.
+ * @return int Pointer to the second part of the string.
  */
 int ldb_split_string(char *string, char separator)
 {
@@ -80,11 +81,11 @@ int ldb_split_string(char *string, char separator)
 }
 
 /**
- * @brief // TODO
+ * @brief Verifies if a string is a valid dbname/tablename
+ * To identificate a table, a string must have the following format: "dbname/tablename"
  * 
- * @param str // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param str String to verify
+ * @return true valid dbname/tablename, false otherwise.
  */
 bool ldb_valid_name(char *str)
 {
@@ -95,17 +96,19 @@ bool ldb_valid_name(char *str)
 }
 
 /**
- * @brief // TODO
+ * @brief Prints to stdout all the parameters in pretty format.
  * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
  */
 bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
@@ -125,17 +128,19 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 }
 
 /**
- * @brief // TODO
+ * @brief Prints to stdout all the parameters in pretty CSV format.
  * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
  */
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
@@ -166,10 +171,11 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 }
 
 /**
- * @brief // TODO
+ * @brief Gives the length of the first word in a string.
+ * It counts how many characters are before the first space.
  * 
- * @param text // TODO
- * @return int // TODO
+ * @param text String to be searched.
+ * @return int Characters found before the first space (Space not included)
  */
 int ldb_word_len(char *text)
 {
@@ -178,11 +184,10 @@ int ldb_word_len(char *text)
 }
 
 /**
- * @brief // TODO
- * 
- * @param table // TODO
- * @return true // TODO
- * @return false // TODO
+ * @brief Verify if a pair DBNAME/TABLENAME is valid and exists.
+ *
+ * @param table A string containing the dbname and table name. Must be in the form of "dbname/tablename".
+ * @return true Name valid, db and table exists. False otherwise.
  */
 bool ldb_valid_table(char *table)
 {
@@ -244,9 +249,10 @@ bool ldb_valid_table(char *table)
 
 /**
  * @brief Counts number of words in normalized text
+ * A word is considered to be a sequence of characters separated by spaces.
  * 
- * @param text // TODO
- * @return int // TODO
+ * @param text String to be searched.
+ * @return int Return the number of words in the text. 
  */
 int ldb_word_count(char *text)
 {
@@ -258,9 +264,11 @@ int ldb_word_count(char *text)
 /**
  * @brief Returns a pointer to a string containing the n word of the (normalized) list
  * 
- * @param n // TODO
- * @param wordlist // TODO
- * @return char* // TODO
+ * Example: ldb_extract_word(3, "This is a test"); returns "a"
+ * 
+ * @param n The word number to extract. Starts at 1.
+ * @param wordlist A list of words separated by spaces.
+ * @return char* Pointer to the nth word in the list.
  */
 char *ldb_extract_word(int n, char *wordlist)
 {

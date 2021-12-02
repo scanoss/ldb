@@ -30,10 +30,10 @@
   */
 
 /**
- * @brief // TODO
+ * @brief Verifies if the db is locked.
+ * Reads the file ldb.lock and if exists the db is locked. Otherwise is free to use.
  * 
- * @return true // TODO
- * @return false // TODO
+ * @return true if the db is locked, false otherwise.
  */
 bool ldb_locked()
 {

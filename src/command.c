@@ -377,6 +377,12 @@ void ldb_command_merge(char *command)
 /**
  * @brief Execute LDB command unlink
  * 
+ * Structure of command:
+ * 
+ * 			unlink list from DBNAME/TABLENAME key KEY
+ * 		      1     2	 3          4          5   6
+ * 
+ * 
  * @param command command string
  */
 void ldb_command_unlink_list(char *command)
@@ -479,6 +485,13 @@ void ldb_command_insert(char *command, commandtype type)
 
 /**
  * @brief LDB command create new table
+ * The command is of the form: 
+ * 
+ * Structure of the command:
+ * 
+ * 		create table DBNAME/TABLENAME keylen N reclen N
+ * 	       1     2         3              4  5   6	  7  
+ * 
  * 
  * @param command command string
  */
@@ -493,6 +506,8 @@ void ldb_command_create_table(char *command)
 	char *dbtable = ldb_extract_word(3, command);
 	char *table = dbtable + ldb_split_string(dbtable, '/');
 
+	// dbtable is the name of the database;
+	// table is the name of the table;
 	if (ldb_create_table(dbtable, table, keylen, reclen)) printf("OK\n");
 
 	free(dbtable);
@@ -577,6 +592,7 @@ void ldb_command_select(char *command, select_format format)
  */
 void ldb_command_create_database(char *command)
 {
+	/* Extract 3th values from command, which is the db name*/
 	char *database = ldb_extract_word(3, command);	
 	char *path = malloc(LDB_MAX_PATH);
 	sprintf(path, "%s/%s", ldb_root, database);

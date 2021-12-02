@@ -157,7 +157,7 @@ void mz_dump_keys(struct mz_job *job)
  * @brief Handling function for listing mz contents in stdout
  * 
  * @param job pointer to mz input struct
- * @return true // TODO
+ * @return true Always true
  */
 bool mz_list_handler(struct mz_job *job)
 {
@@ -210,11 +210,10 @@ void mz_list(struct mz_job *job)
 }
 
 /**
- * @brief // TODO
+ * @brief Handler to find if a key exist in the mz_job struct, in that case job.key will be true.
  * 
- * @param job // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param job pointer to input mz job struct
+ * @return true if key exist, false otherwise.
  */
 bool mz_key_exists_handler(struct mz_job *job)
 {
@@ -308,10 +307,10 @@ void mz_cat(struct mz_job *job, char *key)
 }
 
 /**
- * @brief Hnadler to extract a mz file
+ * @brief Handler to extract a mz file
  * 
  * @param job input mz job
- * @return true // TODO
+ * @return true Always return true
  */
 bool mz_extract_handler(struct mz_job *job)
 {
