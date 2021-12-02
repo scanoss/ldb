@@ -23,7 +23,7 @@
 /**
   * @file shell.c
   * @date 12 Jul 2020
-  * @brief // TODO
+  * @brief Contains shell functions and help text
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/shell.c
@@ -47,7 +47,7 @@
 #include "command.c"
 
 /**
- * @brief // TODO
+ * @brief Contains the shell help text
  * 
  */
 void help()
@@ -91,11 +91,10 @@ void help()
 }
 
 /**
- * @brief // TODO
+ * @brief Process and run the user input command
  * 
- * @param raw_command // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param raw_command string with the user input
+ * @return true if the program must keept running, false otherwise
  */
 bool execute(char *raw_command)
 {
@@ -206,10 +205,10 @@ bool execute(char *raw_command)
 }
 
 /**
- * @brief // TODO
+ * @brief Handle the command line interface
+ * To close the program, the variable stay should be set to false
  * 
- * @return true // TODO
- * @return false // TODO
+ * @return true if the program must keept running, false otherwise
  */
 bool stdin_handle()
 {
@@ -227,7 +226,7 @@ bool stdin_handle()
 }
 
 /**
- * @brief // TODO
+ * @brief Prints the welcome banner
  * 
  */
 void welcome()
@@ -237,7 +236,7 @@ void welcome()
 }
 
 /**
- * @brief // TODO
+ * @brief Prints the ldb prompt
  * 
  */
 void ldb_prompt()
@@ -245,23 +244,12 @@ void ldb_prompt()
 	printf("ldb> ");
 }
 
-/**
- * @brief // TODO
- * 
- * @return true // TODO
- * @return false // TODO
- */
 bool is_stdin_off()
 {
 	struct termios t;
 	return (tcgetattr(STDIN_FILENO, &t) == 0);
 }
 
-/**
- * @brief // TODO
- * 
- * @return int // TODO
- */
 int main()
 {
 	bool stdin_off = is_stdin_off();

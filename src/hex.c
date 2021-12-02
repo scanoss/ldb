@@ -24,17 +24,29 @@
   * @file hex.c
   * @date 12 Jul 2020 
   * @brief Contains HEX print and process utilities
- 
+  * 
   * //TODO Long description
+  *
   * @see https://github.com/scanoss/ldb/blob/master/src/hex.c
   */
 
+
 /**
- * @brief // TODO
+ * @brief Prints a hexdump of 'len' bytes from 'data' organized 'width' columns
  * 
- * @param data // TODO
- * @param len // TODO
- * @param width // TODO
+ * 
+ * Example:
+ * 0000  54686973206973206120  This is a
+ * 0010  737472696e6720746861  string tha
+ * 0020  74207761732068657864  t was hexd
+ * 0030  756d706564202e2e2e2e  umped ....
+ * 0040  2e2e2e2e2e2e2e2e2e2e  ..........
+ * 0050  2e2e2e2e2e2e2e2e2e2e  ..........
+ * 
+ * 
+ * @param data Buffer to print
+ * @param len Length of buffer
+ * @param width width of columns
  */
 void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width)
 {
@@ -57,15 +69,16 @@ void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width)
 /**
  * @brief Fixed width recordset handler for hexdump
  * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param len // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * For Example: See in function ldb_hexprint();
+ * 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data Buffer to print
+ * @param len Length of buffer
+ * @param iteration Not used
+ * @param ptr Pointer to integer. Stores the number of columns to be printed.
+ * @return false Always return false. It 
  */
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
@@ -79,17 +92,18 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 }
 
 /**
- * @brief Variable width recordset handler for hexdump
+ * @brief Fixed width recordset handler for hexdump
  * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param len // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * For Example: See in function ldb_hexprint();
+ * 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data Buffer to print
+ * @param len Length of buffer
+ * @param iteration Not used
+ * @param ptr Pointer to integer. Stores the number of columns to be printed.
+ * @return false Always return false. It 
  */
 bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
@@ -103,11 +117,15 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
 }
 
 /**
- * @brief Converts hex to bin
+ * @brief Converts a string of hex digits to binary.
+ * Does the opposite of ldb_hexprint() and ldb_bin_to_hex();
  * 
- * @param hex // TODO
- * @param len // TODO
- * @param out // TODO
+ * Example: ldb_hex_to_bin("48656c6c6f20576f726c6421", 24, out);
+ *          48656c6c6f20576f726c6421 -> Hello World!
+ * 
+ * @param hex String representing hex data
+ * @param len Lenght of the string in bytes
+ * @param out Buffer to write the binary
  */
 void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
 {
@@ -122,11 +140,12 @@ void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
 }
 
 /**
- * @brief Converts bin to hex
+ * @brief Converts binary to a string of hex digits
+ * Does the opposite of ldb_hex_to_bin();
  * 
- * @param bin // TODO
- * @param len // TODO
- * @param out // TODO
+ * @param bin binary data to convert
+ * @param len Length in bytes of the binary data
+ * @param out Buffer to write the hex string
  */
 void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
 {
@@ -136,11 +155,10 @@ void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
 }
 
 /**
- * @brief // TODO
+ * @brief Verify if a string only contains hexadecimal characters
  * 
- * @param str // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param str String to verify
+ * @return true If the string only contains hexadecimal characters. False otherwise.
  */
 bool ldb_valid_hex(char *str)
 {
@@ -157,8 +175,8 @@ bool ldb_valid_hex(char *str)
 /**
  * @brief Write an unsigned long integer (40-bit) in the provided ldb_sector at the current location
  * 
- * @param ldb_sector // TODO
- * @param value // TODO
+ * @param ldb_sector LDB sector to write to
+ * @param value Value to write
  */
 void ldb_uint40_write(FILE *ldb_sector, uint64_t value)
 {
@@ -168,8 +186,8 @@ void ldb_uint40_write(FILE *ldb_sector, uint64_t value)
 /**
  * @brief Write an unsigned long integer (32-bit) in the provided ldb_sector at the current location
  * 
- * @param ldb_sector // TODO
- * @param value // TODO
+ * @param ldb_sector LDB sector to write to
+ * @param value Value to write
  */
 void ldb_uint32_write(FILE *ldb_sector, uint32_t value)
 {
@@ -179,8 +197,8 @@ void ldb_uint32_write(FILE *ldb_sector, uint32_t value)
 /**
  * @brief Read an unsigned long integer (32-bit) from the provided ldb_sector at the current location
  * 
- * @param ldb_sector // TODO
- * @return uint32_t // TODO
+ * @param ldb_sector LDB sector to read from
+ * @return uint32_t Value readed
  */
 uint32_t ldb_uint32_read(FILE *ldb_sector)
 {
@@ -192,8 +210,8 @@ uint32_t ldb_uint32_read(FILE *ldb_sector)
 /**
  * @brief Read an unsigned long integer (40-bit) from the provided ldb_sector at the current location
  * 
- * @param ldb_sector // TODO
- * @return uint64_t // TODO
+ * @param ldb_sector LDB sector to read from
+ * @return uint64_t Value readed
  */
 uint64_t ldb_uint40_read(FILE *ldb_sector)
 {
@@ -205,8 +223,8 @@ uint64_t ldb_uint40_read(FILE *ldb_sector)
 /**
  * @brief Read an unsigned integer (16-bit) from the provided ldb_sector at the current location
  * 
- * @param ldb_sector // TODO
- * @return uint16_t // TODO
+ * @param ldb_sector LDB sector to read from
+ * @return uint16_t Value readed
  */
 uint16_t ldb_uint16_read(FILE *ldb_sector)
 {
@@ -216,10 +234,11 @@ uint16_t ldb_uint16_read(FILE *ldb_sector)
 }
 
 /**
- * @brief Read an unsigned integer (16-bit) from the provided pointer
+ * @brief Read an unsigned integer (16-bit) from the provided pointer.
+ * Copy two bytes starting from the provided pointer into an unsigned short.
  * 
- * @param pointer // TODO
- * @return uint16_t // TODO
+ * @param pointer Pointer to read from
+ * @return uint16_t Value readed
  */
 uint16_t uint16_read(uint8_t *pointer)
 {
@@ -230,9 +249,11 @@ uint16_t uint16_read(uint8_t *pointer)
 
 /**
  * @brief Write an unsigned integer (16-bit) in the provided location
+ * Copy two bytes from the provided value into the provided pointer.
+ * pointer must point to a memory allocated of at least 2 bytes long.
  * 
- * @param pointer // TODO
- * @param value // TODO
+ * @param pointer Pointer to write to
+ * @param value Value to write
  */
 void uint16_write(uint8_t *pointer, uint16_t value)
 {
@@ -240,10 +261,10 @@ void uint16_write(uint8_t *pointer, uint16_t value)
 }
 
 /**
- * @brief Read an unsigned integer (16-bit) from the provided pointer
+ * @brief Read an unsigned integer (32-bit) from the provided pointer
  * 
- * @param pointer // TODO
- * @return uint32_t // TODO
+ * @param pointer Pointer to read from
+ * @return uint32_t Value readed
  */
 uint32_t uint32_read(uint8_t *pointer)
 {
@@ -254,9 +275,12 @@ uint32_t uint32_read(uint8_t *pointer)
 
 /**
  * @brief  Write an unsigned integer (32-bit) in the provided location
+ * Copy four bytes from the provided value into the provided pointer.
+ * pointer must point to a memory allocated of at least 4 bytes long.
  * 
- * @param pointer // TODO
- * @param value // TODO
+ * 
+ * @param pointer Pointer to write to
+ * @param value Value to write
  */
 void uint32_write(uint8_t *pointer, uint32_t value)
 {
@@ -266,8 +290,8 @@ void uint32_write(uint8_t *pointer, uint32_t value)
 /**
  * @brief Read an unsigned integer (40-bit) from the provided pointer
  * 
- * @param pointer // TODO
- * @return uint64_t // TODO
+ * @param pointer Pointer to read from
+ * @return uint64_t Value readed
  */
 uint64_t uint40_read(uint8_t *pointer)
 {
@@ -278,9 +302,11 @@ uint64_t uint40_read(uint8_t *pointer)
 
 /**
  * @brief Write an unsigned integer (40-bit) in the provided location
+ * Copy five bytes from the provided value into the provided pointer.
+ * pointer must point to a memory allocated of at least 5 bytes long.
  * 
- * @param pointer // TODO
- * @param value // TODO
+ * @param pointer Pointer to write to
+ * @param value Value to write
  */
 void uint40_write(uint8_t *pointer, uint64_t value)
 {
@@ -288,11 +314,10 @@ void uint40_write(uint8_t *pointer, uint64_t value)
 }
 
 /**
- * @brief // TODO
+ * @brief Verify if a memory block of 4 bytes is all zeros
  * 
- * @param n // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param n Buffer to verify
+ * @return true If all values are 0. False otherwise.
  */
 bool uint32_is_zero(uint8_t *n)
 {

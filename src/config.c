@@ -73,7 +73,7 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
 }
 
 /**
- * @brief Load config from a file
+ * @brief Read table config from a file and loads insto a ldb_table structure
  * 
  * @param db_table DB table name
  * @return struct with table configuration

@@ -23,7 +23,7 @@
 /**
   * @file sector.c
   * @date 12 Jul 2020
-  * @brief // TODO
+  * @brief Contains functions related to table and database creations. Also has helper functions for sector handling.
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/sector.c
@@ -34,10 +34,10 @@
  *  in case it does not exist. Otherwise an empty sector file is created in case it
  *  does not exist
  * 
- * @param table // TODO
- * @param key // TODO
- * @param mode // TODO
- * @return FILE* // TODO
+ * @param table Struct with the table configuration.
+ * @param key Key of the table
+ * @param mode Opens the db in read or write mode
+ * @return FILE* File descriptor of the ldb_sector (sector_path is the filepath associated with a pair tablename and a key)
  */
 FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
@@ -53,14 +53,13 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 }
 
 /**
- * @brief // TODO
+ * @brief Creates a table in the ldb directory
  * 
- * @param db // TODO
- * @param table // TODO
- * @param keylen // TODO
- * @param reclen // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param db database name
+ * @param table table name
+ * @param keylen length of the key
+ * @param reclen length of the record
+ * @return true success. false failure
  */
 bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 {
@@ -100,11 +99,11 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 }
 
 /**
- * @brief // TODO
+ * @brief Creates the databases folders from a database name
+ * The path for the folder is a concatenation of ldb_root + database name. ldb_root is defined in ldb.c
  * 
- * @param database // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param database String with the database name
+ * @return true Success
  */
 bool ldb_create_database(char *database)
 {
@@ -133,9 +132,9 @@ bool ldb_create_database(char *database)
  * @brief Loads an entire LDB sector into memory and returns a pointer
    (NULL if the sector does not exist)
  * 
- * @param table // TODO
- * @param key // TODO
- * @return uint8_t* // TODO
+ * @param table  Instance of the table struct.
+ * @param key   Key of the sector to load.
+ * @return uint8_t* Pointer to the block of memory with the sector loaded.
  */
 uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 
@@ -157,13 +156,13 @@ uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
  * @brief Reserves memory for storing a copy of an entire LDB sector
  * (returns NULL if the source sector does not exist)
  * 
- * @param table // TODO
- * @param key // TODO
- * @return uint8_t* // TODO
+ * @param table Instance of the table struct.
+ * @param key Key of the sector
+ * @return uint8_t* Pointer to the block of memory.
  */
 uint8_t *ldb_load_new_sector(struct ldb_table table, uint8_t *key) {
 
-	FILE *ldb_sector = ldb_open(table, key, "r");
+	FILE *ldb_sector = ldb_open(table, key, "r");	// Opens a ldb in read mode. Will return NULL if it does not exist.
 	if (!ldb_sector) return NULL;
 
 	fseeko64(ldb_sector, 0, SEEK_END);
@@ -179,7 +178,7 @@ uint8_t *ldb_load_new_sector(struct ldb_table table, uint8_t *key) {
 /**
  * @brief Create an empty data sector (empty map)
  * 
- * @param sector_path // TODO
+ * @param sector_path Path to the sector
  */
 void ldb_create_sector(char *sector_path)
 {
@@ -199,9 +198,10 @@ void ldb_create_sector(char *sector_path)
 
 /**
  * @brief Moves sector.tmp into sector.ldb
+ * Copy a temporary sector into a permanent sector.
  * 
- * @param table // TODO
- * @param key // TODO
+ * @param table Instance of the table struct.
+ * @param key Key of the sector.
  */
 void ldb_sector_update(struct ldb_table table, uint8_t *key)
 {
@@ -223,8 +223,10 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 /**
  * @brief Erases sector.ldb
  * 
- * @param table // TODO
- * @param key // TODO
+ * Does not erase sector.tmp
+ * 
+ * @param table Table struct that will be erased
+ * @param key Key of the sector to be erased
  */
 void ldb_sector_erase(struct ldb_table table, uint8_t *key)
 {
@@ -244,11 +246,16 @@ void ldb_sector_erase(struct ldb_table table, uint8_t *key)
 /**
  * @brief Returns the sector path for a given table_path and key
  * 
- * @param table // TODO
- * @param key // TODO
- * @param mode // TODO
- * @param tmp // TODO
- * @return char* // TODO
+ * Table_path is a concatenation of ldb_root + database_name + table_name
+ * 	- ldb_root is defined on ldb.c
+ * 	- database_name is obtained from the struct table (table.db)
+ *  - table_name is obtained from the struct table (table.table)
+ * 
+ * @param table Instance of the table struct in order to get the sector_path
+ * @param key Key of the sector to be accessed
+ * @param mode Mode of the sector to be accessed mode = "r" for only read. mode = "r+" for reads and write
+ * @param tmp Boolean to indicate if the sector is temporary or not. (Will return the path with extention .tmp or .ldb)
+ * @return char* Sector path according to the table and key provided.
  */
 char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp)
 {
