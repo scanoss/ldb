@@ -20,6 +20,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+  * @file collate.c
+  * @date 19 Aug 2020 
+  * @brief Implement de funtions used for collate ldb records
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
+  */
+
+/**
+ * @brief Compare two blocks. Compare each byte until the end of the shorter record.
+ * 
+ * @param a block a
+ * @param b block b
+ * @return 1 if a is bigger than b, -1 if b is bigger tha a, or 0 if they are equals.
+ */
 int ldb_collate_cmp(const void * a, const void * b)
 {
 	const uint8_t *va = a;
@@ -35,7 +51,14 @@ int ldb_collate_cmp(const void * a, const void * b)
     return 0;
 }
 
-/* Checks if two blocks of memory contain the same data, from last to first byte */
+/**
+ * @brief Checks if two blocks of memory contain the same data, from last to first byte
+ * 
+ * @param a block a.
+ * @param b block b.
+ * @param bytes number of bytes to be compared
+ * @return true if they are equals, false otherwise.
+ */
 bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 {
 	for (int i = (bytes - 1); i >= 0; i--)
@@ -43,7 +66,14 @@ bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes)
 	return true;
 }
 
-/* Eliminate duplicated records from data into tmp_data, returns new data size */
+/**
+ * @brief Eliminate duplicated records from data into tmp_data, returns new data size
+ * 
+ * @param collate pointer to buffer to be collated
+ * @param ptr start position
+ * @param size block number
+ * @return int updated size after collate
+ */
 int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int size)
 {
 	int new_size = 0;
@@ -70,6 +100,12 @@ int ldb_eliminate_duplicates(struct ldb_collate_data *collate, long ptr, int siz
 	return new_size;
 }
 
+/**
+ * @brief import a list, collate and write to a file.
+ * 
+ * @param collate pointer to collate data strcture.
+ * @return true succed
+ */
 bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 {
 	FILE * new_sector = collate->out_sector;
@@ -97,6 +133,11 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 	return true;
 }
 
+/**
+ * @brief import a list, collate and write to a file.
+ * @param collate pointer to collate data strcture.
+ * @return true succed
+ */
 bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 {
 	FILE * new_sector = collate->out_sector;
@@ -191,6 +232,11 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	return true;
 }
 
+/**
+ * @brief Import a list and write it into a file.
+ * @param collate pointer to collate data structure.
+ * @return true succed
+ */
 bool ldb_import_list(struct ldb_collate_data *collate)
 {
 	if (collate->table_rec_ln) return ldb_import_list_fixed_records(collate);
@@ -198,6 +244,17 @@ bool ldb_import_list(struct ldb_collate_data *collate)
 	return ldb_import_list_variable_records(collate);
 }
 
+/**
+ * @brief Add fixed records to a list
+ * 
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
+ */
 bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	/* Size should be = N x rec_ln */
@@ -227,7 +284,17 @@ bool ldb_collate_add_fixed_records(struct ldb_collate_data *collate, uint8_t *ke
 	return true;
 }
 
-/* Add record to collate->data */
+/**
+ * @brief Add variable records to a list
+ * 
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
+ */
 bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	/* Add record exceeds limit, skip it */
@@ -253,6 +320,17 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	return true;
 }
 
+/**
+ * @brief Add record to a list
+ * 
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
+ */
 bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size)
 {
 	if (collate->table_rec_ln)
@@ -262,6 +340,11 @@ bool ldb_collate_add_record(struct ldb_collate_data *collate, uint8_t *key, uint
 	return ldb_collate_add_variable_record(collate, key, subkey, subkey_ln, data, size);
 }
 
+/**
+ * @brief Sort a list
+ * 
+ * @param collate point to collate data structure
+ */
 void ldb_collate_sort(struct ldb_collate_data *collate)
 {
 		if (collate->merge) return;
@@ -285,8 +368,16 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
 		qsort(collate->data, items, size, ldb_collate_cmp);
 }
 
-/* Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
-	to speed up the search */
+/**
+ * @brief Search for key+subkey in the del_keys blob. Search is lineal on a sorted array, with the aid of del_map
+ * to speed up the search.
+ * 
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @return true
+ */
 bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln)
 {
 	/* Position pointer to start of second byte in the sorted del_key array */
@@ -312,6 +403,17 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 	return false;
 }
 
+/**
+ * @brief LDB collate handler. Will be called for ldb_fetch_recordset in each iteration.
+ * Execute the collate job, adding the new registers or deleting the keys from the delete list.
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
+ */
 bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 
@@ -365,9 +467,16 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	return false;
 }
 
-/*	Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
-	(the first byte is the same in all keys)
-*/
+
+/**
+ * @brief Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
+ *	(the first byte is the same in all keys)
+ * 
+ * @param del_keys keys to be deleted
+ * @param del_ln keys lenght
+ * @param subkey_ln subkey lenght
+ * @return pointer to the output map
+ */
 long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 {
 	int step = LDB_KEY_LN + subkey_ln;
@@ -388,6 +497,16 @@ long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 	return map;
 }
 
+/**
+ * @brief Execute the collate job
+ * 
+ * @param table LDB table to be processed
+ * @param out_table Output LDB table
+ * @param max_rec_ln Maximum record lenght
+ * @param merge True for update a record, false to add a new one.
+ * @param del_keys pointer to list of keys to be deleted.
+ * @param del_ln number of keys to be deleted
+ */
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln)
 {
 

@@ -20,7 +20,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Handle the dump keys record: Write in stdout unique keys */
+ /**
+  * @file keys.c
+  * @date 24 Dec 2020 
+  * @brief Handle the dump keys record: Write in stdout unique keys
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
+  */
+
+/**
+ * @brief Handle the dump keys record: Write in stdout unique keys
+ * 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @param iteration number of iterations
+ * @param ptr[out] output pointer
+ * @return true to finish the fetch
+ * @return false to continue the fetch
+ */
 bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	struct ldb_table *table = ptr;
@@ -44,6 +65,11 @@ bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t
 	return false;
 }
 
+/**
+ * @brief LDB dump keys trought stdout
+ * 
+ * @param table input table
+ */
 void ldb_dump_keys(struct ldb_table table)
 {
 	/* Read each DB sector */

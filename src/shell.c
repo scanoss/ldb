@@ -20,6 +20,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+  * @file shell.c
+  * @date 12 Jul 2020
+  * @brief Contains shell functions and help text
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/shell.c
+  */
+
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -37,6 +46,10 @@
 #include "mz.c"
 #include "command.c"
 
+/**
+ * @brief Contains the shell help text
+ * 
+ */
 void help()
 {
 	printf("LDB stores information using single, 32-bit keys and single data records. Data records could be fixed in size (drastically footprint for large amounts of short, fixed-sized records). The LDB console accepts the following commands:\n");
@@ -77,6 +90,12 @@ void help()
 
 }
 
+/**
+ * @brief Process and run the user input command
+ * 
+ * @param raw_command string with the user input
+ * @return true if the program must keept running, false otherwise
+ */
 bool execute(char *raw_command)
 {
 
@@ -185,7 +204,12 @@ bool execute(char *raw_command)
 	return true;
 }
 
-
+/**
+ * @brief Handle the command line interface
+ * To close the program, the variable stay should be set to false
+ * 
+ * @return true if the program must keept running, false otherwise
+ */
 bool stdin_handle()
 {
 
@@ -201,12 +225,20 @@ bool stdin_handle()
 	return stay;
 }
 
+/**
+ * @brief Prints the welcome banner
+ * 
+ */
 void welcome()
 {
 	printf("Welcome to LDB %s\n", LDB_VERSION);
 	printf("Use help for a command list and quit for leaving this session\n\n"); 
 }
 
+/**
+ * @brief Prints the ldb prompt
+ * 
+ */
 void ldb_prompt()
 {
 	printf("ldb> ");

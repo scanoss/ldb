@@ -18,27 +18,39 @@
 
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-
- * NODE STRUCTURE
- * Every data list starts with a pointer to the last node in the list, followed by the first node:
-
- * List header:
- * LN = is the 40-bit pointer to the last node
-
- * Node header:
- * Each node starts with a pointer to the next node, followed by the node size, followed by the node data
- * NN = is the 40-bit pointer to the next node
- * TS = is the 16-bit (or 32-bit) total size of the node data (in bytes, if variable-sized records, in number of records if fixed-sized records)
- * K = is the remaining part of the key for the group of records that follow (in case the key is bigger than 32-bit, otherwise K is omitted)
- * GS = is the total size of the group records that follow (those sharing K, omitted when key is 32-bit)
-
- * Node data is a series of records (size+data):
- * R: Data record
- * s = is a 16-bit record size (omitted when record size is fixed)
- * d = is the data record
  */
 
+/**
+  * @file node.c
+  * @date 12 Jul 2020
+  * @brief Contains functions to handle LDB nodes
+ 
+  * NODE STRUCTURE
+  * Every data list starts with a pointer to the last node in the list, followed by the first node:
+ 
+  * List header:
+  * LN = is the 40-bit pointer to the last node
+ 
+  * Node header:
+  * Each node starts with a pointer to the next node, followed by the node size, followed by the node data
+  * NN = is the 40-bit pointer to the next node
+  * TS = is the 16-bit (or 32-bit) total size of the node data (in bytes, if variable-sized records, in number of records if fixed-sized records)
+  * K = is the remaining part of the key for the group of records that follow (in case the key is bigger than 32-bit, otherwise K is omitted)
+  * GS = is the total size of the group records that follow (those sharing K, omitted when key is 32-bit)
+ 
+  * Node data is a series of records (size+data):
+  * R: Data record
+  * s = is a 16-bit record size (omitted when record size is fixed)
+  * d = is the data record
+  * @see https://github.com/scanoss/ldb/blob/master/src/node.c
+  */
+
+/**
+ * @brief Gets a next node addr from the header provided and loads it into the rs list. 
+ * 
+ * @param rs Struct that wraps the list
+ * @param header Buffer with information about: addr of a node and lenght of itself
+ */
 void ldb_load_node_header(struct ldb_recordset *rs, uint8_t *header)
 {
 
@@ -50,6 +62,12 @@ void ldb_load_node_header(struct ldb_recordset *rs, uint8_t *header)
 	if (rs->rec_ln) rs->node_ln = rs->rec_ln * rs->node_ln;
 }
 
+/**
+ * @brief Reads and loads the node that the list is pointing to.
+ * Free the node if it is already loaded and then loads the new node.
+ * 
+ * @param rs Struct that wraps the list 
+ */
 void ldb_load_node(struct ldb_recordset *rs)
 {
 	if (rs->node) free(rs->node);
@@ -62,10 +80,16 @@ void ldb_load_node(struct ldb_recordset *rs)
 	rs->node[rs->node_ln] = 0;
 
 }
-
-/*
-   Writes a data node and updates pointers
-   */
+/**
+ * @brief Writes data into a node and updates pointers
+ * 
+ * @param table The table the data is going to be written into
+ * @param ldb_sector The sector of the LDB where the data is going to be written. The file descriptor must be opened before.
+ * @param key table key
+ * @param data Buffer with the data to be written
+ * @param dataln Length of the data to be written
+ * @param records The number of records
+ */
 void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records)
 {
 	uint8_t subkey_ln = table.key_ln - LDB_KEY_LN;
@@ -144,11 +168,22 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 	free(node);
 }
 
-/*
-   Reads a node from the given location (ptr) for a 32-bit key. If ptr is set to zero, the location is
-   obtained from the sector map. The function returns a pointer to the next node, which is zero if it 
-   is the last node in the list.
-   */
+/**
+ * @brief Reads a node from the given location (ptr) for a 32-bit key. If ptr is set to zero, the location is
+ * obtained from the sector map. The function returns a pointer to the next node, which is zero if it 
+ * is the last node in the list.
+ * 
+ * @param sector Optional: Pointer to a LDB sector allocated in memory. If NULL the function will use the table struct and key to open the ldb
+ * @param table  table struct config
+ * @param ldb_sector A file descriptor to the LDB sector. If sector is not NULL, this parameter is ignored.
+ * @param ptr If ptr is set to zero, the location is obtained from the sector map
+ * @param key key of the associated table
+ * @param bytes_read Number of bytes readed from the node (output)
+ * @param out Buffer with the data readed from the node
+ * @param max_node_size Indicates the maximum size of the node. If the node is bigger than this value, the function will return an error.
+ * @return uint64_t The addr of the next node
+ * 
+ */
 uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size)
 {
 	*bytes_read = 0;
@@ -221,9 +256,12 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 	return next_node;
 }
 
-/* 
-   Unlinks a first node found for the given table and key
-   */
+/**
+ * @brief Unlinks a first node found for the given table and key
+ * 
+ * @param table Configuration of a table
+ * @param key The key of the table
+ */
 void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 {
 
@@ -339,6 +377,14 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 	if (ldb_sector) fclose(ldb_sector);
 }
 
+/**
+ * @brief Validates a node checking for the dataset size.
+ * 
+ * @param node Buffer containing the node data
+ * @param node_size Size of the node
+ * @param subkey_ln block subkey lenght
+ * @return true if the node is valid. False otherwise.
+ */
 bool ldb_validate_node(uint8_t *node, uint32_t node_size, int subkey_ln)
 {
 

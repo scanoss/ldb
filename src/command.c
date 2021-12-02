@@ -20,6 +20,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file command.c
+  * @date 12 Jul 2020 
+  * @brief Implement the command line consolo for LDB.
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
+  */
+
 #define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
@@ -34,6 +43,12 @@
 #include <openssl/md5.h>
 #include "ldb.h"
 
+/**
+ * @brief Normalize the command to LDB console-
+ * 
+ * @param text string to be normalized
+ * @return char* normalized command
+ */
 char *ldb_command_normalize(char *text)
 {
 	int strln = strlen(text);
@@ -58,9 +73,15 @@ char *ldb_command_normalize(char *text)
 	return tmp;
 }
 
-/*	Checks command against list of known command and returns number
-	of matched words and matched command (n)
-	*/
+/**
+ * @brief Checks command against list of known command and returns number
+ *	of matched words and matched command (n)
+ * 
+ * @param command  command to be evaluated
+ * @param command_nr[out] number of recognized command
+ * @param word_nr[out] nuber of recognized word
+ * @return true if it is a valid command
+ */
 commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 {
 	int closest = 0;
@@ -103,7 +124,12 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 	return false;
 }
 
-/* Return pointer to start of keys in a delete command */
+/**
+ * @brief Return pointer to start of keys in a delete command
+ * 
+ * @param command input string command
+ * @return pointer to start key
+ */
 char *keys_start(char *command)
 {
 	char keyword[] = " keys ";
@@ -112,6 +138,13 @@ char *keys_start(char *command)
 	return NULL;
 }
 
+/**
+ * @brief Check if a hex is valid
+ * 
+ * @param str input string with the hex to be tested
+ * @param ln hex lenght
+ * @return true if it is a valid hex
+ */
 bool valid_hex_ln(char *str, int ln)
 {
 	for (int i = 0; i < ln; i++)
@@ -122,7 +155,14 @@ bool valid_hex_ln(char *str, int ln)
 	return true;
 }
 
-/* Converts keys to binary, making sure they are valid and share the same first byte */
+/**
+ * @brief Converts keys to binary, making sure they are valid and share the same first byte
+ * 
+ * @param keys string with the input string
+ * @param size number of keys
+ * @param key_ln key lenght
+ * @return pointer to binaries keys
+ */
 uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 {
 	long  keys_ln = strlen(keys);
@@ -163,6 +203,11 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 	return keyblob;
 }
 
+/**
+ * @brief LDB console command to delete keys
+ * 
+ * @param command command to be executed
+ */
 void ldb_command_delete(char *command)
 {
 	/* Lock DB */
@@ -209,6 +254,11 @@ void ldb_command_delete(char *command)
 	free(dbtable);
 }
 
+/**
+ * @brief Execute the LDB command collate
+ * 
+ * @param command input command
+ */
 void ldb_command_collate(char *command)
 {
 	/* Lock DB */
@@ -243,6 +293,11 @@ void ldb_command_collate(char *command)
 	free(dbtable);
 }
 
+/**
+ * @brief Execute the LDB command dump
+ * 
+ * @param command input command string
+ */
 void ldb_command_dump(char *command)
 {
 	int sectorn = -1; //all sectors
@@ -272,6 +327,11 @@ void ldb_command_dump(char *command)
 	free(dbtable);
 }
 
+/**
+ * @brief Execute LDB command merge
+ * 
+ * @param command command string
+ */
 void ldb_command_merge(char *command)
 {
 	/* Lock DB */
@@ -314,6 +374,17 @@ void ldb_command_merge(char *command)
 	free(totable);
 }
 
+/**
+ * @brief Execute LDB command unlink
+ * 
+ * Structure of command:
+ * 
+ * 			unlink list from DBNAME/TABLENAME key KEY
+ * 		      1     2	 3          4          5   6
+ * 
+ * 
+ * @param command command string
+ */
 void ldb_command_unlink_list(char *command)
 {
 	/* Extract values from command */
@@ -349,7 +420,12 @@ void ldb_command_unlink_list(char *command)
 	free(keybin);
 }
 
-
+/**
+ * @brief Execute command insert
+ * 
+ * @param command command string
+ * @param type command type
+ */
 void ldb_command_insert(char *command, commandtype type)
 {
 	/* Extract values from command */
@@ -407,6 +483,18 @@ void ldb_command_insert(char *command, commandtype type)
 	free(databin);
 }
 
+/**
+ * @brief LDB command create new table
+ * The command is of the form: 
+ * 
+ * Structure of the command:
+ * 
+ * 		create table DBNAME/TABLENAME keylen N reclen N
+ * 	       1     2         3              4  5   6	  7  
+ * 
+ * 
+ * @param command command string
+ */
 void ldb_command_create_table(char *command)
 {
 	char *tmp = ldb_extract_word(5, command);
@@ -418,11 +506,19 @@ void ldb_command_create_table(char *command)
 	char *dbtable = ldb_extract_word(3, command);
 	char *table = dbtable + ldb_split_string(dbtable, '/');
 
+	// dbtable is the name of the database;
+	// table is the name of the table;
 	if (ldb_create_table(dbtable, table, keylen, reclen)) printf("OK\n");
 
 	free(dbtable);
 }
 
+/**
+ * @brief Execute LDB command select
+ * 
+ * @param command command string
+ * @param format format type
+ */
 void ldb_command_select(char *command, select_format format)
 {
 
@@ -489,8 +585,14 @@ void ldb_command_select(char *command, select_format format)
 	free(rs);
 }
 
+/**
+ * @brief Execute LDB comman create database
+ * 
+ * @param command command string
+ */
 void ldb_command_create_database(char *command)
 {
+	/* Extract 3th values from command, which is the db name*/
 	char *database = ldb_extract_word(3, command);	
 	char *path = malloc(LDB_MAX_PATH);
 	sprintf(path, "%s/%s", ldb_root, database);
@@ -507,6 +609,10 @@ void ldb_command_create_database(char *command)
 	free(database);
 }
 
+/**
+ * @brief Execute the command LDB shows databases: list the availables databases en the default path
+ * 
+ */
 void ldb_command_show_databases()
 {
 	DIR *dir;
@@ -526,6 +632,11 @@ void ldb_command_show_databases()
 	}
 }
 
+/**
+ * @brief Shows the availables tables
+ * 
+ * @param command command string
+ */
 void ldb_command_show_tables(char *command)
 {
 
@@ -567,13 +678,26 @@ void ldb_command_show_tables(char *command)
 	free(dbname);
 }
 
-/* Case insensitive string comparison */
+/**
+ * @brief Case insensitive string comparison
+ * 
+ * @param a input string a
+ * @param b input string b
+ * @return true if they are equals
+ */
 bool stricmp(char *a, char *b)
 {
 	while (*a && *b) if (tolower(*a++) != tolower(*b++)) return false;
 	return (*a == *b);
 }
 
+/**
+ * @brief Print ldb records
+ * 
+ * @param ptr pointer to input key
+ * @param keyln key lenght
+ * @param hex hex 
+ */
 void print_record(uint8_t *ptr, int keyln, int hex)
 {
 	/* Print key */
@@ -592,6 +716,11 @@ void print_record(uint8_t *ptr, int keyln, int hex)
 	if (printf("%s\n", (char *) ptr + keyln + hex));
 }
 
+/**
+ * @brief Execute LDB command dump keys
+ * 
+ * @param command command string
+ */
 void ldb_command_dump_keys(char *command)
 {
 	/* Extract values from command */
@@ -608,6 +737,11 @@ void ldb_command_dump_keys(char *command)
 	free(dbtable);
 }
 
+/**
+ * @brief Execute mz cat over a LDB key 
+ * 
+ * @param command command string 
+ */
 void ldb_mz_cat(char *command)
 {
 	/* Extract values from command */

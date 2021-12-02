@@ -20,12 +20,30 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/**
+  * @file lock.c
+  * @date 12 Jul 2020 
+  * @brief Contains LDB lock functions
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/lock.c
+  */
+
+/**
+ * @brief Verifies if the db is locked.
+ * Reads the file ldb.lock and if exists the db is locked. Otherwise is free to use.
+ * 
+ * @return true if the db is locked, false otherwise.
+ */
 bool ldb_locked()
 {
 	return ldb_file_exists (ldb_lock_path);
 }
 
-/* Lock LDB for writing */
+/**
+ * @brief Lock LDB for writing
+ * 
+ */
 void ldb_lock()
 {
 	if (ldb_locked()) ldb_error ("E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)");
@@ -44,7 +62,10 @@ void ldb_lock()
 	if (pid != getpid()) ldb_error ("E052 Concurrent ldb writing is not supported. (check /dev/shm/ldb.lock)");
 }
 
-/* Unlock LDB */
+/**
+ * @brief Unlock LDB 
+ * 
+ */
 void ldb_unlock()
 {
 	unlink(ldb_lock_path);

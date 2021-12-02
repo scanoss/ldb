@@ -20,6 +20,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file file.c
+  * @date 12 Jul 2020 
+  * @brief LDB file management functions
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/file.c
+  */
+
+/**
+ * @brief create LDB directory
+ * 
+ * @param path string path
+ */
 void ldb_prepare_dir(char *path)
 {
 	if (ldb_dir_exists (path)) return;
@@ -27,6 +41,12 @@ void ldb_prepare_dir(char *path)
 		ldb_error ("E050 Cannot create root LDB directory");
 }
 
+/**
+ * @brief Check if exist a LDB file
+ * 
+ * @param path string path
+ * @return true if the file exist
+ */
 bool ldb_file_exists(char *path)
 {
 	struct stat pstat;
@@ -36,6 +56,12 @@ bool ldb_file_exists(char *path)
 	return false;
 }
 
+/**
+ * @brief Check if the LDB directory exist
+ * 
+ * @param path path string
+ * @return true if exist
+ */
 bool ldb_dir_exists(char *path)
 {
 	struct stat pstat;
@@ -45,7 +71,12 @@ bool ldb_dir_exists(char *path)
 	return false;
 }
 
-/* Return the file size for path */
+/**
+ * @brief Return the file size for path
+ * 
+ * @param path string path
+ * @return file size
+ */
 uint64_t ldb_file_size(char *path)
 {
 	FILE *fp = fopen(path, "r");
@@ -58,6 +89,11 @@ uint64_t ldb_file_size(char *path)
 	return size;
 }
 
+/**
+ * @brief Check if LDB root directory exist
+ * 
+ * @return true if exist
+ */
 bool ldb_check_root()
 {
 	if (!ldb_dir_exists(ldb_root))
@@ -68,7 +104,13 @@ bool ldb_check_root()
 	return true;
 }
 
-/* Checks if a db/table already exists */
+/**
+ * @brief Checks if a db/table already exists
+ * 
+ * @param db DB name string
+ * @param table name string
+ * @return true if exist
+ */
 bool ldb_table_exists(char *db, char*table)
 {
 	char *path = malloc(LDB_MAX_PATH);
@@ -78,8 +120,12 @@ bool ldb_table_exists(char *db, char*table)
 	return out;
 }
 
-/* Checks if a db already exists */
-
+/**
+ * @brief Checks if a db already exists
+ * 
+ * @param db db string path
+ * @return true if exist
+ */
 bool ldb_database_exists(char *db)
 {
 	char *path = malloc(LDB_MAX_PATH);

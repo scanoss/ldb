@@ -20,7 +20,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Loads table configuration from .cfg file */
+ /**
+  * @file config.c
+  * @date 12 Jul 2020 
+  * @brief LDB configuration functions
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
+  */
+
+/**
+ * @brief Loads table configuration from .cfg file
+ * 
+ * @param db DB string name
+ * @param table table string name
+ * @param rs ldb recordset pointer
+ * @return true if succed
+ */
 bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
 {
 	char *path = malloc(LDB_MAX_PATH);
@@ -56,6 +72,12 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
 	return true;
 }
 
+/**
+ * @brief Read table config from a file and loads insto a ldb_table structure
+ * 
+ * @param db_table DB table name
+ * @return struct with table configuration
+ */
 struct ldb_table ldb_read_cfg(char *db_table)
 {
 	struct ldb_table tablecfg;
@@ -93,6 +115,14 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	return tablecfg;
 }
 
+/**
+ * @brief Save db config into a file
+ * 
+ * @param db DB name
+ * @param table Table name
+ * @param keylen Key lenght
+ * @param reclen register lenght
+ */
 void ldb_write_cfg(char *db, char *table, int keylen, int reclen)
 {
 	char *path = malloc(LDB_MAX_PATH);

@@ -125,7 +125,7 @@ struct ldb_recordset
 
 struct ldb_collate_data
 {
-	void *data;
+	void *data; 
 	void *tmp_data;
 	long data_ptr;
 	int table_key_ln;

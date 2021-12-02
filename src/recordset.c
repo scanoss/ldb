@@ -20,9 +20,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
-   subkey, subkey length, fetched data, length and iteration number. This function acts on the .ldb for the
-   provided *key*, but can also work from memory, if a pointer to a *sector* is provided (not NULL) */
+/**
+  * @file recordset.c
+  * @date 12 Jul 2020
+  * @brief Contains functions to read records from a LDB recordset
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/recordset.c
+  */
+
+/**
+ * @brief Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
+ * subkey, subkey length, fetched data, length and iteration number. This function acts on the .ldb for the
+ * provided *key*, but can also work from memory, if a pointer to a *sector* is provided (not NULL)
+ * 
+ * @param sector Optional: Pointer to a LDB sector allocated in memory. If NULL the function will use tha table struct and key to open the ldb
+ * @param table table struct config
+ * @param key key of the associated table
+ * @param skip_subkey true for skip the subkey
+ * @param ldb_record_handler Handler to print the data
+ * @param void_ptr This pointer is passed to the handler function
+ * @return uint32_t The number of records found
+ */
 uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr)
 {
 	FILE *ldb_sector = NULL;
@@ -111,7 +130,18 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 	return records;
 }
 
-/* Handler function for ldb_get_first_record */
+/**
+ * @brief Handler function for ldb_get_first_record
+ * 
+ * @param key Not used
+ * @param subkey Not used
+ * @param subkey_ln Not used
+ * @param data Source for the record
+ * @param datalen Length of the record
+ * @param iteration Not used
+ * @param ptr Buffer where the record is written
+ * @return true if datalen is > 0. False otherwise
+ */
 bool ldb_get_first_record_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	uint8_t *record = (uint8_t *) ptr;
@@ -124,19 +154,42 @@ bool ldb_get_first_record_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, 
 	return false;
 }
 
-/* Return the first record for the given table/key */
+/**
+ * @brief Return the first record for the given table/key
+ * 
+ * @param table Struct with the config of the table
+ * @param key Key of the table
+ * @param void_ptr Pointer passed to the handler function
+ */
 void ldb_get_first_record(struct ldb_table table, uint8_t* key, void *void_ptr)
 {
 	ldb_fetch_recordset(NULL, table, key, false, ldb_get_first_record_handler, void_ptr);
 }
 
-/* Handler function for ldb_key_exists */
+/**
+ * @brief Handler function for ldb_key_exists
+ * 
+ * @param key Not used
+ * @param subkey Not used
+ * @param subkey_ln Not used
+ * @param data Not used
+ * @param datalen Not used
+ * @param iteration Not used
+ * @param ptr Not used
+ * @return true always (the key exists) 
+ */
 bool ldb_key_exists_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	return true;
 }
 
-/* Returns true if there is at least a record for the "key" in the "table" */
+/**
+ * @brief Returns true if there is at least a record for the "key" in the "table"
+ * 
+ * @param table Struct with the config of the table
+ * @param key Key of the table
+ * @return true if there is at least a record for the "key" in the "table"
+ */
 bool ldb_key_exists(struct ldb_table table, uint8_t *key)
 {
 	return (ldb_fetch_recordset(NULL, table, key, false, ldb_key_exists_handler, NULL) > 0);

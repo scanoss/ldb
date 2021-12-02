@@ -20,6 +20,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+ /**
+  * @file string.c
+  * @date 12 Jul 2020
+  * @brief String utils
+ 
+  * //TODO Long description
+  * @see https://github.com/scanoss/ldb/blob/master/src/string.c
+  */
+
+/**
+ * @brief Verifies if a buffer contains printable characters
+ * 
+ * @param str String to verify
+ * @return true String contains printable characters, false otherwise.
+ */
 bool ldb_valid_ascii(char *str)
 {
 	if (strlen(str) < 1) return false;
@@ -28,6 +43,11 @@ bool ldb_valid_ascii(char *str)
 	return true;
 }
 
+/**
+ * @brief remove whitespace characters from the start and end of a string
+ * 
+ * @param str String to work on.
+ */
 void ldb_trim(char *str)
 {
 	int i = 0;
@@ -43,6 +63,15 @@ void ldb_trim(char *str)
 	str[i + 1] = 0;
 }
 
+/**
+ * @brief Divides a string into two when the first occurrence of a delimiter is found.
+ * In the position where the delimiter was found, a null character is added. This means that the first part of the string is in the input buffer.
+ * To obtain the position of the second part use the return value.
+ * 
+ * @param string The string to be split.
+ * @param separator The delimiter to split the string on.
+ * @return int Pointer to the second part of the string.
+ */
 int ldb_split_string(char *string, char separator)
 {
 	int pos;
@@ -51,6 +80,13 @@ int ldb_split_string(char *string, char separator)
 	return pos + 1;
 }
 
+/**
+ * @brief Verifies if a string is a valid dbname/tablename
+ * To identificate a table, a string must have the following format: "dbname/tablename"
+ * 
+ * @param str String to verify
+ * @return true valid dbname/tablename, false otherwise.
+ */
 bool ldb_valid_name(char *str)
 {
 	if (strlen(str) >= LDB_MAX_NAME) return false;
@@ -59,6 +95,21 @@ bool ldb_valid_name(char *str)
 	return true;
 }
 
+/**
+ * @brief Prints to stdout all the parameters in pretty format.
+ * 
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
+ */
 bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
@@ -76,6 +127,21 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 	return false;
 }
 
+/**
+ * @brief Prints to stdout all the parameters in pretty CSV format.
+ * 
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
+ */
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	/* Print key in hex (first CSV field) */
@@ -104,12 +170,25 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 	return false;
 }
 
+/**
+ * @brief Gives the length of the first word in a string.
+ * It counts how many characters are before the first space.
+ * 
+ * @param text String to be searched.
+ * @return int Characters found before the first space (Space not included)
+ */
 int ldb_word_len(char *text)
 {
 	for (int i=0; i<strlen(text); i++) if (text[i] == ' ') return i;
 	return strlen(text);
 }
 
+/**
+ * @brief Verify if a pair DBNAME/TABLENAME is valid and exists.
+ *
+ * @param table A string containing the dbname and table name. Must be in the form of "dbname/tablename".
+ * @return true Name valid, db and table exists. False otherwise.
+ */
 bool ldb_valid_table(char *table)
 {
 
@@ -168,7 +247,13 @@ bool ldb_valid_table(char *table)
 }
 
 
-/* Counts number of words in normalized text */
+/**
+ * @brief Counts number of words in normalized text
+ * A word is considered to be a sequence of characters separated by spaces.
+ * 
+ * @param text String to be searched.
+ * @return int Return the number of words in the text. 
+ */
 int ldb_word_count(char *text)
 {
 	int words = 1;
@@ -176,7 +261,15 @@ int ldb_word_count(char *text)
 	return words;
 }
 
-/* Returns a pointer to a string containing the n word of the (normalized) list */
+/**
+ * @brief Returns a pointer to a string containing the n word of the (normalized) list
+ * 
+ * Example: ldb_extract_word(3, "This is a test"); returns "a"
+ * 
+ * @param n The word number to extract. Starts at 1.
+ * @param wordlist A list of words separated by spaces.
+ * @return char* Pointer to the nth word in the list.
+ */
 char *ldb_extract_word(int n, char *wordlist)
 {
 	int word_start = 0;
