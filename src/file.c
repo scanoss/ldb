@@ -23,16 +23,16 @@
  /**
   * @file file.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief LDB file management functions
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/file.c
   */
 
 /**
- * @brief // TODO
+ * @brief create LDB directory
  * 
- * @param path // TODO
+ * @param path string path
  */
 void ldb_prepare_dir(char *path)
 {
@@ -42,11 +42,10 @@ void ldb_prepare_dir(char *path)
 }
 
 /**
- * @brief // TODO
+ * @brief Check if exist a LDB file
  * 
- * @param path // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param path string path
+ * @return true if the file exist
  */
 bool ldb_file_exists(char *path)
 {
@@ -58,11 +57,10 @@ bool ldb_file_exists(char *path)
 }
 
 /**
- * @brief // TODO
+ * @brief Check if the LDB directory exist
  * 
- * @param path // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param path path string
+ * @return true if exist
  */
 bool ldb_dir_exists(char *path)
 {
@@ -76,8 +74,8 @@ bool ldb_dir_exists(char *path)
 /**
  * @brief Return the file size for path
  * 
- * @param path // TODO
- * @return uint64_t // TODO
+ * @param path string path
+ * @return file size
  */
 uint64_t ldb_file_size(char *path)
 {
@@ -92,10 +90,9 @@ uint64_t ldb_file_size(char *path)
 }
 
 /**
- * @brief // TODO
+ * @brief Check if LDB root directory exist
  * 
- * @return true // TODO
- * @return false // TODO
+ * @return true if exist
  */
 bool ldb_check_root()
 {
@@ -110,10 +107,9 @@ bool ldb_check_root()
 /**
  * @brief Checks if a db/table already exists
  * 
- * @param db // TODO
- * @param table // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param db DB name string
+ * @param table name string
+ * @return true if exist
  */
 bool ldb_table_exists(char *db, char*table)
 {
@@ -127,9 +123,8 @@ bool ldb_table_exists(char *db, char*table)
 /**
  * @brief Checks if a db already exists
  * 
- * @param db // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param db db string path
+ * @return true if exist
  */
 bool ldb_database_exists(char *db)
 {

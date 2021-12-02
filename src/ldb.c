@@ -23,7 +23,7 @@
  /**
   * @file ldb.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief LDB commands definition
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
@@ -88,7 +88,7 @@ int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 /**
  * @brief Display LDB error and exit program
  * 
- * @param txt // TODO
+ * @param txt error string
  */
 void ldb_error (char *txt)
 {
@@ -97,7 +97,7 @@ void ldb_error (char *txt)
 }
 
 /**
- * @brief // TODO
+ * @brief Print ldb version
  * 
  */
 void ldb_version()

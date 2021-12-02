@@ -23,18 +23,18 @@
  /**
   * @file dump.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief LDB dump functions
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/dump.c
   */
 
 /**
- * @brief // TODO
+ * @brief Dump LDB into stdout
  * 
- * @param table // TODO
- * @param hex_bytes // TODO
- * @param sectorn // TODO
+ * @param table table name string
+ * @param hex_bytes hex bytes format
+ * @param sectorn sectur number
  */
 void ldb_dump(struct ldb_table table, int hex_bytes, int sectorn)
 {

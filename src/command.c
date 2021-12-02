@@ -23,7 +23,7 @@
  /**
   * @file command.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief Implement the command line consolo for LDB.
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
@@ -44,10 +44,10 @@
 #include "ldb.h"
 
 /**
- * @brief // TODO
+ * @brief Normalize the command to LDB console-
  * 
- * @param text // TODO
- * @return char* // TODO
+ * @param text string to be normalized
+ * @return char* normalized command
  */
 char *ldb_command_normalize(char *text)
 {
@@ -77,10 +77,10 @@ char *ldb_command_normalize(char *text)
  * @brief Checks command against list of known command and returns number
  *	of matched words and matched command (n)
  * 
- * @param command  // TODO
- * @param command_nr // TODO
- * @param word_nr // TODO
- * @return commandtype // TODO
+ * @param command  command to be evaluated
+ * @param command_nr[out] number of recognized command
+ * @param word_nr[out] nuber of recognized word
+ * @return true if it is a valid command
  */
 commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 {
@@ -127,8 +127,8 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 /**
  * @brief Return pointer to start of keys in a delete command
  * 
- * @param command // TODO
- * @return char* // TODO
+ * @param command input string command
+ * @return pointer to start key
  */
 char *keys_start(char *command)
 {
@@ -139,12 +139,11 @@ char *keys_start(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Check if a hex is valid
  * 
- * @param str // TODO
- * @param ln // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param str input string with the hex to be tested
+ * @param ln hex lenght
+ * @return true if it is a valid hex
  */
 bool valid_hex_ln(char *str, int ln)
 {
@@ -159,10 +158,10 @@ bool valid_hex_ln(char *str, int ln)
 /**
  * @brief Converts keys to binary, making sure they are valid and share the same first byte
  * 
- * @param keys // TODO
- * @param size // TODO
- * @param key_ln // TODO
- * @return uint8_t* // TODO
+ * @param keys string with the input string
+ * @param size number of keys
+ * @param key_ln key lenght
+ * @return pointer to binaries keys
  */
 uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 {
@@ -205,9 +204,9 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 }
 
 /**
- * @brief // TODO
+ * @brief LDB console command to delete keys
  * 
- * @param command // TODO
+ * @param command command to be executed
  */
 void ldb_command_delete(char *command)
 {
@@ -256,9 +255,9 @@ void ldb_command_delete(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute the LDB command collate
  * 
- * @param command // TODO 
+ * @param command input command
  */
 void ldb_command_collate(char *command)
 {
@@ -295,9 +294,9 @@ void ldb_command_collate(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute the LDB command dump
  * 
- * @param command // TODO
+ * @param command input command string
  */
 void ldb_command_dump(char *command)
 {
@@ -329,9 +328,9 @@ void ldb_command_dump(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute LDB command merge
  * 
- * @param command // TODO
+ * @param command command string
  */
 void ldb_command_merge(char *command)
 {
@@ -376,9 +375,9 @@ void ldb_command_merge(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute LDB command unlink
  * 
- * @param command // TODO
+ * @param command command string
  */
 void ldb_command_unlink_list(char *command)
 {
@@ -416,10 +415,10 @@ void ldb_command_unlink_list(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute command insert
  * 
- * @param command // TODO
- * @param type // TODO
+ * @param command command string
+ * @param type command type
  */
 void ldb_command_insert(char *command, commandtype type)
 {
@@ -479,9 +478,9 @@ void ldb_command_insert(char *command, commandtype type)
 }
 
 /**
- * @brief // TODO
+ * @brief LDB command create new table
  * 
- * @param command // TODO
+ * @param command command string
  */
 void ldb_command_create_table(char *command)
 {
@@ -500,10 +499,10 @@ void ldb_command_create_table(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute LDB command select
  * 
- * @param command // TODO
- * @param format // TODO
+ * @param command command string
+ * @param format format type
  */
 void ldb_command_select(char *command, select_format format)
 {
@@ -572,9 +571,9 @@ void ldb_command_select(char *command, select_format format)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute LDB comman create database
  * 
- * @param command // TODO
+ * @param command command string
  */
 void ldb_command_create_database(char *command)
 {
@@ -595,7 +594,7 @@ void ldb_command_create_database(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute the command LDB shows databases: list the availables databases en the default path
  * 
  */
 void ldb_command_show_databases()
@@ -618,9 +617,9 @@ void ldb_command_show_databases()
 }
 
 /**
- * @brief // TODO
+ * @brief Shows the availables tables
  * 
- * @param command // TODO
+ * @param command command string
  */
 void ldb_command_show_tables(char *command)
 {
@@ -666,10 +665,9 @@ void ldb_command_show_tables(char *command)
 /**
  * @brief Case insensitive string comparison
  * 
- * @param a // TODO
- * @param b // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param a input string a
+ * @param b input string b
+ * @return true if they are equals
  */
 bool stricmp(char *a, char *b)
 {
@@ -678,11 +676,11 @@ bool stricmp(char *a, char *b)
 }
 
 /**
- * @brief // TODO
+ * @brief Print ldb records
  * 
- * @param ptr // TODO
- * @param keyln // TODO
- * @param hex // TODO
+ * @param ptr pointer to input key
+ * @param keyln key lenght
+ * @param hex hex 
  */
 void print_record(uint8_t *ptr, int keyln, int hex)
 {
@@ -703,9 +701,9 @@ void print_record(uint8_t *ptr, int keyln, int hex)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute LDB command dump keys
  * 
- * @param command // TODO 
+ * @param command command string
  */
 void ldb_command_dump_keys(char *command)
 {
@@ -724,9 +722,9 @@ void ldb_command_dump_keys(char *command)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute mz cat over a LDB key 
  * 
- * @param command // TODO 
+ * @param command command string 
  */
 void ldb_mz_cat(char *command)
 {

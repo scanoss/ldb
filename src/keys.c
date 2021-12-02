@@ -23,7 +23,7 @@
  /**
   * @file keys.c
   * @date 24 Dec 2020 
-  * @brief // TODO
+  * @brief Handle the dump keys record: Write in stdout unique keys
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
@@ -32,15 +32,15 @@
 /**
  * @brief Handle the dump keys record: Write in stdout unique keys
  * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @param iteration number of iterations
+ * @param ptr[out] output pointer
+ * @return true to finish the fetch
+ * @return false to continue the fetch
  */
 bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
@@ -66,9 +66,9 @@ bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t
 }
 
 /**
- * @brief // TODO
+ * @brief LDB dump keys trought stdout
  * 
- * @param table // TODO
+ * @param table input table
  */
 void ldb_dump_keys(struct ldb_table table)
 {

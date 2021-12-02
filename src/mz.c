@@ -24,7 +24,7 @@
 /**
   * @file mz.c
   * @date 7 Feb 2021 
-  * @brief // TODO
+  * @brief Implements MZ functions used to compress and decompress LDB blocks
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/lock.c
@@ -44,8 +44,8 @@
 /**
  * @brief Returns the hexadecimal md5 sum for "path"
  * 
- * @param path // TODO
- * @return uint8_t* // TODO
+ * @param path string path
+ * @return pointer to file md5 array
  */
 uint8_t *file_md5 (char *path)
 {
@@ -72,9 +72,9 @@ uint8_t *file_md5 (char *path)
 /**
  * @brief Calculates the MD5 hash for data
  * 
- * @param data // TODO
- * @param size // TODO
- * @param out // TODO
+ * @param data input data
+ * @param size data size
+ * @param out[out] pointer to MD5 array
  */
 void calc_md5(char *data, int size, uint8_t *out)
 {
@@ -85,11 +85,11 @@ void calc_md5(char *data, int size, uint8_t *out)
 }
 
 /**
- * @brief // TODO
+ * @brief compare two MZ keys
  * 
- * @param a // TODO
- * @param b // TODO
- * @return int // TODO
+ * @param a key a
+ * @param b key b
+ * @return 1 if a>b, -1 if b>a, 0 if they are equals
  */
 int mz_key_cmp(const void * a, const void * b)
 {
@@ -109,9 +109,8 @@ int mz_key_cmp(const void * a, const void * b)
 /**
  * @brief Handling function for listing mz keys 
  * 
- * @param job // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param job pointer to mz_job struct
+ * @return true
  */
 bool mz_dump_keys_handler(struct mz_job *job)
 {
@@ -127,7 +126,7 @@ bool mz_dump_keys_handler(struct mz_job *job)
 /**
  * @brief Output unique mz keys to STDOUT (binary)
  * 
- * @param job // TODO
+ * @param job input pointer to mz jon struct
  */
 void mz_dump_keys(struct mz_job *job)
 {
@@ -155,11 +154,10 @@ void mz_dump_keys(struct mz_job *job)
 }
 
 /**
- * @brief Handling function for listing mz contents
+ * @brief Handling function for listing mz contents in stdout
  * 
- * @param job // TODO
+ * @param job pointer to mz input struct
  * @return true // TODO
- * @return false // TODO
  */
 bool mz_list_handler(struct mz_job *job)
 {
@@ -190,9 +188,9 @@ bool mz_list_handler(struct mz_job *job)
 }
 
 /**
- * @brief // TODO
+ * @brief 
  * 
- * @param job // TODO
+ * @param job MZ job to be procesed
  */
 void mz_list(struct mz_job *job)
 {
@@ -229,11 +227,11 @@ bool mz_key_exists_handler(struct mz_job *job)
 }
 
 /**
- * @brief // TODO
+ * @brief Handler for MZ cat operation
  * 
- * @param job // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param job pointer to input mz job
+ * @return true to finish
+ * @return false to continue
  */
 bool mz_cat_handler(struct mz_job *job)
 {
@@ -251,12 +249,11 @@ bool mz_cat_handler(struct mz_job *job)
 }
 
 /**
- * @brief // TODO
+ * @brief Find a key inside a mz file
  * 
- * @param job // TODO
- * @param key // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param job input mz job
+ * @param key key to be found
+ * @return true if the key exist
  */
 bool mz_key_exists(struct mz_job *job, uint8_t *key)
 {
@@ -282,10 +279,10 @@ bool mz_key_exists(struct mz_job *job, uint8_t *key)
 }
 
 /**
- * @brief // TODO
+ * @brief Find a key and print the result
  * 
- * @param job // TODO
- * @param key // TODO
+ * @param job input mz job
+ * @param key key to be found
  */
 void mz_cat(struct mz_job *job, char *key)
 {
@@ -311,11 +308,10 @@ void mz_cat(struct mz_job *job, char *key)
 }
 
 /**
- * @brief // TODO
+ * @brief Hnadler to extract a mz file
  * 
- * @param job // TODO
+ * @param job input mz job
  * @return true // TODO
- * @return false // TODO
  */
 bool mz_extract_handler(struct mz_job *job)
 {
@@ -349,9 +345,9 @@ bool mz_extract_handler(struct mz_job *job)
 }
 
 /**
- * @brief // TODO
+ * @brief Extract the content from a mz file
  * 
- * @param job // TODO
+ * @param job pointer to mz job
  */
 void mz_extract(struct mz_job *job)
 {
@@ -370,9 +366,9 @@ void mz_extract(struct mz_job *job)
 /**
  * @brief Read file and return pointer to file contents
  * 
- * @param filename // TODO
- * @param size // TODO
- * @return uint8_t* // TODO
+ * @param filename file name string
+ * @param size [out] file size
+ * @return pointer to file content
  */
 uint8_t *file_read(char *filename, uint64_t *size)
 {
@@ -398,9 +394,9 @@ uint8_t *file_read(char *filename, uint64_t *size)
 /**
  * @brief Write data to file
  * 
- * @param filename 
- * @param src 
- * @param src_ln 
+ * @param filename file name string
+ * @param src pointer to data to be written
+ * @param src_ln data size
  */
 void file_write(char *filename, uint8_t *src, uint64_t src_ln)
 {
@@ -417,11 +413,10 @@ void file_write(char *filename, uint8_t *src, uint64_t src_ln)
 /**
  * @brief Searches for a 14-byte ID in *mz
  * 
- * @param mz // TODO
- * @param size // TODO
- * @param id // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param mz pointer to mz content
+ * @param size content size
+ * @param id id to be found
+ * @return true if the id exist
  */
 bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id)
 {
@@ -449,8 +444,8 @@ bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id)
 /**
  * @brief Walks to an mz file, calling mz_parse_handler with each iteration
  * 
- * @param job // TODO
- * @param mz_parse_handler // TODO
+ * @param job mz input job
+ * @param mz_parse_handler function pointer to be executed
  */
 void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 {
@@ -485,10 +480,10 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 }
 
 /**
- * @brief // TODO
+ * @brief Create a uint16_t from two bytes.
  * 
- * @param data // TODO
- * @return uint16_t // TODO
+ * @param data pointer to input data
+ * @return uint16_t result
  */
 static uint16_t uint16(uint8_t *data)
 {
@@ -498,10 +493,9 @@ static uint16_t uint16(uint8_t *data)
 /**
  * @brief Returns true if an ID exists in the mz_cache
  * 
- * @param md5 // TODO
- * @param mz_cache // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param md5 id to be found
+ * @param mz_cache pointer to mz cache data
+ * @return true if exist
  */
 bool mz_exists_in_cache(uint8_t *md5, struct mz_cache_item *mz_cache)
 {
@@ -531,10 +525,9 @@ bool mz_exists_in_cache(uint8_t *md5, struct mz_cache_item *mz_cache)
 /**
  * @brief Returns true if an mz ID exists in the mz archive
  * 
- * @param md5 // TODO
- * @param mined_path // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param md5 ID to be found
+ * @param mined_path path to the mz file
+ * @return true if the ID exist
  */
 bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
 {
@@ -587,11 +580,10 @@ bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
 /**
  * @brief Returns true if an mz ID exists on disk or in memory
  * 
- * @param mined_path // TODO
- * @param md5 // TODO
- * @param mz_cache // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param mined_path path to the mz file
+ * @param md5 ID to be found
+ * @param mz_cache pointer to mz cache
+ * @return true if the key exist
  */
 bool mz_exists(char *mined_path, uint8_t *md5, struct mz_cache_item *mz_cache)
 {
@@ -603,10 +595,10 @@ bool mz_exists(char *mined_path, uint8_t *md5, struct mz_cache_item *mz_cache)
 /**
  * @brief Appends mz_cache to the mz archive in disk 
  * 
- * @param mined_path // TODO
- * @param mzid // TODO
- * @param data // TODO
- * @param datalen // TODO
+ * @param mined_path mz file path
+ * @param mzid mz ID
+ * @param data data to be added
+ * @param datalen data len
  */
 void mz_write(char *mined_path, int mzid, uint8_t *data, int datalen)
 {
@@ -636,13 +628,13 @@ void mz_write(char *mined_path, int mzid, uint8_t *data, int datalen)
  *	 MD5(14) + COMPRESSED_SRC_SIZE(4) + COMPRESSED_SRC(N)
  *	 The first two bytes of the md5 are in the actual XXXX.mz filename
  * 
- * @param mined_path // TODO
- * @param md5 // TODO
- * @param src // TODO
- * @param src_ln // TODO
- * @param check // TODO
- * @param zsrc // TODO
- * @param mz_cache // TODO
+ * @param mined_path mz file path
+ * @param md5 MD5 key
+ * @param src pointer to source buffer
+ * @param src_ln source buffer len
+ * @param check true to check if the key exist
+ * @param zsrc 
+ * @param mz_cache pointer to mz cache
  */
 void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache)
 {
@@ -690,8 +682,8 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 /**
  * @brief Write all cached mz records
  * 
- * @param mined_path // TODO
- * @param mz_cache // TODO
+ * @param mined_path path to mz file
+ * @param mz_cache pointer to mz buffer
  */
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache)
 {
@@ -708,9 +700,8 @@ void mz_flush(char *mined_path, struct mz_cache_item *mz_cache)
 /**
  * @brief Checks mz container for integrity
  * 
- * @param path // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param path mz file path
+ * @return true if the test pass
  */
 bool mz_check(char *path)
 {
@@ -756,8 +747,8 @@ bool mz_check(char *path)
 /**
  * @brief Fills bytes 3-16 of md5 with id 
  * 
- * @param md5 // TODO
- * @param mz_id // TODO
+ * @param md5[out] md5 output
+ * @param mz_id mz ID
  */
 void mz_id_fill(char *md5, uint8_t *mz_id)
 {
@@ -768,7 +759,7 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
 }
 
 /**
- * @brief // TODO
+ * @brief Print corrupted error message
  * 
  */
 void mz_corrupted()
@@ -778,9 +769,9 @@ void mz_corrupted()
 }
 
 /**
- * @brief // TODO
+ * @brief Decompress a MZ job
  * 
- * @param job // TODO
+ * @param job MZ job
  */
 void mz_deflate(struct mz_job *job)
 {

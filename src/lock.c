@@ -23,7 +23,7 @@
 /**
   * @file lock.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief Contains LDB lock functions
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/lock.c

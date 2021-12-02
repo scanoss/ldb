@@ -23,7 +23,7 @@
  /**
   * @file hex.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief Contains HEX print and process utilities
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/hex.c

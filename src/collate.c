@@ -233,8 +233,8 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 }
 
 /**
- * @brief Import a list and write it in a file.
- * @param collate pointer to collate data strcture.
+ * @brief Import a list and write it into a file.
+ * @param collate pointer to collate data structure.
  * @return true succed
  */
 bool ldb_import_list(struct ldb_collate_data *collate)
@@ -404,17 +404,15 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 }
 
 /**
- * @brief // TODO
- * 
- * @param key // TODO
- * @param subkey // TODO
- * @param subkey_ln // TODO
- * @param data // TODO
- * @param size // TODO
- * @param iteration // TODO
- * @param ptr // TODO
- * @return true // TODO
- * @return false // TODO
+ * @brief LDB collate handler. Will be called for ldb_fetch_recordset in each iteration.
+ * Execute the collate job, adding the new registers or deleting the keys from the delete list.
+ * @param collate pointer to collate data structure 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data uint8_t pointer to data to be added
+ * @param size data size
+ * @return true
  */
 bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
@@ -474,10 +472,10 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
  * @brief Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
  *	(the first byte is the same in all keys)
  * 
- * @param del_keys //TODO
- * @param del_ln //TODO
- * @param subkey_ln //TODO
- * @return long* //TODO
+ * @param del_keys keys to be deleted
+ * @param del_ln keys lenght
+ * @param subkey_ln subkey lenght
+ * @return pointer to the output map
  */
 long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 {
@@ -500,14 +498,14 @@ long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
 }
 
 /**
- * @brief // TODO
+ * @brief Execute the collate job
  * 
- * @param table // TODO
- * @param out_table // TODO
- * @param max_rec_ln // TODO
- * @param merge // TODO
- * @param del_keys // TODO
- * @param del_ln // TODO
+ * @param table LDB table to be processed
+ * @param out_table Output LDB table
+ * @param max_rec_ln Maximum record lenght
+ * @param merge True for update a record, false to add a new one.
+ * @param del_keys pointer to list of keys to be deleted.
+ * @param del_ln number of keys to be deleted
  */
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln)
 {

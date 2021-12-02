@@ -23,7 +23,7 @@
  /**
   * @file config.c
   * @date 12 Jul 2020 
-  * @brief // TODO
+  * @brief LDB configuration functions
  
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
@@ -32,11 +32,10 @@
 /**
  * @brief Loads table configuration from .cfg file
  * 
- * @param db // TODO
- * @param table // TODO
- * @param rs // TODO
- * @return true // TODO
- * @return false // TODO
+ * @param db DB string name
+ * @param table table string name
+ * @param rs ldb recordset pointer
+ * @return true if succed
  */
 bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
 {
@@ -74,10 +73,10 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
 }
 
 /**
- * @brief // TODO
+ * @brief Load config from a file
  * 
- * @param db_table // TODO
- * @return struct ldb_table // TODO
+ * @param db_table DB table name
+ * @return struct with table configuration
  */
 struct ldb_table ldb_read_cfg(char *db_table)
 {
@@ -117,12 +116,12 @@ struct ldb_table ldb_read_cfg(char *db_table)
 }
 
 /**
- * @brief // TODO
+ * @brief Save db config into a file
  * 
- * @param db // TODO
- * @param table // TODO
- * @param keylen // TODO
- * @param reclen // TODO
+ * @param db DB name
+ * @param table Table name
+ * @param keylen Key lenght
+ * @param reclen register lenght
  */
 void ldb_write_cfg(char *db, char *table, int keylen, int reclen)
 {
