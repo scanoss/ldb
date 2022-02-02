@@ -210,9 +210,6 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
  */
 void ldb_command_delete(char *command)
 {
-	/* Lock DB */
-	ldb_lock();
-
 	/* Extract values from command */
 	char *dbtable = ldb_extract_word(3, command);
 	char *max_ln  = ldb_extract_word(5, command);
@@ -221,6 +218,8 @@ void ldb_command_delete(char *command)
 
 	if (ldb_valid_table(dbtable))
 	{
+		/* Lock DB */
+		ldb_lock(dbtable);
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
@@ -248,7 +247,7 @@ void ldb_command_delete(char *command)
 	}
 
 	/* Unlock DB */
-	ldb_unlock ();
+	ldb_unlock (dbtable);
 
 	/* Free memory */
 	free(dbtable);
@@ -261,10 +260,7 @@ void ldb_command_delete(char *command)
  */
 void ldb_command_collate(char *command)
 {
-	/* Lock DB */
-	ldb_lock();
-
-	/* Extract values from command */
+		/* Extract values from command */
 	char *dbtable = ldb_extract_word(2, command);
 	char *max_ln  = ldb_extract_word(4, command);
 	int max = atoi(max_ln);
@@ -272,6 +268,9 @@ void ldb_command_collate(char *command)
 
 	if (ldb_valid_table(dbtable))
 	{
+		/* Lock DB */
+		ldb_lock(dbtable);
+
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
@@ -287,7 +286,7 @@ void ldb_command_collate(char *command)
 	}
 
 	/* Unlock DB */
-	ldb_unlock ();
+	ldb_unlock(dbtable);
 
 	/* Free memory */
 	free(dbtable);
@@ -334,9 +333,6 @@ void ldb_command_dump(char *command)
  */
 void ldb_command_merge(char *command)
 {
-	/* Lock DB */
-	ldb_lock();
-
 	/* Extract values from command */
 	char *dbtable = ldb_extract_word(2, command);
 	char *totable = ldb_extract_word(4, command);
@@ -345,7 +341,10 @@ void ldb_command_merge(char *command)
 	free(max_ln);
 
 	if (ldb_valid_table(dbtable))
-	{
+	{		
+		/* Lock DB */
+		ldb_lock(dbtable);
+
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table outtable = ldb_read_cfg(totable);
@@ -367,7 +366,7 @@ void ldb_command_merge(char *command)
 	}
 
 	/* Unlock DB */
-	ldb_unlock ();
+	ldb_unlock(dbtable);
 
 	/* Free memory */
 	free(dbtable);

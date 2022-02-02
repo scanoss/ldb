@@ -35,27 +35,32 @@
  * 
  * @return true if the db is locked, false otherwise.
  */
-bool ldb_locked()
+bool ldb_locked(char * db_name)
 {
-	return ldb_file_exists (ldb_lock_path);
+	char file_lock[LDB_MAX_PATH];
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db_name);
+	return ldb_file_exists (file_lock);
 }
 
 /**
  * @brief Lock LDB for writing
  * 
  */
-void ldb_lock()
+void ldb_lock(char * db_table)
 {
-	if (ldb_locked()) ldb_error ("E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)");
 	pid_t pid = getpid();
+	char file_lock[LDB_MAX_PATH];
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db_table);
+	
+	if (ldb_locked(db_table)) ldb_error ("E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)");
 
 	/* Write lock file */
-	FILE *lock = fopen (ldb_lock_path, "wb");
+	FILE *lock = fopen (file_lock, "wb");
 	if (!fwrite (&pid, 4, 1, lock)) printf("Warning: cannot write lock file\n");
 	fclose (lock);
 
 	/* Validate lock file */
-	lock = fopen (ldb_lock_path, "rb");
+	lock = fopen (file_lock, "rb");
 	if (!fread (&pid, 4, 1, lock)) printf("Warning: cannot read lock file\n");
 	fclose (lock);
 
@@ -66,8 +71,10 @@ void ldb_lock()
  * @brief Unlock LDB 
  * 
  */
-void ldb_unlock()
+void ldb_unlock(char * db_table)
 {
-	unlink(ldb_lock_path);
+	char file_lock[LDB_MAX_PATH];
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db_table);
+	unlink(file_lock);
 }
 
