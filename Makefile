@@ -30,6 +30,7 @@ clean:
 install:
 	@cp ldb /usr/bin
 	@cp libldb.so /usr/lib
+	@cp src/ldb.h /usr/include
 
 test: ldb
 	@test/test.sh
