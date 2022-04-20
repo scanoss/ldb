@@ -50,12 +50,27 @@ void ldb_lock(char * db_table)
 {
 	pid_t pid = getpid();
 	char file_lock[LDB_MAX_PATH];
-	sprintf(file_lock,"%s.%s", ldb_lock_path, db_table);
+
+	char * table_name = strrchr(db_table,'/');
+	
+	if (!table_name)
+		table_name = db_table;
+	else
+		table_name++;
+
+	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
 	
 	if (ldb_locked(db_table)) ldb_error ("E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)");
 
 	/* Write lock file */
 	FILE *lock = fopen (file_lock, "wb");
+
+	if (!lock)
+	{
+		printf("Failed to create lock file %s\n", file_lock);
+		exit(1);
+	}
+
 	if (!fwrite (&pid, 4, 1, lock)) printf("Warning: cannot write lock file\n");
 	fclose (lock);
 
