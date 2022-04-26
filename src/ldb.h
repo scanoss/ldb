@@ -284,7 +284,6 @@ bool mz_check(char *path);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
 void mz_list(struct mz_job *job);
 void mz_extract(struct mz_job *job);
-void mz_optimise(struct mz_job *job);
 void mz_cat(struct mz_job *job, char *key);
 uint8_t *file_md5 (char *path);
 void calc_md5(char *data, int size, uint8_t *out);
