@@ -2,6 +2,17 @@
 
 The LDB (Linked-list database) is a headless database management system focused in single-key, read-only application on vast amounts of data, while maintaining a minimal footprint and keeping system calls to a bare minimum. Information is structured using linked lists. 
 
+# Build and Install
+
+## Prerequisites
+Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
+
+## Build
+Run `make` to build the shell binary and the shared library.
+
+## Install
+Run `make install` to copy the binary to `/usr/bin`, the shared library to `/usr/lib` and the header to `/usr/include`.
+
 # Features
 
 Some of the features of the LDB are:
@@ -64,9 +75,6 @@ unlink list from DBNAME/TABLENAME key KEY
 dump DBNAME/TABLENAME hex N
     Dumps table contents with first N bytes in hex
 ```
-# Requirements
-
-Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
 
 # Using the shell
 

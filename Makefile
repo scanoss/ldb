@@ -3,7 +3,7 @@ CC=gcc
 endif
 CCFLAGS?=-O -g -Wall -std=gnu99
 LIBFLAGS=$(CCFLAGS) -fPIC -c
-LIBS=-lm -lpthread -lz -lcrypt
+LIBS=-lm -lpthread -lz 
 
 all: clean lib shell
 
