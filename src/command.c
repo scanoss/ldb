@@ -572,6 +572,9 @@ void ldb_command_select(char *command, select_format format)
 					case CSV:
 						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_csvprint, &hex_bytes);
 						break;
+					case WFP:
+						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_wfp_print, &hex_bytes);
+						break;
 				}
 			}
 		}

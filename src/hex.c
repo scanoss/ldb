@@ -30,7 +30,7 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/hex.c
   */
 
-
+#include "ldb.h"
 /**
  * @brief Prints a hexdump of 'len' bytes from 'data' organized 'width' columns
  * 
@@ -115,6 +115,28 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
 	printf("\n");
 	return false;
 }
+
+bool ldb_wfp_print(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
+{
+	uint16_t line = 0;
+	int reg_number = len /18;
+	char key_hex[LDB_KEY_LN*2+1];
+	char md5_hex[MD5_LEN * 2 + 1];
+
+	ldb_bin_to_hex(key, LDB_KEY_LN, key_hex);
+
+	printf("reg number: %d\n",reg_number);
+
+	for (int i=0; i < len; i = i + 18)
+	{
+		ldb_bin_to_hex(data+i, MD5_LEN, md5_hex);
+		memcpy(&line, data+i + MD5_LEN, 2);
+		printf("%s,%s,%d\n", key_hex, md5_hex, line);
+	}
+
+	return false;
+}
+
 
 /**
  * @brief Converts a string of hex digits to binary.

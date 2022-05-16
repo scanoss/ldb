@@ -63,7 +63,8 @@ extern int ldb_cmp_width;
 typedef enum {
 HEX,
 ASCII,
-CSV
+CSV,
+WFP
 } select_format;
 
 typedef enum { 
@@ -76,6 +77,7 @@ INSERT_ASCII,
 INSERT_HEX, 
 SELECT_ASCII,
 SELECT_CSV,
+SELECT_WFP,
 SELECT, 
 DELETE,
 COLLATE,
@@ -262,6 +264,7 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
+bool ldb_wfp_print(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr);
 void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);

@@ -72,6 +72,7 @@ char *ldb_commands[] =
 	"insert into {ascii} key {hex} hex {hex}",
 	"select from {ascii} key {hex} ascii",
 	"select from {ascii} key {hex} csv hex {ascii}",
+	"select from {ascii} key {hex} wfp",
 	"select from {ascii} key {hex} hex",
 	"delete from {ascii} max {ascii} keys {ascii}",
 	"collate {ascii} max {ascii}",

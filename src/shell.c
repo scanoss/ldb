@@ -150,6 +150,9 @@ bool execute(char *raw_command)
 		case SELECT_CSV:
 			ldb_command_select(command, CSV);
 			break;
+		case SELECT_WFP:
+			ldb_command_select(command, WFP);
+			break;
 
 		case CREATE_DATABASE:
 			ldb_command_create_database(command);
