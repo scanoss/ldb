@@ -79,7 +79,7 @@ char *ldb_commands[] =
 	"version",
 	"unlink list from {ascii} key {hex}",
 	"dump {ascii} hex {ascii} sector {hex}",
-	"dump {ascii} hex {ascii}",
+	"dump {ascii} hex {ascii}, use 'hex -1' to print the complete register as hex",
 	"dump keys from {ascii}",
 	"cat {hex} from {ascii}"
 };
