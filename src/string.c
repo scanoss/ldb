@@ -152,7 +152,7 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 	int *hex_bytes = ptr;
 	int remaining_hex = 0;
 	if (*hex_bytes < 0)
-		remaining_hex = size - LDB_KEY_LN - subkey_ln;
+		remaining_hex = size;
 	else
 	 	remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
 
