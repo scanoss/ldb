@@ -150,8 +150,14 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 
 	/* Print remaining hex bytes (if any, as a second CSV field) */
 	int *hex_bytes = ptr;
-	int remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
+	int remaining_hex = 0;
+	if (*hex_bytes < 0)
+		remaining_hex = size - LDB_KEY_LN - subkey_ln;
+	else
+	 	remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
+
 	if (remaining_hex < 0) remaining_hex = 0;
+	
 	if (remaining_hex)
 	{
 		printf(",");
