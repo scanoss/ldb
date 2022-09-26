@@ -38,7 +38,15 @@
 bool ldb_locked(char * db_name)
 {
 	char file_lock[LDB_MAX_PATH];
-	sprintf(file_lock,"%s.%s", ldb_lock_path, db_name);
+	char * table_name = strrchr(db_name,'/');
+	
+	if (!table_name)
+		table_name = db_name;
+	else
+		table_name++;
+
+	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
+
 	return ldb_file_exists (file_lock);
 }
 
@@ -89,7 +97,17 @@ void ldb_lock(char * db_table)
 void ldb_unlock(char * db_table)
 {
 	char file_lock[LDB_MAX_PATH];
-	sprintf(file_lock,"%s.%s", ldb_lock_path, db_table);
+	char * table_name = strrchr(db_table,'/');
+	
+	if (!table_name)
+		table_name = db_table;
+	else
+		table_name++;
+
+	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
+	printf("%s\n",file_lock);
+
 	unlink(file_lock);
+	
 }
 
