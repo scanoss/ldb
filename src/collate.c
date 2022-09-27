@@ -174,9 +174,9 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		uint32_t projected_size = buffer_ptr + collate->rec_width + (2 * LDB_PTR_LN) + out_table.ts_ln;
 
 		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key, last_key, collate->table_key_ln) != 0);
+		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
 		/* If node size is exceeded, initialize buffer */
-		if (new_subkey || projected_size >= LDB_MAX_REC_LN)
+		if (projected_size >= LDB_MAX_REC_LN)
 		{
 			/* Write buffer to disk and initialize buffer */
 			if (rec_group_size > 0) uint16_write(buffer + rec_group_start + subkey_ln, rec_group_size);
@@ -184,6 +184,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 			buffer_ptr = 0;
 			rec_group_start  = 0;
 			rec_group_size   = 0;
+			new_subkey = true;
 		}
 
 		/* New file id, start a new record group */
