@@ -250,8 +250,27 @@ bool is_stdin_off()
 	return (tcgetattr(STDIN_FILENO, &t) == 0);
 }
 
-int main()
+
+int main(int argc, char **argv)
 {
+	int option;
+
+	while ((option = getopt(argc, argv, "vh")) != -1)
+	{
+		/* Check valid alpha is entered */
+		switch (option)
+		{
+			case 'v':
+				ldb_version();
+				return EXIT_SUCCESS;
+			case 'h':
+				help();
+				return EXIT_SUCCESS;
+			default:
+				break;
+		}
+	} 
+	
 	bool stdin_off = is_stdin_off();
 
 	if (!ldb_check_root()) return EXIT_FAILURE;
