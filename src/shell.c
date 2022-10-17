@@ -81,7 +81,7 @@ void help()
 	printf("    Merges tables erasing tablename1 when done. Tables must have the same configuration\n\n");
 	printf("unlink list from DBNAME/TABLENAME key KEY\n");
 	printf("    Unlinks the given list (32-bit KEY) from the sector map\n\n");
-	printf("dump DBNAME/TABLENAME hex N [sector N]\n");
+	printf("dump DBNAME/TABLENAME hex N [sector N], use 'hex -1' to print the complete register as hex\n");
 	printf("    Dumps table contents with first N bytes in hex\n\n");
 	printf("dump keys from DBNAME/TABLENAME\n");
 	printf("    Dumps a unique list of existing keys (binary output)\n\n");
