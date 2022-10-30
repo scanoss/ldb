@@ -177,7 +177,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else if (!job->check_only)
 	{
@@ -330,7 +330,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else
 	{
@@ -761,9 +761,9 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted()
+void mz_corrupted(int error)
 {
-	printf("Corrupted mz file\n");
+	printf("Corrupted mz file: %d\n", error);
 	exit(EXIT_FAILURE);
 }
 
@@ -776,9 +776,10 @@ void mz_deflate(struct mz_job *job)
 {
 	/* Decompress data */
 	job->data_ln = MZ_MAX_FILE;
-	if (Z_OK != uncompress((uint8_t *)job->data, &job->data_ln, job->zdata, job->zdata_ln))
+	int error = uncompress((uint8_t *)job->data, &job->data_ln, job->zdata, job->zdata_ln);
+	if (Z_OK != error)
 	{
-		mz_corrupted();
+		mz_corrupted(error);
 	}
 	job->data_ln--;
 }
