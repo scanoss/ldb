@@ -29,6 +29,7 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/lock.c
   */
 
+#include <stdio.h>
 /**
  * @brief Verifies if the db is locked.
  * Reads the file ldb.lock and if exists the db is locked. Otherwise is free to use.
@@ -38,14 +39,16 @@
 bool ldb_locked(char * db_name)
 {
 	char file_lock[LDB_MAX_PATH];
-	char * table_name = strrchr(db_name,'/');
 	
-	if (!table_name)
-		table_name = db_name;
-	else
-		table_name++;
+	char * db = strdup(db_name);
+	char * sub = strrchr(db_name,'/');
+	
+	// Replace the '/' by '.' in the lock file
+	if (sub)
+		*sub = '.';
 
-	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db);
+	free(db);
 
 	return ldb_file_exists (file_lock);
 }
@@ -59,16 +62,21 @@ void ldb_lock(char * db_table)
 	pid_t pid = getpid();
 	char file_lock[LDB_MAX_PATH];
 
-	char * table_name = strrchr(db_table,'/');
+	char * db_name = strdup(db_table);
+	char * sub = strrchr(db_name,'/');
 	
-	if (!table_name)
-		table_name = db_table;
-	else
-		table_name++;
+	// Replace the '/' by '.' in the lock file
+	if (sub)
+		*sub = '.';
 
-	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db_name);
+	free (db_name);
 	
-	if (ldb_locked(db_table)) ldb_error ("E051 Concurrent ldb writing not supported (/dev/shm/ldb.lock exists)");
+	if (ldb_locked(db_table)) 
+	{
+		fprintf(stderr, "Lock file: %s exists\n", file_lock);
+		ldb_error("E051 Concurrent ldb writing not supported");
+	}
 
 	/* Write lock file */
 	FILE *lock = fopen (file_lock, "wb");
@@ -85,7 +93,7 @@ void ldb_lock(char * db_table)
 	/* Validate lock file */
 	lock = fopen (file_lock, "rb");
 	if (!fread (&pid, 4, 1, lock)) printf("Warning: cannot read lock file\n");
-	fclose (lock);
+	fclose(lock);
 
 	if (pid != getpid()) ldb_error ("E052 Concurrent ldb writing is not supported. (check /dev/shm/ldb.lock)");
 }
@@ -97,16 +105,15 @@ void ldb_lock(char * db_table)
 void ldb_unlock(char * db_table)
 {
 	char file_lock[LDB_MAX_PATH];
-	char * table_name = strrchr(db_table,'/');
+	char * db_name = strdup(db_table);
+	char * sub = strrchr(db_name,'/');
 	
-	if (!table_name)
-		table_name = db_table;
-	else
-		table_name++;
+	// Replace the '/' by '.' in the lock file
+	if (sub)
+		*sub = '.';
 
-	sprintf(file_lock,"%s.%s", ldb_lock_path, table_name);
-	printf("%s\n",file_lock);
-
+	sprintf(file_lock,"%s.%s", ldb_lock_path, db_name);
+	free(db_name);
 	unlink(file_lock);
 	
 }

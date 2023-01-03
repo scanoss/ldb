@@ -218,14 +218,13 @@ void ldb_command_delete(char *command)
 
 	if (ldb_valid_table(dbtable))
 	{
+		/* Lock DB */
+		ldb_lock(dbtable);
 		
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
-		
-		/* Lock DB */
-		ldb_lock(ldbtable.table);
-		
+				
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
@@ -248,7 +247,7 @@ void ldb_command_delete(char *command)
 		free(keys);
 
 		/* Unlock DB */
-		ldb_unlock(ldbtable.table);
+		ldb_unlock(dbtable);
 	}
 
 	/* Free memory */
