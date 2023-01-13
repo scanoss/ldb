@@ -1,0 +1,1 @@
+collate oss_test_collate/file max 1024

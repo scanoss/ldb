@@ -29,12 +29,14 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/string.c
   */
 
+#include "ldb.h"
 /**
  * @brief Verifies if a buffer contains printable characters
  * 
  * @param str String to verify
  * @return true String contains printable characters, false otherwise.
  */
+
 bool ldb_valid_ascii(char *str)
 {
 	if (strlen(str) < 1) return false;

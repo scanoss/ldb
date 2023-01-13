@@ -28,6 +28,21 @@
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/recordset.c
   */
+#include "ldb.h"
+
+#ifndef LDB_EXTRACT_DEFINED_EXTERN
+int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset_ptr, int record_size, struct ldb_table table, const uint8_t *key, const uint8_t *subkey)
+{
+		printf("estoy en la lib ldb");
+
+	*msg  = strdup((char *) data + dataset_ptr);
+	msg[record_size-1] = 0;
+	return strlen(*msg);
+}
+#else
+extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset_ptr, int record_size, struct ldb_table table, const uint8_t *key, const uint8_t *subkey);
+
+#endif
 
 /**
  * @brief Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
@@ -107,9 +122,14 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 						int record_size = uint16_read(dataset + dataset_ptr);
 						dataset_ptr += 2;
 
+						char * msg = NULL;
+						int msg_len = ldb_extract_record(&msg, dataset, dataset_ptr, record_size, table, key, subkey);
+
 						/* We drop records longer than the desired limit */
 						if (record_size + 32 < LDB_MAX_REC_LN)
-							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
+							done = ldb_record_handler(key, subkey, subkey_ln, (uint8_t*) msg, msg_len, records++, void_ptr);
+						
+						free(msg);
 
 						/* Move pointer to end of record */
 						dataset_ptr += record_size;

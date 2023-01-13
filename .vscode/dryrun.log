@@ -1,0 +1,12 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/data/mariano/ldb'
+echo Cleaning...
+rm -f *.o *.a ldb *.so
+gcc -O -g -Wall -std=gnu99 -fPIC -c -D_LARGEFILE64_SOURCE src/ldb.c src/mz.c -lm -lpthread -lz -lscanoss_encoder
+gcc -shared -Wl,-soname,libldb.so -o libldb.so ldb.o mz.o -lm -lpthread -lz -lscanoss_encoder
+echo Library is built
+gcc -O -g -Wall -std=gnu99 -D_LARGEFILE64_SOURCE -c src/shell.c src/mz.c -lm -lpthread -lz -lscanoss_encoder
+gcc -O -g -Wall -std=gnu99 -o ldb_enc ldb.o shell.o -lcrypto -lm -lpthread -lz -lscanoss_encoder
+echo Shell is built
+make: Leaving directory '/data/mariano/ldb'
+ 

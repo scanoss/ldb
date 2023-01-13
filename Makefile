@@ -1,13 +1,21 @@
 ifeq ($(origin CC),default)
 CC=gcc
 endif
+
 CCFLAGS?=-O -g -Wall -std=gnu99
 LIBFLAGS=$(CCFLAGS) -fPIC -c
-LIBS=-lm -lpthread -lz 
+LIBS=-lm -lpthread -lz
+
+ifneq ("$(EXTERN_LIB)","")
+CCFLAGS+=-DLDB_EXTRACT_DEFINED_EXTERN
+LIBS+=-l$(EXTERN_LIB)
+endif
 
 all: clean lib shell
 
 lib: src/ldb.c src/mz.c src/ldb.h
+	@echo $(LIBS)
+	@echo $(CCFLAGS)
 	@$(CC) $(LIBFLAGS) -D_LARGEFILE64_SOURCE src/ldb.c src/mz.c $(LIBS)
 	@$(CC) -shared -Wl,-soname,libldb.so -o libldb.so ldb.o mz.o $(LIBS)
 	@echo Library is built
