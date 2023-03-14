@@ -29,7 +29,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
   */
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -65,7 +64,7 @@ char *ldb_commands[] =
 {
 	"help",
 	"create database {ascii}",
-	"create table {ascii} keylen {ascii} reclen {ascii}",
+	"create table {ascii} keylen {ascii} reclen {ascii} seckey {ascii}",
 	"show databases",
 	"show tables from {ascii}",
 	"insert into {ascii} key {hex} ascii {ascii}",
@@ -75,6 +74,8 @@ char *ldb_commands[] =
 	"select from {ascii} key {hex} hex",
 	"delete from {ascii} max {ascii} keys {ascii}",
 	"collate {ascii} max {ascii}",
+	"bulk insert {ascii} from {ascii} with {ascii}",
+	"bulk insert {ascii} from {ascii}",
 	"merge {ascii} into {ascii} max {ascii}",
 	"version",
 	"unlink list from {ascii} key {hex}",

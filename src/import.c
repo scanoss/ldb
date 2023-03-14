@@ -25,26 +25,79 @@
  * @date 25 October 2021
  * @brief Implement the functions used for import
  */
-
+#include <stdio.h>
 #include <sys/time.h>
 #include <libgen.h>
 #include <dirent.h>
+#include <string.h>
 
-#include "minr.h"
 #include "import.h"
-#include <ldb.h>
-#include "ignored_wfp.h"
+#include "ldb.h"
 #include "bsort.h"
-#include "file.h"
-#include "hex.h"
-#include "ignorelist.h"
 #include "join.h"
-#include "minr_log.h"
+
+#define DECODE_BASE64 8
+#define MAX_CSV_LINE_LEN 1024
+#define REC_SIZE_LEN 2
+
+
+static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 
 int (*decode) (int op, unsigned char *key, unsigned char *nonce,
 		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out);
 
 double progress_timer = 0;
+
+
+/**
+ * @brief Sort a csv file invokinkg a new process and executing a sort command
+ *
+ * @param file_path file path to be processed
+ * @param skip_sort true to skip sort
+ * @return true if succed
+ */
+bool csv_sort(ldb_importation_config_t * config)
+{
+	if (!ldb_file_size(config->csv_path) || config->opt.params.skip_sort)
+		return false;
+
+	/* Assemble command */
+	char *command = malloc(MAX_CSV_LINE_LEN + 3 * LDB_MAX_PATH);
+	sprintf(command, "sort -T %s -u -o %s %s", config->tmp_path, config->csv_path, config->csv_path);
+	
+	if (config->opt.params.verbose)
+		fprintf(stderr, "Sorting... (%s)\n",command);
+	
+	FILE *p = popen(command, "r");
+	if (p)
+		pclose(p);
+	else
+	{
+		printf("Cannot execute %s\n", command);
+		free(command);
+		return false;
+	}
+	free(command);
+	return true;
+}
+
+/**
+ * @brief Execute bsort over a file
+ *
+ * @param file_path pointer to file path
+ * @param skip_sort
+ * @return true
+ */
+bool bin_sort(char *file_path, bool skip_sort)
+{
+	if (!ldb_file_size(file_path))
+		return false;
+	if (skip_sort)
+		return true;
+
+	return bsort(file_path);
+}
+
 
 /**
  * @brief Checks if two blocks of memory contain the same data, from last to first byte
@@ -128,19 +181,19 @@ void progress(char *prompt, size_t count, size_t max, bool percent)
  * @param skip_delete true to avoid delete
  * @return true is succed
  */
-bool ldb_import_snippets(char *db_name, char *filename, bool skip_delete)
+bool ldb_import_snippets(ldb_importation_config_t * config)
 {
 	/* Table definition */
 	struct ldb_table oss_wfp;
-	strcpy(oss_wfp.db, db_name);
-	strcpy(oss_wfp.table, "wfp");
+	strcpy(oss_wfp.db, config->dbname);
+	strcpy(oss_wfp.table, config->table);
 	oss_wfp.key_ln = 4;
 	oss_wfp.rec_ln = 18;
 	oss_wfp.ts_ln = 2;
 	oss_wfp.tmp = false;
 
 	/* Progress counters */
-	uint64_t totalbytes = file_size(filename);
+	uint64_t totalbytes = ldb_file_size(config->csv_path);
 	int reccounter = 0;
 	size_t bytecounter = 0;
 	int tick = 10000; // activate progress every "tick" records
@@ -152,12 +205,12 @@ bool ldb_import_snippets(char *db_name, char *filename, bool skip_delete)
 	int rec_ln = raw_ln - 3;
 
 	/* First byte of the wfp is the file name */
-	uint8_t key1 = first_byte(filename);
+	uint8_t key1 = first_byte(config->csv_path);
 
 	/* File should contain 21 * N bytes */
-	if (file_size(filename) % 21)
+	if (ldb_file_size(config->csv_path) % 21)
 	{
-		printf("File %s does not contain 21-byte records\n", filename);
+		printf("File %s does not contain 21-byte records\n", config->csv_path);
 		exit(EXIT_FAILURE);
 	}
 
@@ -170,12 +223,12 @@ bool ldb_import_snippets(char *db_name, char *filename, bool skip_delete)
 	FILE *in, *out;
 	out = NULL;
 
-	in = fopen(filename, "rb");
+	in = fopen(config->csv_path, "rb");
 	if (in == NULL)
 		return false;
 
 	/* Lock DB */
-	char lock_file[MAX_PATH_LEN];
+	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_wfp.db,oss_wfp.table);
 	ldb_lock(lock_file);
 
@@ -198,16 +251,14 @@ bool ldb_import_snippets(char *db_name, char *filename, bool skip_delete)
 	uint8_t *buffer = malloc(buffer_ln);
 
 	/* Create table if it doesn't exist */
-	if (!ldb_table_exists(db_name, "wfp"))
-		ldb_create_table(db_name, "wfp", 4, rec_ln);
+	if (!ldb_table_exists(config->dbname, config->table))
+		ldb_create_table(config->dbname, config->table, 4, rec_ln, 0);
 
 	/* Open ldb */
 	out = ldb_open(oss_wfp, last_wfp, "r+");
 
 	bool first_read = true;
 	uint32_t bytes_read = 0;
-
-	printf("%s\n", filename);
 
 	while ((bytes_read = fread(buffer, 1, buffer_ln, in)) > 0)
 	{
@@ -275,8 +326,8 @@ bool ldb_import_snippets(char *db_name, char *filename, bool skip_delete)
 		fclose(out);
 
 	fclose(in);
-	if (!skip_delete)
-		unlink(filename);
+	if (config->opt.params.delete_after_import)
+		unlink(config->csv_path);
 
 	free(record);
 	free(buffer);
@@ -411,20 +462,28 @@ bool valid_hex(char *str, int bytes)
  * @param nfields number of fileds
  * @return true if succed
  */
-bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool secondary_key, int nfields)
+bool ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
-	bool skip_csv_check = job->skip_csv_check;
-	if (job->bin_import || strstr(filename, ".enc"))
+	bool skip_csv_check = job->opt.params.skip_fields_check;
+
+	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
 		skip_csv_check = true;
 	}
+	
+	FILE *fp = fopen(job->csv_path, "r");
+	if (fp == NULL)
+	{
+		fprintf(stderr, "File does not exist %s\n", job->csv_path);
+		return false;
+	}
 
-	bool skip_delete = job->skip_delete;
-	int expected_fields = (skip_csv_check ? 0 : nfields);
+	csv_sort(job);
 
-	FILE *fp;
+	int expected_fields = (skip_csv_check ? 0 : job->opt.params.csv_fields);
+
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t lineln;
@@ -444,53 +503,43 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 	uint16_t item_rg_start = 0; // record group size
 	uint16_t item_rg_size = 0;	// record group size
 	char last_id[MD5_LEN * 2 + 1 -2]; //save last 30th chars from the last md5.
-	memset(last_id, 0, MD5_LEN * 2 + 1);
+	memset(last_id, 0, sizeof(last_id));
 
 	/* Counters */
 	uint32_t imported = 0;
 	uint32_t skipped = 0;
 
-	uint64_t totalbytes = file_size(filename);
+	uint64_t totalbytes = ldb_file_size(job->csv_path);
 	size_t bytecounter = 0;
-	int field2_ln = secondary_key ? 16 : 0;
 
 	/* Get 1st byte of the item ID from csv filename (if available) */
 	uint8_t first_byte = 0;
 	bool got_1st_byte = false;
-	if (valid_hex(basename(filename), 2))
+	if (valid_hex(basename(job->csv_path), 2))
 		got_1st_byte = true;
-	ldb_hex_to_bin(basename(filename), 2, &first_byte);
+	ldb_hex_to_bin(basename(job->csv_path), 2, &first_byte);
 
 	/* Create table if it doesn't exist */
 	if (!ldb_database_exists(job->dbname))
 		ldb_create_database(job->dbname);
-	if (!ldb_table_exists(job->dbname, table))
-		ldb_create_table(job->dbname, table, 16, 0);
+	if (!ldb_table_exists(job->dbname, job->table))
+		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.has_secondary_key);
 
 	/* Create table structure for bulk import (32-bit key) */
-	struct ldb_table oss_bulk;
-	strcpy(oss_bulk.db, job->dbname);
-	strcpy(oss_bulk.table, table);
-	oss_bulk.key_ln = 4;
-	oss_bulk.rec_ln = 0;
-	oss_bulk.ts_ln = 2;
-	oss_bulk.tmp = false;
+	char db_table[LDB_MAX_NAME];
+	snprintf(db_table,LDB_MAX_NAME-1, "%s/%s", job->dbname, job->table);
 
-	char last_url_id[MAX_ARG_LEN] = "\0";
+	struct ldb_table oss_bulk = ldb_read_cfg(db_table);
+/* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
+	oss_bulk.key_ln = 4; 
 
-	fp = fopen(filename, "r");
-	if (fp == NULL)
-	{
-		minr_log( "File does not exist %s\n", filename);
-	
-		if (!skip_delete)
-			unlink(filename);
-		return false;
-	}
-	printf("%s\n", filename);
+	int field2_ln = oss_bulk.sec_key ? 16 : 0;
+	char last_url_id[MD5_LEN_HEX] = "\0";
+
+	fprintf(stderr, "Importing %s to %s/%s\n", job->csv_path, job->dbname, job->table);
 
 	/* Lock DB */
-	char lock_file[MAX_PATH_LEN];
+	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_bulk.db,oss_bulk.table);
 	ldb_lock(lock_file);
 
@@ -502,7 +551,9 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
-			minr_log( "Line %s -- Skipped, %ld exceed MAX line size %d.\n", line, lineln, MAX_CSV_LINE_LEN);
+			if (job->opt.params.verbose)
+				fprintf(stderr, "Line %s -- Skipped, %ld exceed MAX line size %d.\n", line, lineln, MAX_CSV_LINE_LEN);
+
 			skipped++;
 			continue;
 		}
@@ -526,23 +577,25 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 		/* File table will have the url id as the second field, which will be
 			 converted to binary. Data then starts on the third field. Also file extensions
 			 are checked and ruled out if ignored */
-		if (secondary_key)
+		if (oss_bulk.sec_key)
 		{
 			/* Skip line if the URL is the same as last, importing unique files per url */
 			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
 			{
-				minr_log( "Line %s -- Skipped, repeated URL ID.\n", line);
+				if (job->opt.params.verbose)
+					fprintf(stderr, "Line %s -- Skipped, repeated URL ID.\n", line);
 				skip = true;
 			}
 			else
 				memcpy(last_url_id, data, MD5_LEN * 2);
 			
-			if (nfields > 2)
+			if (job->opt.params.csv_fields > 2)
 			{
 				data = field_n(3, line);
 				if (!data)
 				{
-					minr_log( "Error in line %s -- Skipped\n", line);
+					if (job->opt.params.verbose)
+						fprintf(stderr, "%s to  %s - %d - Error in line: %s -- Skipped\n", job->csv_path, job->table,job->opt.params.csv_fields, line);
 					skipped++;
 				}
 			}
@@ -568,12 +621,13 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 			if (expected_fields)
 				if (csv_fields(line) != expected_fields)
 				{
-					minr_log( "Line %s -- Skipped, Missing CSV fields. Expected: %d.\n", line, expected_fields);
+					if (job->opt.params.verbose)
+						fprintf(stderr, "Line %s -- Skipped, Missing CSV fields. Expected: %d.\n", line, expected_fields);
 					skip = true;
 				}
-			
-			if (secondary_key && ignored_extension(data) && !bin_mode) //we dont know the file extension in bin_mode
-				skip = true;
+		/*	Disabled, we should have a ignored extension entry at this time 
+			if (job->opt.params.has_secondary_key && ignored_extension(data) && !bin_mode) //we dont know the file extension in bin_mode
+				skip = true; */
 
 			if (skip)
 			{
@@ -582,12 +636,13 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 			}
 		}
 
-		if (data || (secondary_key && nfields < 3))
+		if (data || (oss_bulk.sec_key && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, secondary_key))
+			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.has_secondary_key))
 			{
-				fprintf(stderr, "failed to parse key: %s\n", line);
+				if (job->opt.params.verbose)
+					fprintf(stderr, "failed to parse key: %s\n", line);
 				continue;
 			}
 
@@ -596,7 +651,7 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, MD5_LEN) != 0);
 
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
-			if (new_key || (item_ptr + 5 * NODE_PTR_LEN + MD5_LEN + 2 * REC_SIZE_LEN + r_size) >= node_limit)
+			if (new_key || (item_ptr + 5 * LDB_PTR_LN + MD5_LEN + 2 * REC_SIZE_LEN + r_size) >= node_limit)
 			{
 				/* Write buffer to disk and initialize buffer */
 				if (item_rg_size > 0)
@@ -692,11 +747,12 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 
 	fclose(fp);
 	
-	if (!skip_delete)
-		unlink(filename);
+	if (job->opt.params.delete_after_import)
+		unlink(job->csv_path);
 
 	if (line)
 		free(line);
+
 	free(itemid);
 	free(item_buf);
 	free(item_lastid);
@@ -709,163 +765,43 @@ bool ldb_import_csv(struct minr_job *job, char *filename, char *table, bool seco
 }
 
 /**
- * @brief Sort a csv file invokinkg a new process and executing a sort command
- *
- * @param file_path file path to be processed
- * @param skip_sort true to skip sort
- * @return true if succed
- */
-bool csv_sort(char *file_path, bool skip_sort)
-{
-	if (skip_sort)
-		return true;
-	if (!file_size(file_path))
-		return true;
-
-	/* Assemble command */
-	char *command = malloc(MAX_ARG_LEN + 3 * MAX_PATH_LEN);
-	sprintf(command, "sort -T %s -u -o %s %s", tmp_path, file_path, file_path);
-
-	FILE *p = popen(command, "r");
-	if (p)
-		pclose(p);
-	else
-	{
-		printf("Cannot execute %s\n", command);
-		free(command);
-		return false;
-	}
-	free(command);
-	return true;
-}
-
-/**
- * @brief Execute bsort over a file
- *
- * @param file_path pointer to file path
- * @param skip_sort
- * @return true
- */
-bool bin_sort(char *file_path, bool skip_sort)
-{
-	if (!file_size(file_path))
-		return false;
-	if (skip_sort)
-		return true;
-
-	return bsort(file_path);
-}
-
-/**
- * @brief
- *
- * @param table table path
- * @param job pointer to minr job
- * @return true if succed
- */
-bool this_table(char *table, struct minr_job *job)
-{
-	if (!*job->import_table)
-		return true;
-	if (!strcmp(job->import_table, table))
-		return true;
-	return false;
-}
-
-/**
  * @brief Wipes table before importing (-O)
  *
  * @param table path to table
  * @param job pointer to mner job
  */
-void wipe_table(char *table, struct minr_job *job)
+void wipe_table(ldb_importation_config_t *config)
 {
-	if (!job->import_overwrite)
+	if (!config->opt.params.overwrite)
 		return;
 
 	bool is_mz = false;
-	if (!strcmp(table, "sources") || !strcmp(table, "notices"))
+	if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices") || config->opt.params.is_mz_table)
 		is_mz = true;
 
-	char path[2 * MAX_PATH_LEN] = "\0";
-	sprintf(path, "%s/%s/%s", LDB_ROOT, job->dbname, table);
+	char path[2 * LDB_MAX_PATH] = "\0";
+	sprintf(path, "%s/%s/%s", ldb_root, config->dbname, config->table);
 
 	printf("Wiping  %s\n", path);
-	if (is_dir(path))
-	{
-		for (int i = 0; i < (is_mz ? 65535 : 256); i++)
-		{
-			if (is_mz)
-			{
-				sprintf(path, "%s/%s/%s/%04x.mz", LDB_ROOT, job->dbname, table, i);
-				check_file_extension(path, job->bin_import);
-			}
-			else
-				sprintf(path, "%s/%s/%s/%02x.ldb", LDB_ROOT, job->dbname, table, i);
-			unlink(path);
-		}
-	}
-}
 
-/**
- * @brief Import files
- *
- * @param job pointer to minr job
- */
-void import_multiple_files(struct minr_job *job, char * table, bool secondary_key, int fields)
-{
-	if (!this_table(table, job))
+	if (!ldb_table_exists(config->dbname, config->table))
+	{
+		fprintf(stderr, "Table %s cannot be wiped, path does not exist\n", config->table);
 		return;
-	/* Wipe existing data if overwrite is requested */
-	wipe_table(table, job);
+	}
 
-	char path[2 * MAX_PATH_LEN] = "\0";
-	sprintf(path, "%s/%s", job->import_path, table);
-
-	if (is_dir(path))
+	for (int i = 0; i < (is_mz ? 65535 : 256); i++)
 	{
-		for (int i = 0; i < 256; i++)
+		if (is_mz)
 		{
-			sprintf(path, "%s/%s/%02x.csv", job->import_path, table,i);
-			check_file_extension(path, job->bin_import);
-
-			if (csv_sort(path, job->skip_sort))
-			{
-				/* 3 fields expected (file id, url id, URL) */
-				ldb_import_csv(job, path, table, true, fields);
-			}
+			sprintf(path, "%s/%s/%s/%04x.mz", ldb_root, config->dbname, config->table, i);
+			check_file_extension(path, config->opt.params.binary_mode);
 		}
-		sprintf(path, "%s/%s", job->import_path, table);
-		if (!job->skip_delete)
-			rmdir(path);
+		else
+			sprintf(path, "%s/%s/%s/%02x.ldb", ldb_root, config->dbname, config->table, i);
+		unlink(path);
 	}
 }
-
-/* Import snippets */
-void import_snippets(struct minr_job *job)
-{
-	/* Wipe existing data if overwrite is requested */
-	wipe_table("wfp", job);
-
-	char path[2 * MAX_PATH_LEN] = "\0";
-	sprintf(path, "%s/%s", job->import_path, TABLE_NAME_WFP);
-	if (is_dir(path))
-	{
-		printf("WFP IDs in ignorelist: %lu\n", IGNORED_WFP_LN / 4);
-		for (int i = 0; i < 256; i++)
-		{
-			sprintf(path, "%s/%s/%02x.bin", job->import_path, TABLE_NAME_WFP, i);
-			if (bin_sort(path, job->skip_sort))
-			{
-				ldb_import_snippets(job->dbname, path, job->skip_delete);
-			}
-		}
-	}
-	sprintf(path, "%s/%s", job->import_path, TABLE_NAME_WFP);
-	if (!job->skip_delete)
-		rmdir(path);
-}
-
 
 /**
  * @brief Import a single file
@@ -875,28 +811,26 @@ void import_snippets(struct minr_job *job)
  * @param tablename table name sting
  * @param nfields number of fields
  */
-void single_file_import(struct minr_job *job, char *filename, char *tablename, int nfields)
-{
-	if (!this_table(tablename, job))
-		return;
+// void single_file_import(ldb_importation_config_t * import, char *filename, char *tablename, int nfields)
+// {
+	
+// 	/* Wipe existing data if overwrite is requested */
+// 	wipe_table(tablename, job);
 
-	/* Wipe existing data if overwrite is requested */
-	wipe_table(tablename, job);
+// 	printf("Importing %s\n", filename);
 
-	printf("Importing %s\n", filename);
+// 	char path[2 * LDB_MAX_PATH] = "\0";
+// 	sprintf(path, "%s/%s", job->import_path, filename);
+// 	check_file_extension(path, job->bin_import);
 
-	char path[2 * MAX_PATH_LEN] = "\0";
-	sprintf(path, "%s/%s", job->import_path, filename);
-	check_file_extension(path, job->bin_import);
-
-	if (is_file(path))
-	{
-		if (csv_sort(path, job->skip_sort))
-		{
-			ldb_import_csv(job, path, tablename,false, nfields);
-		}
-	}
-}
+// 	if (is_file(path))
+// 	{
+// 		if (csv_sort(path, job->opt.params.skip_sort))
+// 		{
+// 			ldb_import_csv(job, path, tablename,false, nfields);
+// 		}
+// 	}
+// }
 
 static char * version_get_daily(char * json)
 {
@@ -974,15 +908,15 @@ static char * version_file_open(char * path)
  * @param job pointer to minr job
  * @return true if succed
  */
-bool version_import(struct minr_job *job)
+bool version_import(ldb_importation_config_t *job)
 {
 	#define JSON_CONTENT  "{\"monthly\":\"%s\", \"daily\":\"%s\"}"
 	char *path = NULL;
-	asprintf(&path, "%s/version.json", job->import_path);
+	asprintf(&path, "%s/version.json", job->path);
 
-	if (!is_file(path))
+	if (!ldb_file_exists(path))
 	{
-		fprintf(stderr, "Cannot find version file in path %s\n",job->import_path);
+		fprintf(stderr, "Cannot find version file in path %s\n",job->path);
 		return false;
 	}
 	char * vf_import = version_file_open(path);
@@ -1044,83 +978,192 @@ bool version_import(struct minr_job *job)
 	return true;
 }
 
-/**
- * @brief Import CSV files and load into database
- *
- * @param job pointer to mnir job
- */
-void mined_import(struct minr_job *job)
-{
-	/* Create database */
-	if (!ldb_database_exists(job->dbname))
-		ldb_create_database(job->dbname);
+const char * config_parameters[] = {
+									"CSV_DEL",
+									"KEY2",
+									"OVERWRITE",
+									"SKIP_SORT",
+									"VALIDATE_VERSION",
+									"VERBOSE",
+									"MZ",
+									"BIN",
+									"WFP",
+									"FIELDS",
+									"SKIP_FIELDS_CHECK",
+									"COLLATE",
+									"COLLATE_MAX_RECORD",
+									"TMP_PATH",
+									};
 
-	/* Import version.json file */
-	if (!version_import(job))
+#define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
+bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line)
+{
+//first normalize the line
+	char normalized[LDB_MAX_COMMAND_SIZE];
+	char no_spaces[LDB_MAX_COMMAND_SIZE];
+	char * line_c = line;
+	int i = 0;
+	do
 	{
-		printf("Failed to import version.json file. This file must be present and must has a valid format to continue. Check at README.md for more details.\n");
+		//skip spaces
+		if (*line_c == ' ')
+			continue;
+		// remove casing
+		no_spaces[i] = *line_c;
+		normalized[i] = toupper(*line_c);
+		i++;
+	} while (*(line_c++) && i < LDB_MAX_COMMAND_SIZE);
+	
+	normalized[i] = 0;
+
+	for (int i = 0; i < CONFIG_PARAMETERS_NUMBER; i++)
+	{
+		char * param = strstr(normalized, config_parameters[i]);
+		int val = 0;
+		if (!param)
+			continue;
+		param = strchr(param,'=');
+		
+		if (sscanf(param,"=%d", &val))
+			config->opt.params_arr[i] = val;
+		
+		else if (!strcmp(config_parameters[i], "TMP_PATH"))
+		{
+			strncpy(config->tmp_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
+			//remove spurius ")" or "," from path TODO: improve
+			char * c = strrchr(config->tmp_path,',');
+			if (c)
+				*c = 0;
+			else
+			{
+				 c = strrchr(config->tmp_path,')');	
+				 if (c)
+				 	*c = 0;
+			} 
+		}
+
+		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
+	}
+	return true;
+}
+
+static bool load_import_config(ldb_importation_config_t * config)
+{
+	char config_path[LDB_MAX_PATH] = "";
+	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
+	if (ldb_file_exists(config_path))
+	{
+		FILE *cfg = fopen(config_path, "r");
+		if (cfg)
+		{
+			char * line = NULL;
+    		size_t len = 0;
+    		ssize_t read;
+			while ((read = getline(&line, &len, cfg)) != -1) 
+			{
+				char * table_cfg = strstr(line, config->table);
+				if (table_cfg)
+				{
+				//	if (config->opt.params.verbose)
+				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
+					
+					ldb_importation_config_parse(config, table_cfg + strlen(config->table));
+					fclose(cfg);
+					return true;
+				}
+
+				const char global_def[]= "GLOBAL:";
+				char * global_cfg = strstr(line, global_def);
+				if (global_cfg)
+				{
+				//	if (config->opt.params.verbose)
+				//		fprintf(stderr, "The table %s is defined at %s as GLOBAL, some parameter may be overwritten\n", config->table, config_path);
+					
+					ldb_importation_config_parse(config, global_cfg + strlen(global_def));
+				}
+
+    		}
+			fclose(cfg);
+		}
+	}
+	return false;
+}
+
+bool import_collate_sector(ldb_importation_config_t * config)
+{
+	
+	if (!config->opt.params.collate || config->opt.params.collate_max_rec < LDB_KEY_LN)
+		return false;
+
+	char dbtable[LDB_MAX_NAME];
+	snprintf(dbtable,LDB_MAX_NAME,"%s/%s", config->dbname, config->table);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Lock DB */
+		ldb_lock(dbtable);
+
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		struct ldb_table tmptable = ldb_read_cfg(dbtable);
+		tmptable.tmp = true;
+		tmptable.key_ln = LDB_KEY_LN;
+		
+		int max_rec_len = config->opt.params.is_wfp_table == 1 ? 18 : config->opt.params.collate_max_rec;
+
+		fprintf(stderr, "Collating %s, sector size: %d\n", dbtable, max_rec_len);
+		
+		if (ldbtable.rec_ln && ldbtable.rec_ln != max_rec_len)
+			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		else if (max_rec_len < ldbtable.key_ln)
+			printf("E076 Max record length cannot be smaller than table key\n");
+		else
+		{
+			char *ptr = NULL;
+			char * filename = basename(config->csv_path);
+			long sector = strtol(filename, &ptr, 16);
+			if (ptr - filename < 2 || (ptr && *ptr != '.'))
+				sector = -1;
+			
+			//rec_len MUST be 18 if table is wfp (fixed sector size).			
+			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, 0);
+		}
+	}
+	ldb_unlock(dbtable);
+	return true;
+}
+
+#define DEFAULT_TMP_PATH "/tmp/"
+bool ldb_import(ldb_importation_config_t * config)
+{
+	bool result = false;
+	if (config->opt.params.version_validation && !version_import(config))
+	{
+		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config->csv_path);
 		exit(EXIT_FAILURE);
 	}
+	load_import_config(config);
 
-	char db_path[MAX_PATH_LEN * 2];
-	sprintf(db_path, "%s/%s", LDB_ROOT, job->dbname);
-
-	/* Import MZ archives */
-	if (this_table("sources", job))
+	if (!config->tmp_path)
 	{
-		/* Wipe existing data if overwrite is requested */
-		wipe_table("sources", job);
-		minr_join_mz("sources", job->import_path, db_path, job->skip_delete, job->bin_import);
+		sprintf(config->tmp_path, DEFAULT_TMP_PATH);
 	}
-
-	if (this_table("notices", job))
+	
+	if (config->opt.params.is_mz_table)
 	{
-		/* Wipe existing data if overwrite is requested */
-		wipe_table("notices", job);
-		minr_join_mz("notices", job->import_path, db_path, job->skip_delete, job->bin_import);
+		char dest_path[LDB_MAX_PATH];
+		sprintf(dest_path, "%s/%s/%s/%s", ldb_root, config->dbname, config->table, basename(config->csv_path));
+		result = ldb_bin_join(config->csv_path, dest_path, false, config->opt.params.delete_after_import);
 	}
-
-	/* Attribution expects 2 fields: id, notice ID */
-	single_file_import(job, TABLE_NAME_ATTRIBUTION".csv", "attribution", 2);
-
-	/* PURLs expects either:
-	 * 7 fields: id, created, latest, updated, star, watch, fork
-	 * or a single field: related PURL. Therefore, 0 is passed as required fields */
-	single_file_import(job, TABLE_NAME_PURL".csv", "purl", 0);
-
-	/* Dependencies expect 5 fields: id, source, vendor, component, version */
-	single_file_import(job, TABLE_NAME_DEPENDENCY".csv", "dependency", 5);
-
-	/* Licenses expects 3 fields: id, source, license */
-	single_file_import(job, TABLE_NAME_LICENSE".csv", "license", 3);
-
-	/* Copyrights expects 3 fields: id, source, copyright statement */
-	single_file_import(job, TABLE_NAME_COPYRIGHT".csv", "copyright", 3);
-
-	/* Vulnerability expects 10 fields: id, source, purl, version from,
-	   version patched, CVE, advisory ID (Github/CPE), Severity, Date, Summary */
-	single_file_import(job, TABLE_NAME_VULNERABILITY".csv", "vulnerability", 10);
-
-	/* Quality expects 3 CSV fields: id, source, value */
-	single_file_import(job, TABLE_NAME_QUALITY".csv", "quality", 3);
-
-	/* Cryptography expects 3 fields: id, algorithm, strength */
-	single_file_import(job, TABLE_NAME_CRYPTOGRAPHY".csv", "cryptography", 3);
-
-	/* URLs expects 8 fields: url id, vendor, component, version, release_date, license, purl, download_url */
-	single_file_import(job, TABLE_NAME_URL".csv", "url", 8);
-
-	/* Import files */
-	import_multiple_files(job, TABLE_NAME_FILE, true, 3);
-
-	/* Import pivot url/files */
-	import_multiple_files(job, TABLE_NAME_PIVOT, true, 2);
-
-	/* Import .bin files */
-	if (this_table("wfp", job))
-		import_snippets(job);
-
-	/* Remove mined directory */
-	if (!job->skip_delete)
-		rmdir(job->import_path);
+	else if (config->opt.params.is_wfp_table)
+	{
+		if (bin_sort(config->csv_path, config->opt.params.skip_sort))
+			result = ldb_import_snippets(config);
+	}
+	else
+	{
+		result =  ldb_import_csv(config);
+	}
+	import_collate_sector(config);
+	return result;
 }

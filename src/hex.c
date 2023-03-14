@@ -29,7 +29,7 @@
   *
   * @see https://github.com/scanoss/ldb/blob/master/src/hex.c
   */
-
+#include "ldb.h"
 
 /**
  * @brief Prints a hexdump of 'len' bytes from 'data' organized 'width' columns

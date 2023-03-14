@@ -19,8 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -36,6 +34,7 @@
 #include <unistd.h>
 #include <openssl/md5.h>
 
+#define LDB_CFG_PATH "/usr/local/etc/scanoss/ldb/"
 #define LDB_VERSION "3.1.5"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
@@ -49,6 +48,7 @@
 #define LDB_MAX_COMMAND_SIZE (64 * 1024)   // Maximum length for an LDB command statement
 #define COLLATE_REPORT_SEC 5 // Report interval for collate status
 #define MD5_LEN 16
+#define MD5_LEN_HEX 33
 #define BUFFER_SIZE 1048576
 
 #ifndef _LDB_GLOBAL_
@@ -79,13 +79,15 @@ SELECT_CSV,
 SELECT, 
 DELETE,
 COLLATE,
+BULK_INSERT,
+BULK_INSERT_DEFAULT,
 MERGE,
 VERSION,
 UNLINK_LIST,
 DUMP_SECTOR,
 DUMP,
 DUMP_KEYS,
-CAT_MZ
+CAT_MZ,
 } commandtype;
 
 struct ldb_stats
@@ -102,6 +104,7 @@ struct ldb_table
 	int  rec_ln; // data record length, otherwise 0 for variable-length data
     int  ts_ln;  // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 	bool tmp; // is this a .tmp sector instead of a .ldb?
+	bool sec_key;
 	uint8_t *current_key;
 	uint8_t *last_key;
 };
@@ -189,6 +192,38 @@ struct mz_job
 	bool key_found;			// Used with mz_key_exists
 };
 
+typedef union import_params {
+	struct __attribute__((__packed__)) params
+	{
+		int delete_after_import;
+    	int has_secondary_key;
+		int overwrite;
+		int skip_sort;
+		int version_validation;
+		int verbose;
+		int is_mz_table;
+    	int binary_mode;
+		int is_wfp_table;
+    	int csv_fields;
+    	int skip_fields_check;
+		int collate;
+		int collate_max_rec;
+	} params;
+	int params_arr[sizeof(struct params)];
+} import_params_t;
+
+typedef struct ldb_importation_config_t
+{
+    char path[LDB_MAX_PATH];
+    char tmp_path[LDB_MAX_PATH];
+    char dbname[LDB_MAX_NAME];
+    char table[LDB_MAX_NAME];
+    char csv_path[LDB_MAX_PATH];
+	import_params_t opt;
+} ldb_importation_config_t;
+
+bool ldb_importation_config_parse(ldb_importation_config_t * conf, char * line);
+
 
 #endif
 
@@ -228,14 +263,14 @@ bool ldb_valid_hex(char *str);
 bool ldb_valid_ascii(char *str);
 void ldb_trim(char *str);
 struct ldb_table ldb_read_cfg(char *db_table);
-void ldb_write_cfg(char *db, char *table, int keylen, int reclen);
+void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int sec_key);
 int ldb_split_string(char *string, char separator);
 bool ldb_valid_name(char *str);
 char *ldb_extract_word(int n, char *wordlist);
 int ldb_word_count(char *text);
 bool ldb_valid_table(char *table);
 int ldb_word_len(char *text);
-commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr);
+bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_command_create_database(char *command);
 char *ldb_command_normalize(char *text);
 void ldb_command_show_tables(char *command);
@@ -247,7 +282,7 @@ void ldb_command_create_table(char *command);
 void ldb_version();
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
-bool ldb_create_table(char *db, char *table, int keylen, int reclen);
+bool ldb_create_table(char *db, char *table, int keylen, int reclen, int sec_key);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key);
@@ -262,12 +297,13 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
-void ldb_collate(struct ldb_table table, struct ldb_table tmp_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln);
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, uint8_t *del_keys, long del_ln);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes, int sector);
 void ldb_dump_keys(struct ldb_table table);
 int ldb_collate_cmp(const void * a, const void * b);
+uint64_t ldb_file_size(char *path);
 
 bool mz_key_exists(struct mz_job *job, uint8_t *key);
 bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id);
@@ -278,7 +314,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ());
 void file_write(char *filename, uint8_t *src, uint64_t src_ln);
 void mz_id_fill(char *md5, uint8_t *mz_id);
 void mz_deflate(struct mz_job *job);
-void mz_corrupted(int error);
+void mz_corrupted();
 void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
 bool mz_check(char *path);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
@@ -288,4 +324,10 @@ void mz_cat(struct mz_job *job, char *key);
 uint8_t *file_md5 (char *path);
 void calc_md5(char *data, int size, uint8_t *out);
 
+char * ldb_file_extension(char * path);
+void ldb_join_mz(char * table, char *source, char *destination, bool skip_delete, bool encrypted);
+void ldb_join_snippets(char * table, char *source, char *destination, bool skip_delete);
+bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete);
+bool ldb_create_dir(char *path);
+bool ldb_import(ldb_importation_config_t * config);
 //normalized_license *load_licenses();

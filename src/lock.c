@@ -30,6 +30,7 @@
   */
 
 #include <stdio.h>
+#include "ldb.h"
 /**
  * @brief Verifies if the db is locked.
  * Reads the file ldb.lock and if exists the db is locked. Otherwise is free to use.
@@ -41,7 +42,7 @@ bool ldb_locked(char * db_name)
 	char file_lock[LDB_MAX_PATH];
 	
 	char * db = strdup(db_name);
-	char * sub = strrchr(db_name,'/');
+	char * sub = strrchr(db,'/');
 	
 	// Replace the '/' by '.' in the lock file
 	if (sub)

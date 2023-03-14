@@ -19,7 +19,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
+#include "ldb.h"
 /**
   * @file collate.c
   * @date 19 Aug 2020 
@@ -359,10 +359,15 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
 			size = collate->table_rec_ln + subkey_ln;
 		}
 
-		else
+		else if (collate->rec_width)
 		{
 			items = collate->data_ptr / collate->rec_width;
 			size = collate->rec_width;
+		}
+		else
+		{
+			fprintf(stderr,"Warning collate rec_width undefined\n");
+			return;
 		}
 		qsort(collate->data, items, size, ldb_collate_cmp);
 }
@@ -417,7 +422,10 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 {
 
 	struct ldb_collate_data *collate = ptr;
-
+	if (!collate->rec_width)
+	{
+		return true;
+	}
 	/* If main key has changed, collate and write list and reset data_ptr */
 	if (collate->data_ptr) if (memcmp(key, collate->last_key, LDB_KEY_LN))
 	{
@@ -506,13 +514,17 @@ long *load_del_map(uint8_t *del_keys, long del_ln, int subkey_ln)
  * @param del_keys pointer to list of keys to be deleted.
  * @param del_ln number of keys to be deleted
  */
-void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t *del_keys, long del_ln)
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, uint8_t *del_keys, long del_ln)
 {
 
 	long *del_map = NULL;
 
 	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
+	if (p_sector >= 0)
+	{
+		k0 = p_sector;
+	}
 
 	/* Otherwise use the first byte of the first key */
 	if (del_ln) k0 = *del_keys;
@@ -607,6 +619,8 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			free(collate.tmp_data);
 			free(sector);
 		}
+		if (p_sector >=0)
+			break;
 
 		/* Exit here if it is a delete command, otherwise move to the next sector */
 	} while (k0++ < 255 && !del_ln);

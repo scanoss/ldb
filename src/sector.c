@@ -19,7 +19,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
+#include "ldb.h"
 /**
   * @file sector.c
   * @date 12 Jul 2020
@@ -61,7 +61,7 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
  * @param reclen length of the record
  * @return true success. false failure
  */
-bool ldb_create_table(char *db, char *table, int keylen, int reclen)
+bool ldb_create_table(char *db, char *table, int keylen, int reclen, int sec_key)
 {
 	bool out = false;
 
@@ -87,7 +87,7 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 		mkdir(tablepath, 0755);
 		if (ldb_dir_exists(tablepath))
 		{
-			ldb_write_cfg(db, table, keylen, reclen);
+			ldb_write_cfg(db, table, keylen, reclen, sec_key);
 			out = true;
 		}
 		else printf("E065 Cannot create %s\n", tablepath);

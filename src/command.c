@@ -29,7 +29,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
   */
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -41,6 +40,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <openssl/md5.h>
+#include <libgen.h>
 #include "ldb.h"
 
 /**
@@ -82,7 +82,7 @@ char *ldb_command_normalize(char *text)
  * @param word_nr[out] nuber of recognized word
  * @return true if it is a valid command
  */
-commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
+bool ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 {
 	int closest = 0;
 	int hits;
@@ -102,7 +102,6 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 			char *cword = ldb_extract_word(j, command);
 			char *kword = ldb_extract_word(j, ldb_commands[i]);
 			bool fulfilled = false;
-
 			if (!strcmp(kword, "{hex}")) fulfilled = ldb_valid_hex(cword);
 			else if (!strcmp(kword, "{ascii}")) fulfilled = ldb_valid_ascii(cword);
 			else if (!strcmp(kword, cword)) fulfilled = true;
@@ -241,7 +240,7 @@ void ldb_command_delete(char *command)
 		{
 			qsort(keys, keys_ln / ldbtable.key_ln, ldbtable.key_ln, ldb_collate_cmp);
 			printf("Removing %ld keys\n", keys_ln / ldbtable.key_ln);
-			ldb_collate(ldbtable, tmptable, max, false, keys, keys_ln);
+			ldb_collate(ldbtable, tmptable, max, false, -1, keys, keys_ln);
 		}
 
 		free(keys);
@@ -283,7 +282,7 @@ void ldb_command_collate(char *command)
 		else if (max < ldbtable.key_ln)
 			printf("E076 Max record length cannot be smaller than table key\n");
 		else
-			ldb_collate(ldbtable, tmptable, max, false, NULL, 0);
+			ldb_collate(ldbtable, tmptable, max, false,-1, NULL, 0);
 	}
 
 	/* Unlock DB */
@@ -362,7 +361,7 @@ void ldb_command_merge(char *command)
 		{
 			outtable.tmp = false;
 			outtable.key_ln = LDB_KEY_LN;
-			ldb_collate(ldbtable, outtable, max, true, NULL, 0);
+			ldb_collate(ldbtable, outtable, max, true,-1, NULL, 0);
 		}
 	}
 
@@ -483,6 +482,152 @@ void ldb_command_insert(char *command, commandtype type)
 	free(databin);
 }
 
+static char * table_name_from_path(char * path)
+{
+	char * table_name = strrchr(path, '/');
+	char * out = NULL;
+	if (table_name)
+		table_name++;
+	else
+		table_name = path;
+			
+	char * dot = strchr(table_name, '.');
+	if (dot)
+		out = strndup(table_name, dot - table_name);
+	else
+		out = strdup(table_name);
+	
+	return out;
+}
+
+static void recurse_directory(ldb_importation_config_t * job, char *name, char * father, bool child)
+{
+	DIR *dir;
+	struct dirent *entry;
+	bool read = false;
+
+	if (!(dir = opendir(name))) return;
+
+	while ((entry = readdir(dir)))
+	{
+		if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
+
+		read = true;
+		char *path =calloc (LDB_MAX_PATH, 1);
+		sprintf (path, "%s/%s", name, entry->d_name);
+			
+		if (entry->d_type == DT_DIR)
+		{
+			father = entry->d_name;
+			ldb_importation_config_t * job_r = calloc(1, sizeof(ldb_importation_config_t));
+			memcpy(job_r, job, sizeof(ldb_importation_config_t));
+			memset(job->table, 0, sizeof(job->table));
+			memset(job->csv_path, 0, sizeof(job->csv_path));
+			recurse_directory(job_r, path, father, true);
+			free(job_r);
+		}
+		else if (ldb_file_exists(path))
+		{
+			if (father && *father && child)
+			{
+				strcpy(job->table,father);
+			}
+			else
+			{
+				char * table_name = table_name_from_path(path);
+				strcpy(job->table,table_name);
+				free(table_name);
+			}
+			
+			if (strstr(path, ".mz"))
+				job->opt.params.is_mz_table = true;
+			else
+				job->opt.params.is_mz_table = false;
+
+			if (strstr(path, ".enc"))
+				job->opt.params.binary_mode = true;
+			else
+				job->opt.params.binary_mode = false;
+
+			if (strstr(path, ".bin"))
+				job->opt.params.is_wfp_table = true;
+			else
+				job->opt.params.is_wfp_table = false;
+ 
+			strcpy(job->csv_path, path);
+			ldb_import(job);
+		}
+
+		free(path);
+	}
+
+	if (read) 
+	{
+		closedir(dir);
+	}
+}
+
+/**
+ * @brief Execute command insert
+ * 
+ * @param command command string
+ * @param type command type
+ */
+void ldb_command_bulk(char *command, commandtype type)
+{
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(3, command);
+	char *path = ldb_extract_word(5, command);
+	char *config = ldb_extract_word(7, command);
+	ldb_importation_config_t job = {0};
+	
+	char *table = strchr(dbtable, '/');
+
+	if (table)
+		strncpy(job.dbname, dbtable, table - dbtable);
+	else
+		strcpy(job.dbname, dbtable);
+	
+	if (*config)
+		ldb_importation_config_parse(&job, config);
+	else 
+	{
+		char config_path[LDB_MAX_PATH] = "";
+		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
+		if (!ldb_file_exists(config_path))
+		{
+			fprintf(stderr,"Error, %s does not exist, you can create one or use the command \"%s\" in place\n", config_path, ldb_commands[BULK_INSERT]);
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	if (!table && ldb_dir_exists(path))
+	{
+		strcpy(job.table, basename(path));
+		strcpy(job.path, path);
+		recurse_directory(&job, path, job.table, false);
+	}
+	else if (table)
+	{
+		strcpy(job.table, table + 1);
+		strcpy(job.path,path);
+		if(ldb_dir_exists(path))
+			recurse_directory(&job, path, job.table, true);
+		else
+		{
+			strcpy(job.csv_path, path);
+			ldb_import(&job);
+		}
+	}
+	else
+	{
+		ldb_error("Command error\n");
+	}
+
+	/* Free memory */
+	free(dbtable);
+}
+
 /**
  * @brief LDB command create new table
  * The command is of the form: 
@@ -501,6 +646,8 @@ void ldb_command_create_table(char *command)
 	int keylen = atoi(tmp);
 	tmp = ldb_extract_word(7, command);
 	int reclen = atoi(tmp);
+	tmp = ldb_extract_word(9, command);
+	int seckey = atoi(tmp);
 	free(tmp);
 
 	char *dbtable = ldb_extract_word(3, command);
@@ -508,7 +655,8 @@ void ldb_command_create_table(char *command)
 
 	// dbtable is the name of the database;
 	// table is the name of the table;
-	if (ldb_create_table(dbtable, table, keylen, reclen)) printf("OK\n");
+	if (ldb_create_table(dbtable, table, keylen, reclen, seckey)) 
+		printf("OK\n");
 
 	free(dbtable);
 }
