@@ -523,7 +523,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (!ldb_database_exists(job->dbname))
 		ldb_create_database(job->dbname);
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
+		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number > 1 ? true : false);
 
 	/* Create table structure for bulk import (32-bit key) */
 	char db_table[LDB_MAX_NAME];
@@ -639,7 +639,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		if (data || (oss_bulk.sec_key && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number))
+			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
 				if (job->opt.params.verbose)
 					fprintf(stderr, "failed to parse key: %s\n", line);
@@ -883,7 +883,7 @@ bool version_import(ldb_importation_config_t *job)
 {
 	#define JSON_CONTENT  "{\"monthly\":\"%s\", \"daily\":\"%s\"}"
 	char *path = NULL;
-	asprintf(&path, "%s/version.json", job->path);
+	asprintf(&path, "%s/version.json",  job->path);
 
 	if (!ldb_file_exists(path))
 	{
@@ -911,8 +911,7 @@ bool version_import(ldb_importation_config_t *job)
 		free(monthly_date_i);
 		return false;
 	}
-
-	asprintf(&path, "/var/lib/ldb/%s/version.json", job->dbname);
+	asprintf(&path, "%s/%s/version.json", ldb_root, job->dbname);
 	char * vf_actual = version_file_open(path);		
 	char * daily_date_o = version_get_daily(vf_actual);
 	char * monthly_date_o = version_get_monthly(vf_actual);
@@ -934,7 +933,10 @@ bool version_import(ldb_importation_config_t *job)
 	FILE *f = fopen(path, "w+");
 	
 	if (!f)
+	{
+		fprintf(stderr, "Cannot create destination file: %s\n", path);
 		return false;
+	}
 
 	fprintf(f, JSON_CONTENT, monthly_date_i == NULL ? "N/A" : monthly_date_i ,daily_date_i == NULL ? "N/A" :  daily_date_i);
 	fclose(f);
@@ -1039,11 +1041,11 @@ bool ldb_create_db_config_default(char * dbname)
 	char config[] = "GLOBAL: (COLLATE_MAX_RECORD=2048, TMP_PATH=/home/scanoss)\n"
 					"file: (KEYS=2, FIELDS=3)\n"
 					"url: (FIELDS=8)\n"
-					"purl: (SKIP_FIELDS_CHECK=1)\n"
+					"purl: (SKIP_FIELDS_CHECK=1, , OVERWRITE=1)\n"
 					"license: (FIELDS=3)\n"
-					"dependency: (FIELDS=5)\n"
+					"dependency: (FIELDS=5, , OVERWRITE=1)\n"
 					"copyright: (FIELDS=3)\n"
-					"vulnerability: (FIELDS=10)\n"
+					"vulnerability: (FIELDS=10, OVERWRITE=1)\n"
 					"quality: (FIELDS=3)\n"
 					"cryptography: (FIELDS=3)\n"
 					"attribution: (FIELDS=2)\n"
@@ -1159,7 +1161,7 @@ bool ldb_import(ldb_importation_config_t * config)
 	bool result = false;
 	if (config->opt.params.version_validation && !version_import(config))
 	{
-		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config->csv_path);
+		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config->path);
 		exit(EXIT_FAILURE);
 	}
 	load_import_config(config);
@@ -1186,4 +1188,146 @@ bool ldb_import(ldb_importation_config_t * config)
 	}
 	import_collate_sector(config);
 	return result;
+}
+
+static char * table_name_from_path(char * path)
+{
+	char * table_name = strrchr(path, '/');
+	char * out = NULL;
+	if (table_name)
+		table_name++;
+	else
+		table_name = path;
+			
+	char * dot = strchr(table_name, '.');
+	if (dot)
+		out = strndup(table_name, dot - table_name);
+	else
+		out = strdup(table_name);
+	
+	return out;
+}
+
+static void recurse_directory(ldb_importation_config_t * job, char *name, char * father, bool child)
+{
+	DIR *dir;
+	struct dirent *entry;
+	bool read = false;
+
+	if (!(dir = opendir(name))) return;
+
+	while ((entry = readdir(dir)))
+	{
+		if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
+
+		read = true;
+		char *path =calloc (LDB_MAX_PATH, 1);
+		sprintf (path, "%s/%s", name, entry->d_name);
+			
+		if (entry->d_type == DT_DIR)
+		{
+			father = entry->d_name;
+			ldb_importation_config_t * job_r = calloc(1, sizeof(ldb_importation_config_t));
+			memcpy(job_r, job, sizeof(ldb_importation_config_t));
+			memset(job->table, 0, sizeof(job->table));
+			memset(job->csv_path, 0, sizeof(job->csv_path));
+			recurse_directory(job_r, path, father, true);
+			free(job_r);
+		}
+		else if (ldb_file_exists(path))
+		{
+			if (father && *father && child)
+			{
+				strcpy(job->table,father);
+			}
+			else
+			{
+				char * table_name = table_name_from_path(path);
+				strcpy(job->table,table_name);
+				free(table_name);
+			}
+			
+			if (strstr(path, ".mz"))
+				job->opt.params.is_mz_table = true;
+			else
+				job->opt.params.is_mz_table = false;
+
+			if (strstr(path, ".enc"))
+				job->opt.params.binary_mode = true;
+			else
+				job->opt.params.binary_mode = false;
+
+			if (strstr(path, ".bin"))
+				job->opt.params.is_wfp_table = true;
+			else
+				job->opt.params.is_wfp_table = false;
+			
+			if (strstr(path, ".json"))
+				continue;
+ 
+			strcpy(job->csv_path, path);
+			ldb_import(job);
+		}
+
+		free(path);
+	}
+
+	if (read) 
+	{
+		closedir(dir);
+	}
+}
+
+bool ldb_import_command(char * dbtable, char * path, char * config)
+{
+	ldb_importation_config_t job = {0};
+	
+	char *table = strchr(dbtable, '/');
+
+	if (table)
+		strncpy(job.dbname, dbtable, table - dbtable);
+	else
+		strcpy(job.dbname, dbtable);
+	
+	if (*config && table)
+		ldb_importation_config_parse(&job, config);
+	else 
+	{
+		char config_path[LDB_MAX_PATH] = "";
+		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
+		if (!ldb_file_exists(config_path))
+		{
+			fprintf(stderr,"Warning, %s does not exist, creating default\n", config_path);
+			if (!ldb_create_db_config_default(job.dbname))
+				ldb_error("Error creating ldb default config\n");
+		}
+	}
+
+	if (!ldb_database_exists(job.dbname))
+		ldb_create_database(job.dbname);
+
+	if (!table && ldb_dir_exists(path))
+	{
+		strcpy(job.table, basename(path));
+		strcpy(job.path, path);
+		recurse_directory(&job, path, job.table, false);
+	}
+	else if (table)
+	{
+		strcpy(job.table, table + 1);
+		strcpy(job.path,path);
+		if(ldb_dir_exists(path))
+			recurse_directory(&job, path, job.table, true);
+		else
+		{
+			strcpy(job.csv_path, path);
+			ldb_import(&job);
+		}
+	}
+	else
+	{
+		ldb_error("Command error\n");
+	}
+
+	return true;
 }

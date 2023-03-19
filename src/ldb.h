@@ -332,4 +332,5 @@ bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete);
 bool ldb_create_dir(char *path);
 bool ldb_import(ldb_importation_config_t * config);
 bool ldb_create_db_config_default(char * dbname);
+bool ldb_import_command(char * dbtable, char * path, char * config);
 //normalized_license *load_licenses();

@@ -482,91 +482,6 @@ void ldb_command_insert(char *command, commandtype type)
 	free(databin);
 }
 
-static char * table_name_from_path(char * path)
-{
-	char * table_name = strrchr(path, '/');
-	char * out = NULL;
-	if (table_name)
-		table_name++;
-	else
-		table_name = path;
-			
-	char * dot = strchr(table_name, '.');
-	if (dot)
-		out = strndup(table_name, dot - table_name);
-	else
-		out = strdup(table_name);
-	
-	return out;
-}
-
-static void recurse_directory(ldb_importation_config_t * job, char *name, char * father, bool child)
-{
-	DIR *dir;
-	struct dirent *entry;
-	bool read = false;
-
-	if (!(dir = opendir(name))) return;
-
-	while ((entry = readdir(dir)))
-	{
-		if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
-
-		read = true;
-		char *path =calloc (LDB_MAX_PATH, 1);
-		sprintf (path, "%s/%s", name, entry->d_name);
-			
-		if (entry->d_type == DT_DIR)
-		{
-			father = entry->d_name;
-			ldb_importation_config_t * job_r = calloc(1, sizeof(ldb_importation_config_t));
-			memcpy(job_r, job, sizeof(ldb_importation_config_t));
-			memset(job->table, 0, sizeof(job->table));
-			memset(job->csv_path, 0, sizeof(job->csv_path));
-			recurse_directory(job_r, path, father, true);
-			free(job_r);
-		}
-		else if (ldb_file_exists(path))
-		{
-			if (father && *father && child)
-			{
-				strcpy(job->table,father);
-			}
-			else
-			{
-				char * table_name = table_name_from_path(path);
-				strcpy(job->table,table_name);
-				free(table_name);
-			}
-			
-			if (strstr(path, ".mz"))
-				job->opt.params.is_mz_table = true;
-			else
-				job->opt.params.is_mz_table = false;
-
-			if (strstr(path, ".enc"))
-				job->opt.params.binary_mode = true;
-			else
-				job->opt.params.binary_mode = false;
-
-			if (strstr(path, ".bin"))
-				job->opt.params.is_wfp_table = true;
-			else
-				job->opt.params.is_wfp_table = false;
- 
-			strcpy(job->csv_path, path);
-			ldb_import(job);
-		}
-
-		free(path);
-	}
-
-	if (read) 
-	{
-		closedir(dir);
-	}
-}
-
 /**
  * @brief Execute command insert
  * 
@@ -579,53 +494,12 @@ void ldb_command_bulk(char *command, commandtype type)
 	char *dbtable = ldb_extract_word(3, command);
 	char *path = ldb_extract_word(5, command);
 	char *config = ldb_extract_word(7, command);
-	ldb_importation_config_t job = {0};
+
+	ldb_import_command(dbtable, path, config);
 	
-	char *table = strchr(dbtable, '/');
-
-	if (table)
-		strncpy(job.dbname, dbtable, table - dbtable);
-	else
-		strcpy(job.dbname, dbtable);
-	
-	if (*config)
-		ldb_importation_config_parse(&job, config);
-	else 
-	{
-		char config_path[LDB_MAX_PATH] = "";
-		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
-		if (!ldb_file_exists(config_path))
-		{
-			fprintf(stderr,"Warning, %s does not exist, creating default\n", config_path);
-			if (!ldb_create_db_config_default(job.dbname))
-				ldb_error("Error creating ldb default config\n");
-		}
-	}
-
-	if (!table && ldb_dir_exists(path))
-	{
-		strcpy(job.table, basename(path));
-		strcpy(job.path, path);
-		recurse_directory(&job, path, job.table, false);
-	}
-	else if (table)
-	{
-		strcpy(job.table, table + 1);
-		strcpy(job.path,path);
-		if(ldb_dir_exists(path))
-			recurse_directory(&job, path, job.table, true);
-		else
-		{
-			strcpy(job.csv_path, path);
-			ldb_import(&job);
-		}
-	}
-	else
-	{
-		ldb_error("Command error\n");
-	}
-
 	/* Free memory */
+	free(path);
+	free(config);
 	free(dbtable);
 }
 
