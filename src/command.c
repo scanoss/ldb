@@ -596,8 +596,9 @@ void ldb_command_bulk(char *command, commandtype type)
 		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
 		if (!ldb_file_exists(config_path))
 		{
-			fprintf(stderr,"Error, %s does not exist, you can create one or use the command \"%s\" in place\n", config_path, ldb_commands[BULK_INSERT]);
-			exit(EXIT_FAILURE);
+			fprintf(stderr,"Warning, %s does not exist, creating default\n", config_path);
+			if (!ldb_create_db_config_default(job.dbname))
+				ldb_error("Error creating ldb default config\n");
 		}
 	}
 

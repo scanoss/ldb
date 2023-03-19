@@ -196,7 +196,7 @@ typedef union import_params {
 	struct __attribute__((__packed__)) params
 	{
 		int delete_after_import;
-    	int has_secondary_key;
+    	int keys_number;
 		int overwrite;
 		int skip_sort;
 		int version_validation;
@@ -221,6 +221,7 @@ typedef struct ldb_importation_config_t
     char csv_path[LDB_MAX_PATH];
 	import_params_t opt;
 } ldb_importation_config_t;
+
 
 bool ldb_importation_config_parse(ldb_importation_config_t * conf, char * line);
 
@@ -330,4 +331,5 @@ void ldb_join_snippets(char * table, char *source, char *destination, bool skip_
 bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete);
 bool ldb_create_dir(char *path);
 bool ldb_import(ldb_importation_config_t * config);
+bool ldb_create_db_config_default(char * dbname);
 //normalized_license *load_licenses();

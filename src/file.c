@@ -36,9 +36,15 @@
  */
 void ldb_prepare_dir(char *path)
 {
-	if (ldb_dir_exists (path)) return;
-	if (mkdir (path, 0755)) 
-		ldb_error ("E050 Cannot create root LDB directory");
+	if (ldb_dir_exists (path)) 
+		return;
+		
+	if (mkdir (path, 0755))
+	{
+		char error[1024];
+		sprintf(error, "E050 Cannot create directory %s\n", path);
+		ldb_error (error);
+	}
 }
 
 /**

@@ -66,7 +66,7 @@ bool csv_sort(ldb_importation_config_t * config)
 	sprintf(command, "sort -T %s -u -o %s %s", config->tmp_path, config->csv_path, config->csv_path);
 	
 	if (config->opt.params.verbose)
-		fprintf(stderr, "Sorting... (%s)\n",command);
+		fprintf(stderr, "Sorting...\n");
 	
 	FILE *p = popen(command, "r");
 	if (p)
@@ -489,7 +489,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	ssize_t lineln;
 
 	/* A CSV line should contain at least an MD5, a comma separator per field and a LF */
-	int min_line_size = 2 * MD5_LEN + expected_fields + 1;
+	int min_line_size = 2 * MD5_LEN + expected_fields;
 
 	/* Node size is a 16-bit int */
 	int node_limit = 65536;
@@ -523,7 +523,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (!ldb_database_exists(job->dbname))
 		ldb_create_database(job->dbname);
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.has_secondary_key);
+		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
 
 	/* Create table structure for bulk import (32-bit key) */
 	char db_table[LDB_MAX_NAME];
@@ -639,7 +639,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		if (data || (oss_bulk.sec_key && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.has_secondary_key))
+			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number))
 			{
 				if (job->opt.params.verbose)
 					fprintf(stderr, "failed to parse key: %s\n", line);
@@ -803,35 +803,6 @@ void wipe_table(ldb_importation_config_t *config)
 	}
 }
 
-/**
- * @brief Import a single file
- *
- * @param job pointer to minr job
- * @param filename file name string
- * @param tablename table name sting
- * @param nfields number of fields
- */
-// void single_file_import(ldb_importation_config_t * import, char *filename, char *tablename, int nfields)
-// {
-	
-// 	/* Wipe existing data if overwrite is requested */
-// 	wipe_table(tablename, job);
-
-// 	printf("Importing %s\n", filename);
-
-// 	char path[2 * LDB_MAX_PATH] = "\0";
-// 	sprintf(path, "%s/%s", job->import_path, filename);
-// 	check_file_extension(path, job->bin_import);
-
-// 	if (is_file(path))
-// 	{
-// 		if (csv_sort(path, job->opt.params.skip_sort))
-// 		{
-// 			ldb_import_csv(job, path, tablename,false, nfields);
-// 		}
-// 	}
-// }
-
 static char * version_get_daily(char * json)
 {
 	if (!json)
@@ -980,7 +951,7 @@ bool version_import(ldb_importation_config_t *job)
 
 const char * config_parameters[] = {
 									"CSV_DEL",
-									"KEY2",
+									"KEYS",
 									"OVERWRITE",
 									"SKIP_SORT",
 									"VALIDATE_VERSION",
@@ -996,6 +967,20 @@ const char * config_parameters[] = {
 									};
 
 #define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
+#define LDB_IMPORTATION_CONFIG_DEFAULT {.delete_after_import = 0,\
+										.keys_number = 1,\
+										.overwrite = 0,\
+										.skip_sort = 0,\
+										.version_validation = 0,\
+										.verbose = 0,\
+										.is_mz_table = 0,\
+										.binary_mode = 0,\
+										.is_wfp_table = 0,\
+										.csv_fields = 0,\
+										.skip_fields_check = 1,\
+										.collate = 0,\
+										.collate_max_rec = 1024}
+
 bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line)
 {
 //first normalize the line
@@ -1003,6 +988,8 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 	char no_spaces[LDB_MAX_COMMAND_SIZE];
 	char * line_c = line;
 	int i = 0;
+	import_params_t opt_default = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	config->opt.params = opt_default.params;
 	do
 	{
 		//skip spaces
@@ -1045,6 +1032,39 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
 	}
 	return true;
+}
+
+bool ldb_create_db_config_default(char * dbname)
+{
+	char config[] = "GLOBAL: (COLLATE_MAX_RECORD=2048, TMP_PATH=/home/scanoss)\n"
+					"file: (KEYS=2, FIELDS=3)\n"
+					"url: (FIELDS=8)\n"
+					"purl: (SKIP_FIELDS_CHECK=1)\n"
+					"license: (FIELDS=3)\n"
+					"dependency: (FIELDS=5)\n"
+					"copyright: (FIELDS=3)\n"
+					"vulnerability: (FIELDS=10)\n"
+					"quality: (FIELDS=3)\n"
+					"cryptography: (FIELDS=3)\n"
+					"attribution: (FIELDS=2)\n"
+					"wfp: (WFP=1)\n"
+					"sources: (MZ=1)\n"
+					"notices: (MZ=1)\n"
+					"pivot: (KEY2=1, FIELDS=1, SKIP_FIELDS_CHECK=1)\n";
+	
+	char config_path[LDB_MAX_PATH] = "";
+	
+	ldb_prepare_dir(LDB_CFG_PATH);
+	
+	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, dbname);
+	FILE *cfg = fopen(config_path, "w+");
+	if (cfg)
+	{
+		fputs(config, cfg);
+		fclose(cfg);
+		return true;
+	}
+	return false;
 }
 
 static bool load_import_config(ldb_importation_config_t * config)
