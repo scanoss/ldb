@@ -98,6 +98,7 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	if (!cfg)
 	{
 		printf("Warning: cannot config file \"%s\" does not exist. Using table's default config\n", path);
+		fclose(cfg);
 		return tablecfg;
 	}
 
@@ -108,6 +109,7 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	if (result < 2)
 	{
 		printf("Warning: cannot read file %s\n, using default config\n", path);
+		fclose(cfg);
 		return tablecfg;
 	}
 
@@ -122,7 +124,7 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	}
 
 	tablecfg.sec_key = sec_key;
-
+	fclose(cfg);
 	return tablecfg;
 }
 

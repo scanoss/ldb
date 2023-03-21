@@ -20,6 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ldb.h"
+#include <sys/file.h> 
+
 /**
   * @file sector.c
   * @date 12 Jul 2020
@@ -47,9 +49,39 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 	/* Open data sector */
 	FILE *out = fopen(sector_path, mode);
-	if (!out) fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));
+	
+	if (!out) 
+		fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));
+	
+	int lock_result = flock(fileno(out),LOCK_EX);
+	
+	if (lock_result < 0)
+	{
+		fprintf(stderr, "Cannot lock LDB file %s: %s\n", sector_path, strerror(errno));
+		fclose(out);
+		out = NULL;
+	}
+
 	free(sector_path);
 	return out;
+}
+
+bool ldb_close(FILE * sector)
+{
+	int lock_result = flock(fileno(sector),LOCK_UN);
+	if (lock_result < 0)
+	{
+		fprintf(stderr, "Failed to relese lock LDB file %s\n", strerror(errno));
+		return false;
+	}
+	
+	if (fclose(sector) != 0)
+	{
+		printf("error closing sector\n");
+		return false;
+	}
+
+	return true;
 }
 
 /**

@@ -27,6 +27,7 @@
  */
 #include <stdio.h>
 #include <sys/time.h>
+ #include <sys/file.h> 
 #include <libgen.h>
 #include <dirent.h>
 #include <string.h>
@@ -58,7 +59,7 @@ double progress_timer = 0;
  */
 bool csv_sort(ldb_importation_config_t * config)
 {
-	if (!ldb_file_size(config->csv_path) || config->opt.params.skip_sort)
+	if (config->opt.params.skip_sort || !ldb_file_size(config->csv_path)  )
 		return false;
 
 	/* Assemble command */
@@ -323,7 +324,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	if (record_ln)
 		ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
 	if (out)
-		fclose(out);
+		ldb_close(out);
 
 	fclose(in);
 	if (config->opt.params.delete_after_import)
@@ -542,7 +543,6 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_bulk.db,oss_bulk.table);
 	ldb_lock(lock_file);
-
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		
@@ -668,7 +668,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				if (*itemid != *item_lastid)
 				{
 					if (item_sector)
-						fclose(item_sector);
+						ldb_close(item_sector);
 					item_sector = ldb_open(oss_bulk, itemid, "r+");
 				}
 				
@@ -741,11 +741,12 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	}
 	
 	if (item_sector)
-		fclose(item_sector);
+		ldb_close(item_sector);
 
 	printf("%u records imported, %u skipped\n", imported, skipped);
 
-	fclose(fp);
+	if (fclose(fp))
+		fprintf(stderr,"error closing %d\n", fileno(fp));
 	
 	if (job->opt.params.delete_after_import)
 		unlink(job->csv_path);
@@ -963,8 +964,8 @@ const char * config_parameters[] = {
 									"WFP",
 									"FIELDS",
 									"SKIP_FIELDS_CHECK",
+									"MAX_RECORD",
 									"COLLATE",
-									"COLLATE_MAX_RECORD",
 									"TMP_PATH",
 									};
 
@@ -1031,14 +1032,14 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 			} 
 		}
 
-		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
+	//	printf("%d - found %s = %d\n", i, config_parameters[i], val);
 	}
 	return true;
 }
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	char config[] = "GLOBAL: (COLLATE_MAX_RECORD=2048, TMP_PATH=/home/scanoss)\n"
+	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/home/scanoss)\n"
 					"file: (KEYS=2, FIELDS=3)\n"
 					"url: (FIELDS=8)\n"
 					"purl: (SKIP_FIELDS_CHECK=1, , OVERWRITE=1)\n"
@@ -1073,6 +1074,7 @@ static bool load_import_config(ldb_importation_config_t * config)
 {
 	char config_path[LDB_MAX_PATH] = "";
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
+	bool result = false;
 	if (ldb_file_exists(config_path))
 	{
 		FILE *cfg = fopen(config_path, "r");
@@ -1090,8 +1092,8 @@ static bool load_import_config(ldb_importation_config_t * config)
 				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
 					
 					ldb_importation_config_parse(config, table_cfg + strlen(config->table));
-					fclose(cfg);
-					return true;
+					result = true;
+					break;
 				}
 
 				const char global_def[]= "GLOBAL:";
@@ -1105,10 +1107,11 @@ static bool load_import_config(ldb_importation_config_t * config)
 				}
 
     		}
-			fclose(cfg);
 		}
+		fclose(cfg);
+
 	}
-	return false;
+	return result;
 }
 
 bool import_collate_sector(ldb_importation_config_t * config)
@@ -1187,6 +1190,7 @@ bool ldb_import(ldb_importation_config_t * config)
 		result =  ldb_import_csv(config);
 	}
 	import_collate_sector(config);
+	
 	return result;
 }
 

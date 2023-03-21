@@ -255,6 +255,7 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 uint64_t ldb_node_read (uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size);
 char *ldb_sector_path (struct ldb_table table, uint8_t *key, char *mode, bool tmp);
 FILE *ldb_open (struct ldb_table table, uint8_t *key, char *mode);
+bool ldb_close(FILE * sector);
 void ldb_node_unlink (struct ldb_table table, uint8_t *key);
 void ldb_hexprint(uint8_t *data, uint32_t len, uint8_t width);
 void ldb_hex_to_bin(char *hex, int hex_ln, uint8_t *out);
