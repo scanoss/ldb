@@ -632,6 +632,15 @@ void ldb_command_create_database(char *command)
 	free(database);
 }
 
+void ldb_command_create_config(char *command)
+{
+	/* Extract 3th values from command, which is the db name*/
+	char *database = ldb_extract_word(3, command);
+	ldb_create_db_config_default(database);
+	free(database);
+}
+
+
 /**
  * @brief Execute the command LDB shows databases: list the availables databases en the default path
  * 

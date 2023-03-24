@@ -65,6 +65,7 @@ char *ldb_commands[] =
 	"help",
 	"create database {ascii}",
 	"create table {ascii} keylen {ascii} reclen {ascii} seckey {ascii}",
+	"create config {ascii}",
 	"show databases",
 	"show tables from {ascii}",
 	"insert into {ascii} key {hex} ascii {ascii}",

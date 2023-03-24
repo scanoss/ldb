@@ -70,6 +70,7 @@ typedef enum {
 HELP, 
 CREATE_DATABASE, 
 CREATE_TABLE,
+CREATE_CONFIG,
 SHOW_DATABASES,
 SHOW_TABLES,
 INSERT_ASCII, 
@@ -274,6 +275,7 @@ bool ldb_valid_table(char *table);
 int ldb_word_len(char *text);
 bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_command_create_database(char *command);
+void ldb_command_create_config(char * command);
 char *ldb_command_normalize(char *text);
 void ldb_command_show_tables(char *command);
 void ldb_command_show_databases();

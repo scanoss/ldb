@@ -31,6 +31,7 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <string.h>
+#include <dlfcn.h>
 
 #include "import.h"
 #include "ldb.h"
@@ -45,9 +46,32 @@
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 
 int (*decode) (int op, unsigned char *key, unsigned char *nonce,
-		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out);
+		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out) = NULL;
 
 double progress_timer = 0;
+
+void * lib_handle = NULL;
+bool ldb_import_decoder_lib_load(void)
+{
+	/*set decode funtion pointer to NULL*/
+	decode = NULL;
+	lib_handle = dlopen("libscanoss_encoder.so", RTLD_NOW);
+	char * err;
+    if (lib_handle) 
+	{
+		fprintf(stderr, "Lib scanoss-enocder present\n");
+		decode = dlsym(lib_handle, "scanoss_decode");
+		if ((err = dlerror())) 
+		{
+			fprintf(stderr,"%s\n", err);
+			return false;
+		}
+		return true;
+     }
+	 
+	 return false;
+}
+
 
 
 /**
@@ -610,7 +634,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		{
 			if (bin_mode)
 			{	
-				r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
+				if (decode)
+					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
+				else
+					ldb_error("libscanoss_encoder.so it is not available, \".enc\" files cannot be processed\n");
 			}
 			else
 			{
@@ -964,8 +991,8 @@ const char * config_parameters[] = {
 									"WFP",
 									"FIELDS",
 									"SKIP_FIELDS_CHECK",
-									"MAX_RECORD",
 									"COLLATE",
+									"MAX_RECORD",
 									"TMP_PATH",
 									};
 
@@ -991,8 +1018,7 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 	char no_spaces[LDB_MAX_COMMAND_SIZE];
 	char * line_c = line;
 	int i = 0;
-	import_params_t opt_default = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
-	config->opt.params = opt_default.params;
+
 	do
 	{
 		//skip spaces
@@ -1032,19 +1058,19 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 			} 
 		}
 
-	//	printf("%d - found %s = %d\n", i, config_parameters[i], val);
+		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
 	}
 	return true;
 }
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/home/scanoss)\n"
+	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/tmp)\n"
 					"file: (KEYS=2, FIELDS=3)\n"
 					"url: (FIELDS=8)\n"
-					"purl: (SKIP_FIELDS_CHECK=1, , OVERWRITE=1)\n"
+					"purl: (SKIP_FIELDS_CHECK=1, OVERWRITE=1)\n"
 					"license: (FIELDS=3)\n"
-					"dependency: (FIELDS=5, , OVERWRITE=1)\n"
+					"dependency: (FIELDS=5, OVERWRITE=1)\n"
 					"copyright: (FIELDS=3)\n"
 					"vulnerability: (FIELDS=10, OVERWRITE=1)\n"
 					"quality: (FIELDS=3)\n"
@@ -1053,7 +1079,7 @@ bool ldb_create_db_config_default(char * dbname)
 					"wfp: (WFP=1)\n"
 					"sources: (MZ=1)\n"
 					"notices: (MZ=1)\n"
-					"pivot: (KEY2=1, FIELDS=1, SKIP_FIELDS_CHECK=1)\n";
+					"pivot: (KEYS=2, FIELDS=1, SKIP_FIELDS_CHECK=1)\n";
 	
 	char config_path[LDB_MAX_PATH] = "";
 	
@@ -1167,7 +1193,26 @@ bool ldb_import(ldb_importation_config_t * config)
 		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config->path);
 		exit(EXIT_FAILURE);
 	}
+	
+	if (strstr(config->csv_path, ".mz"))
+		config->opt.params.is_mz_table = true;
+	else
+		config->opt.params.is_mz_table = false;
+	
+	if (strstr(config->csv_path, ".enc"))
+		config->opt.params.binary_mode = true;
+	else
+		config->opt.params.binary_mode = false;
+
+	if (strstr(config->csv_path, ".bin"))
+		config->opt.params.is_wfp_table = true;
+	else
+		config->opt.params.is_wfp_table = false;
+
 	load_import_config(config);
+
+	if (config->opt.params.binary_mode && !decode)
+		ldb_import_decoder_lib_load();
 
 	if (!config->tmp_path)
 	{
@@ -1251,21 +1296,6 @@ static void recurse_directory(ldb_importation_config_t * job, char *name, char *
 				free(table_name);
 			}
 			
-			if (strstr(path, ".mz"))
-				job->opt.params.is_mz_table = true;
-			else
-				job->opt.params.is_mz_table = false;
-
-			if (strstr(path, ".enc"))
-				job->opt.params.binary_mode = true;
-			else
-				job->opt.params.binary_mode = false;
-
-			if (strstr(path, ".bin"))
-				job->opt.params.is_wfp_table = true;
-			else
-				job->opt.params.is_wfp_table = false;
-			
 			if (strstr(path, ".json"))
 				continue;
  
@@ -1284,7 +1314,7 @@ static void recurse_directory(ldb_importation_config_t * job, char *name, char *
 
 bool ldb_import_command(char * dbtable, char * path, char * config)
 {
-	ldb_importation_config_t job = {0};
+	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT};
 	
 	char *table = strchr(dbtable, '/');
 

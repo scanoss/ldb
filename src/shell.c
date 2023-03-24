@@ -207,6 +207,9 @@ bool execute(char *raw_command)
 		case CREATE_TABLE:
 			ldb_command_create_table(command);
 			break;
+		case CREATE_CONFIG:
+			ldb_command_create_config(command);
+			break;
 
 		case UNLINK_LIST:
 			ldb_command_unlink_list(command);
@@ -343,7 +346,7 @@ int main(int argc, char **argv)
 			if (path)
 			{
 				if (!dbname)
-					ldb_import_command("test", path, "(VALIDATE_VERSION=1)");
+					ldb_import_command("oss", path, "(VALIDATE_VERSION=1)");
 				else
 					ldb_import_command(dbname, path, "(VALIDATE_VERSION=1)");
 				

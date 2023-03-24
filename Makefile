@@ -2,8 +2,8 @@ ifeq ($(origin CC),default)
 CC=gcc
 endif
 CCFLAGS?=-O -g -Wall -std=gnu99 -D_GNU_SOURCE -Wno-format-truncation
-LIBFLAGS=$(CCFLAGS) -fPIC -c
-LIBS=-lm -lpthread -lz 
+LIBFLAGS=$(CCFLAGS) -fPIC -c -ldl
+LIBS=-lm -lpthread -lz -ldl
 LDB_CONF_PATH=/usr/local/etc/scanoss/ldb/
 
 all: clean lib shell
