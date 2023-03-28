@@ -331,7 +331,7 @@ void calc_md5(char *data, int size, uint8_t *out);
 char * ldb_file_extension(char * path);
 void ldb_join_mz(char * table, char *source, char *destination, bool skip_delete, bool encrypted);
 void ldb_join_snippets(char * table, char *source, char *destination, bool skip_delete);
-bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete);
+bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets, bool delete);
 bool ldb_create_dir(char *path);
 bool ldb_import(ldb_importation_config_t * config);
 bool ldb_create_db_config_default(char * dbname);

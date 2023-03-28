@@ -1263,7 +1263,7 @@ bool ldb_import(ldb_importation_config_t * config)
 	{
 		char dest_path[LDB_MAX_PATH];
 		sprintf(dest_path, "%s/%s/%s/%s", ldb_root, config->dbname, config->table, basename(config->csv_path));
-		result = ldb_bin_join(config->csv_path, dest_path, false, config->opt.params.delete_after_import);
+		result = ldb_bin_join(config->csv_path, dest_path, config->opt.params.overwrite, false, config->opt.params.delete_after_import);
 	}
 	else if (config->opt.params.is_wfp_table)
 	{

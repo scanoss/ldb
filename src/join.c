@@ -97,9 +97,9 @@ bool move_file(char *src, char *dst, bool delete)
  * @param destination path to out file
  */
 
-bool file_append(char *file, char *destination)
+bool file_append(char *file, char *destination, bool delete)
 {
-	return write_file(file,destination, "ab", false, true);
+	return write_file(file,destination, "ab", false, delete);
 }
 
 
@@ -112,7 +112,7 @@ bool file_append(char *file, char *destination)
  * @param snippets true if it is a snippet file
  * @param skip_delete true to avoid deletion
  */
-bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete)
+bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets, bool delete)
 {
 	/* If source does not exist, no need to join */
 	if (!ldb_file_exists(source)) 
@@ -121,7 +121,7 @@ bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete)
 		return false;
 	}
 
-	if (ldb_file_exists(destination))
+	if (ldb_file_exists(destination) && !overwrite)
 	{
 		/* Snippet records should divide by 21 */
 		if (snippets) if (ldb_file_size(destination) % 21)
@@ -144,57 +144,10 @@ bool ldb_bin_join(char *source, char *destination, bool snippets, bool delete)
 	}
 
 	printf("Joining into %s\n", destination);
-	file_append(source, destination);
+	file_append(source, destination, delete);
 	if (delete) unlink(source);
 
 	return true;
 }
 
-/**
- * @brief Join two mz sources
- * 
- * @param source paht to source
- * @param destination  path to destination
- * @param skip_delete true to skip deletion
- */
-/*void ldb_join_mz(char * table, char *source, char *destination, bool skip_delete, bool encrypted)
-{
-	char src_path[LDB_MAX_PATH] = "\0";
-	char dst_path[LDB_MAX_PATH] = "\0";
-
-	for (int i = 0; i < 65536; i++)
-	{
-		sprintf(src_path, "%s/%s/%04x.mz", source, table, i);
-		sprintf(dst_path, "%s/%s/%04x.mz", destination, table, i);
-
-		check_file_extension(src_path, encrypted);
-		check_file_extension(dst_path, encrypted);
-
-		ldb_bin_join(src_path, dst_path, false, skip_delete);
-	}
-	sprintf(src_path, "%s/%s", table, source);
-	if (!skip_delete) rmdir(src_path);
-}*/
-
-/**
- * @brief  Join two snippets file
- * 
- * @param source path to source
- * @param destination path to destination
- * @param skip_delete true to skip deletion
- */
-void ldb_join_snippets(char * table, char *source, char *destination, bool skip_delete)
-{
-	char src_path[LDB_MAX_PATH] = "\0";
-	char dst_path[LDB_MAX_PATH] = "\0";
-
-	for (int i = 0; i < 256; i++)
-	{
-		sprintf(src_path, "%s/%s/%02x.bin", source, table, i);
-		sprintf(dst_path, "%s/%s/%02x.bin", destination, table, i);
-		ldb_bin_join(src_path, dst_path, true, skip_delete);
-	}
-	sprintf(src_path, "%s/%s", source, table);
-	if (!skip_delete) rmdir(src_path);
-}
 
