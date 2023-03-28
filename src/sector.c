@@ -44,7 +44,7 @@
 FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 	/* Create sector (file) if it doesn't already exist */
-	char *sector_path = ldb_sector_path(table, key, mode, table.tmp);
+	char *sector_path = ldb_sector_path(table, key, mode);
 	if (!sector_path) return NULL;
 
 	/* Open data sector */
@@ -242,12 +242,16 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 	sprintf(sector_ldb, "%s/%s/%s/%02x.ldb", ldb_root, table.db, table.table, key[0]);
 	sprintf(sector_tmp, "%s/%s/%s/%02x.tmp", ldb_root, table.db, table.table, key[0]);
 
-	if (!ldb_file_exists(sector_ldb) || !ldb_file_exists(sector_tmp))
+	if (!ldb_file_exists(sector_tmp))
 	{
 		ldb_error("E074 Cannot update sector with .tmp");
 	}
 
-	if (!unlink(sector_ldb)) if (!rename(sector_tmp, sector_ldb)) return;
+	if (ldb_file_exists(sector_ldb) && unlink(sector_ldb))
+		ldb_error("E074 Cannot update sector with .tmp, cannot remove old .ldb file.");
+	
+	if (!rename(sector_tmp, sector_ldb)) 
+		return;
 
 	ldb_error("E074 Error replacing sector with .tmp");
 }
@@ -289,7 +293,7 @@ void ldb_sector_erase(struct ldb_table table, uint8_t *key)
  * @param tmp Boolean to indicate if the sector is temporary or not. (Will return the path with extention .tmp or .ldb)
  * @return char* Sector path according to the table and key provided.
  */
-char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp)
+char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode)
 {
 	/* Create table (directory) if it doesn't already exist */
 	char table_path[LDB_MAX_PATH] = "\0";
@@ -308,7 +312,7 @@ char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp
 		sprintf(sector_path, "%s/%02x.ldb", table_path, key[0]);
 
 	/* If opening a tmp table, we remove the file if it exists */
-	if (ldb_file_exists(sector_path) && tmp) remove(sector_path);
+	//if (ldb_file_exists(sector_path) && tmp) remove(sector_path);
 
 	if (!ldb_file_exists(sector_path))
 	{

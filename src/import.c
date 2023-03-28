@@ -215,7 +215,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	oss_wfp.key_ln = 4;
 	oss_wfp.rec_ln = 18;
 	oss_wfp.ts_ln = 2;
-	oss_wfp.tmp = false;
+	oss_wfp.tmp = config->opt.params.overwrite;
 
 	/* Progress counters */
 	uint64_t totalbytes = ldb_file_size(config->csv_path);
@@ -358,6 +358,10 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	free(buffer);
 	free(bl);
 
+	
+	ldb_sector_update(oss_wfp, last_wfp);
+
+
 	/* Lock DB */
 	ldb_unlock(lock_file);
 
@@ -491,6 +495,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
 	bool skip_csv_check = job->opt.params.skip_fields_check;
+	bool sectors_modified[256] = {false};
 
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
@@ -557,6 +562,9 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	struct ldb_table oss_bulk = ldb_read_cfg(db_table);
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
 	oss_bulk.key_ln = 4; 
+
+	if (job->opt.params.overwrite)
+		oss_bulk.tmp = true;
 
 	int field2_ln = oss_bulk.sec_key ? 16 : 0;
 	char last_url_id[MD5_LEN_HEX] = "\0";
@@ -687,7 +695,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				if (item_ptr)
 				{
 					if (!item_sector)
+					{
 						item_sector = ldb_open(oss_bulk, item_lastid, "r+");
+						sectors_modified[item_lastid[0]] = true;
+					}
 					else
 						ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 				}
@@ -697,6 +708,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 					if (item_sector)
 						ldb_close(item_sector);
 					item_sector = ldb_open(oss_bulk, itemid, "r+");
+					sectors_modified[itemid[0]] = true;
 				}
 				
 
@@ -762,7 +774,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (item_ptr)
 	{
 		if (!item_sector)
+		{
 			item_sector = ldb_open(oss_bulk, itemid, "r+");
+			sectors_modified[itemid[0]] = true;
+		}
 		
 		ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 	}
@@ -786,8 +801,35 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	free(item_lastid);
 	free(field2);
 
-	/* Lock DB */
+	
+	if (job->opt.params.overwrite)
+	{
+		for (int i=0; i < 256; i++)
+		{
+//			printf("<sector %d: %d>\n", i,sectors_modified[i]);
+			if (sectors_modified[i])
+			{
+				if (job->opt.params.verbose)
+					fprintf(stderr, "Overwriting sector %02x of %s\n", i, job->table);
+				uint8_t k = i;
+//				if (job->opt.params.overwrite)
+					ldb_sector_update(oss_bulk, &k);
+				// else
+				// {
+				// 	char * source = ldb_sector_path(oss_bulk, &k,"r");
+				// 	oss_bulk.tmp = false;
+				// 	char * dest = ldb_sector_path(oss_bulk, &k,"r");
+				// 	ldb_bin_join(source, dest, false, true);
+				// 	free(source);
+				// 	free(dest);
+				// }
+
+			}
+		}
+
+		/* Lock DB */
 	ldb_unlock(lock_file);
+	}
 
 	return true;
 }
@@ -803,9 +845,7 @@ void wipe_table(ldb_importation_config_t *config)
 	if (!config->opt.params.overwrite)
 		return;
 
-	bool is_mz = false;
-	if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices") || config->opt.params.is_mz_table)
-		is_mz = true;
+	bool is_mz = config->opt.params.is_mz_table;
 
 	char path[2 * LDB_MAX_PATH] = "\0";
 	sprintf(path, "%s/%s/%s", ldb_root, config->dbname, config->table);
@@ -1047,7 +1087,7 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 		{
 			strncpy(config->tmp_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
 			//remove spurius ")" or "," from path TODO: improve
-			char * c = strrchr(config->tmp_path,',');
+			char * c = strchr(config->tmp_path,',');
 			if (c)
 				*c = 0;
 			else
@@ -1058,7 +1098,7 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 			} 
 		}
 
-		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
+		printf("%d - found %s = %d\n", i, config_parameters[i], val);
 	}
 	return true;
 }
@@ -1232,7 +1272,7 @@ bool ldb_import(ldb_importation_config_t * config)
 	}
 	else
 	{
-		result =  ldb_import_csv(config);
+		result = ldb_import_csv(config);
 	}
 	import_collate_sector(config);
 	
@@ -1285,17 +1325,19 @@ static void recurse_directory(ldb_importation_config_t * job, char *name, char *
 		}
 		else if (ldb_file_exists(path))
 		{
-			if (father && *father && child)
+			if (!*job->table)
 			{
-				strcpy(job->table,father);
+				if (father && *father && child)
+				{
+					strcpy(job->table,father);
+				}
+				else
+				{
+					char * table_name = table_name_from_path(path);
+					strcpy(job->table,table_name);
+					free(table_name);
+				}
 			}
-			else
-			{
-				char * table_name = table_name_from_path(path);
-				strcpy(job->table,table_name);
-				free(table_name);
-			}
-			
 			if (strstr(path, ".json"))
 				continue;
  
