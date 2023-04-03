@@ -244,7 +244,8 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 
 	if (!ldb_file_exists(sector_tmp))
 	{
-		ldb_error("E074 Cannot update sector with .tmp");
+		printf("%s\n", sector_tmp);
+		ldb_error("E074 Cannot update sector with .tmp ");
 	}
 
 	if (ldb_file_exists(sector_ldb) && unlink(sector_ldb))

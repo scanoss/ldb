@@ -135,7 +135,7 @@ struct ldb_collate_data
 	int table_key_ln;
 	int table_rec_ln;
 	int max_rec_ln;
-	int  rec_width;
+	long  rec_width;
 	long rec_count;
 	FILE *out_sector;
 	struct ldb_table out_table;
@@ -146,6 +146,7 @@ struct ldb_collate_data
 	long del_ln;
 	long del_count;
 	long *del_map;
+	long key_rec_count;
 };
 
 /* MZ  */

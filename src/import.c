@@ -358,8 +358,8 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	free(buffer);
 	free(bl);
 
-	
-	ldb_sector_update(oss_wfp, last_wfp);
+	if (config->opt.params.overwrite)
+		ldb_sector_update(oss_wfp, last_wfp);
 
 
 	/* Lock DB */
@@ -510,8 +510,6 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		return false;
 	}
 
-	csv_sort(job);
-
 	int expected_fields = (skip_csv_check ? 0 : job->opt.params.csv_fields);
 
 	char *line = NULL;
@@ -575,6 +573,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_bulk.db,oss_bulk.table);
 	ldb_lock(lock_file);
+	
+	/*sort the csv*/
+	csv_sort(job);
+
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		
@@ -806,30 +808,19 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	{
 		for (int i=0; i < 256; i++)
 		{
-//			printf("<sector %d: %d>\n", i,sectors_modified[i]);
+			printf("<sector %d: %d>\n", i,sectors_modified[i]);
 			if (sectors_modified[i])
 			{
 				if (job->opt.params.verbose)
 					fprintf(stderr, "Overwriting sector %02x of %s\n", i, job->table);
 				uint8_t k = i;
-//				if (job->opt.params.overwrite)
-					ldb_sector_update(oss_bulk, &k);
-				// else
-				// {
-				// 	char * source = ldb_sector_path(oss_bulk, &k,"r");
-				// 	oss_bulk.tmp = false;
-				// 	char * dest = ldb_sector_path(oss_bulk, &k,"r");
-				// 	ldb_bin_join(source, dest, false, true);
-				// 	free(source);
-				// 	free(dest);
-				// }
-
+				ldb_sector_update(oss_bulk, &k);
 			}
 		}
 
-		/* Lock DB */
-	ldb_unlock(lock_file);
 	}
+			/* Lock DB */
+	ldb_unlock(lock_file);
 
 	return true;
 }
@@ -926,7 +917,7 @@ static char * version_get_monthly(char * json)
 
 static char * version_file_open(char * path)
 {
-	FILE *f = fopen(path, "rb");
+	FILE *f = fopen(path, "r");
 	if (!f)
 		return NULL;
 
@@ -934,7 +925,7 @@ static char * version_file_open(char * path)
 	long len = ftell(f);
 	fseek(f, 0, SEEK_SET);
 
-	char * file_content = malloc(len + 1);
+	char * file_content = calloc(len + 1, 1);
 	fread(file_content, len, 1, f);
 	fclose(f);
 
@@ -950,16 +941,20 @@ static char * version_file_open(char * path)
 bool version_import(ldb_importation_config_t *job)
 {
 	#define JSON_CONTENT  "{\"monthly\":\"%s\", \"daily\":\"%s\"}"
-	char *path = NULL;
-	asprintf(&path, "%s/version.json",  job->path);
+	char path[LDB_MAX_PATH] = "\0";
+	snprintf(path, LDB_MAX_PATH, "%s/version.json",  job->path);
 
 	if (!ldb_file_exists(path))
 	{
-		fprintf(stderr, "Cannot find version file in path %s\n",job->path);
-		return false;
+		snprintf(path, LDB_MAX_PATH, "%s/version.json", dirname(job->path));
+		if(!ldb_file_exists(path))
+		{
+			fprintf(stderr, "Cannot find version file in path %s\n",job->path);
+			return false;
+		}
 	}
+
 	char * vf_import = version_file_open(path);
-	free(path);
 
 	char * daily_date_i = version_get_daily(vf_import);
 	char * monthly_date_i = version_get_monthly(vf_import);
@@ -979,7 +974,7 @@ bool version_import(ldb_importation_config_t *job)
 		free(monthly_date_i);
 		return false;
 	}
-	asprintf(&path, "%s/%s/version.json", ldb_root, job->dbname);
+	sprintf(path, "%s/%s/version.json", ldb_root, job->dbname);
 	char * vf_actual = version_file_open(path);		
 	char * daily_date_o = version_get_daily(vf_actual);
 	char * monthly_date_o = version_get_monthly(vf_actual);
@@ -1008,7 +1003,6 @@ bool version_import(ldb_importation_config_t *job)
 
 	fprintf(f, JSON_CONTENT, monthly_date_i == NULL ? "N/A" : monthly_date_i ,daily_date_i == NULL ? "N/A" :  daily_date_i);
 	fclose(f);
-	free(path);
 	free(daily_date_i);
 	free(daily_date_o);
 	free(monthly_date_i);
@@ -1053,6 +1047,8 @@ const char * config_parameters[] = {
 
 bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line)
 {
+	if (!config)
+		return false;
 //first normalize the line
 	char normalized[LDB_MAX_COMMAND_SIZE];
 	char no_spaces[LDB_MAX_COMMAND_SIZE];
@@ -1365,9 +1361,9 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	else
 		strcpy(job.dbname, dbtable);
 	
-	if (*config && table)
-		ldb_importation_config_parse(&job, config);
-	else 
+	ldb_importation_config_parse(&job, config);
+
+	if (!table || !*config) 
 	{
 		char config_path[LDB_MAX_PATH] = "";
 		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
@@ -1384,7 +1380,6 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 
 	if (!table && ldb_dir_exists(path))
 	{
-		strcpy(job.table, basename(path));
 		strcpy(job.path, path);
 		recurse_directory(&job, path, job.table, false);
 	}

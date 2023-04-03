@@ -117,29 +117,6 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
 }
 
 /**
- * @brief Converts a string of hex digits to binary.
- * Does the opposite of ldb_hexprint() and ldb_bin_to_hex();
- * 
- * Example: ldb_hex_to_bin("48656c6c6f20576f726c6421", 24, out);
- *          48656c6c6f20576f726c6421 -> Hello World!
- * 
- * @param hex String representing hex data
- * @param len Lenght of the string in bytes
- * @param out Buffer to write the binary
- */
-void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
-{
-	uint32_t ptr = 0;
-	char pair[] = "\0\0\0";
-	for (uint32_t i = 0; i < len; i += 2)
-	{
-		pair[0] = hex[i];
-		pair[1] = hex[i + 1];
-		out[ptr++] = strtol(pair, NULL, 16);
-	}
-}
-
-/**
  * @brief Converts binary to a string of hex digits
  * Does the opposite of ldb_hex_to_bin();
  * 
@@ -153,6 +130,27 @@ void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out)
 	for (uint32_t i = 0; i < len; i++)
 		sprintf(out + strlen(out), "%02x", bin[i]);
 }
+
+
+/**
+ * @brief Converts a string of hex digits to binary.
+ * Does the opposite of ldb_hexprint() and ldb_bin_to_hex();
+ * 
+ * Example: ldb_hex_to_bin("48656c6c6f20576f726c6421", 24, out);
+ *          48656c6c6f20576f726c6421 -> Hello World!
+ * 
+ * @param hex String representing hex data
+ * @param len Lenght of the string in bytes
+ * @param out Buffer to write the binary
+ */
+void ldb_hex_to_bin(char *hex, int len, uint8_t *out)
+{
+
+    for (int i = 0; i < len; i += 2) {
+        sscanf(&hex[i], "%2hhx", &out[i/2]);
+    }
+ }
+
 
 /**
  * @brief Verify if a string only contains hexadecimal characters

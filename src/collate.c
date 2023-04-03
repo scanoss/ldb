@@ -427,7 +427,7 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 		return true;
 	}
 	/* If main key has changed, collate and write list and reset data_ptr */
-	if (collate->data_ptr) if (memcmp(key, collate->last_key, LDB_KEY_LN))
+	if (collate->data_ptr && memcmp(key, collate->last_key, LDB_KEY_LN))
 	{
 		/* Sort records */
 		ldb_collate_sort(collate);
@@ -437,12 +437,23 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 
 		/* Reset data pointer */
 		collate->data_ptr = 0;
+		collate->key_rec_count = 0;
+	}
+	else
+	{
+		collate->key_rec_count++;
 	}
 
 	/* If we exceed LDB_MAX_RECORDS, skip it */
-	if ((collate->data_ptr + collate->rec_width) > (LDB_MAX_RECORDS * collate->rec_width))
+	if (collate->key_rec_count > LDB_MAX_RECORDS)
 	{
-		printf("%02x%02x%02x%02x: Max list size exceeded\n", key[0], key[1], key[2], key[3]);
+		if (collate->key_rec_count == LDB_MAX_RECORDS + 1)
+		{
+			for (int i = 0; i < LDB_KEY_LN; i++) fprintf(stderr, "%02x", key[i]);
+			for (int i = 0; i < subkey_ln; i++)  fprintf(stderr, "%02x", subkey[i]);
+			fprintf(stderr, ": Max list size exceeded\n");
+			collate->key_rec_count++;
+		}
 		return false;
 	}
 
@@ -547,6 +558,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			collate.table_rec_ln = table.rec_ln;
 			collate.max_rec_ln = max_rec_ln;
 			collate.rec_count = 0;
+			collate.key_rec_count = 0;
 			collate.del_count = 0;
 			collate.out_table = out_table;
 			memcpy(collate.last_key, "\0\0\0\0", 4);

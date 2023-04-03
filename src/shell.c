@@ -41,7 +41,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <openssl/md5.h>
-
+#include <popt.h>
 #include "ldb.h"
 #include "mz.c"
 #include "command.c"
@@ -308,16 +308,33 @@ typedef enum
 	LDB_UPDATE
 } ldb_mode_t;
 
+
+
 ldb_mode_t mode = LDB_CONSOLE;
 int main(int argc, char **argv)
 {
-	int option;
-	char * dbname = NULL;
+	int opt;
+	char * dbname = NULL;//[LDB_MAX_NAME] = "\0";
 	char * path = NULL;
-	while ((option = getopt(argc, argv, "n:u:vh")) != -1)
+	int collate = false;
+
+    struct poptOption options[] = {
+        {"version", 'v', POPT_ARG_NONE, 0, 'v', "Print ldb version", NULL}, 
+		{"help", 'h', POPT_ARG_NONE, 0, 'h', "Print ldb shell help", NULL},
+		{"collate", 'c', POPT_ARG_NONE, &collate, 0, "Collate after update", NULL},
+        {"update", 'u', POPT_ARG_STRING, &path, 'u', "Update kb from [path]", NULL},
+        {"dbname", 'n', POPT_ARG_STRING, &dbname, 0, "set database name, \"oss\" by default", NULL},
+        POPT_AUTOHELP
+        {NULL, 0, 0, NULL, 0, NULL, NULL}
+    };
+	
+	poptContext optCon = poptGetContext(NULL, argc, (const char **)argv, options, 0);
+    poptSetOtherOptionHelp(optCon, "[OPTIONS]");
+
+    while ((opt = poptGetNextOpt(optCon)) >= 0) 
 	{
 		/* Check valid alpha is entered */
-		switch (option)
+		switch (opt)
 		{
 			case 'v':
 				ldb_version();
@@ -325,34 +342,47 @@ int main(int argc, char **argv)
 			case 'h':
 				help();
 				return EXIT_SUCCESS;
-			case 'n':
-				dbname = strdup(optarg);
-				break;
 			case 'u':
 			{
 				mode = LDB_UPDATE;
-				path = strdup(optarg);
 				break;
 			}
 			default:
-				break;
+				poptPrintUsage(optCon, stderr, 0);
+            	exit(1);
+			break;
 		}
 	}
+
+	if (opt < -1)
+	{
+		poptPrintUsage(optCon, stderr, 0);
+		 fprintf(stderr, "%s: %s\n",
+              poptBadOption(optCon, POPT_BADOPTION_NOALIAS),
+              poptStrerror(opt));
+			              	exit(1);
+	}
+
+	poptFreeContext(optCon);
 
 	switch (mode)
 	{
 		case LDB_UPDATE:
 		{
-			if (path)
+			char cmd [LDB_MAX_PATH] = "(VALIDATE_VERSION=1";
+			if (*path)
 			{
-				if (!dbname)
-					ldb_import_command("oss", path, "(VALIDATE_VERSION=1)");
+				if (collate)
+				{
+					strcat(cmd, ",COLLATE=1)");
+				}
 				else
-					ldb_import_command(dbname, path, "(VALIDATE_VERSION=1)");
+					strcat(cmd, ")");
+				if (!*dbname)
+					ldb_import_command("oss", path, cmd);
+				else
+					ldb_import_command(dbname, path, cmd);
 				
-				free(dbname);
-				free(path);
-
 				return EXIT_SUCCESS;
 			}
 			break;
@@ -360,6 +390,9 @@ int main(int argc, char **argv)
 		default:
 			break;
 	}
+
+	free(dbname);
+
 	bool stdin_off = is_stdin_off();
 
 	if (!ldb_check_root()) return EXIT_FAILURE;
