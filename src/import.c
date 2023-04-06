@@ -285,6 +285,8 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	bool first_read = true;
 	uint32_t bytes_read = 0;
 
+	fprintf(stderr, "Importing %s to %s/%s\n", config->csv_path, config->dbname, config->table);
+
 	while ((bytes_read = fread(buffer, 1, buffer_ln, in)) > 0)
 	{
 		for (int i = 0; (i + raw_ln) <= bytes_read; i += raw_ln)
@@ -1102,20 +1104,20 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 bool ldb_create_db_config_default(char * dbname)
 {
 	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/tmp)\n"
-					"file: (KEYS=2, FIELDS=3)\n"
-					"url: (FIELDS=8)\n"
+					"sources: (MZ=1)\n"
+					"notices: (MZ=1)\n"
+					"attribution: (FIELDS=2)\n"
 					"purl: (SKIP_FIELDS_CHECK=1, OVERWRITE=1)\n"
-					"license: (FIELDS=3)\n"
 					"dependency: (FIELDS=5, OVERWRITE=1)\n"
+					"license: (FIELDS=3)\n"
 					"copyright: (FIELDS=3)\n"
 					"vulnerability: (FIELDS=10, OVERWRITE=1)\n"
 					"quality: (FIELDS=3)\n"
 					"cryptography: (FIELDS=3)\n"
-					"attribution: (FIELDS=2)\n"
-					"wfp: (WFP=1)\n"
-					"sources: (MZ=1)\n"
-					"notices: (MZ=1)\n"
-					"pivot: (KEYS=2, FIELDS=1, SKIP_FIELDS_CHECK=1)\n";
+					"url: (FIELDS=8)\n"
+					"file: (KEYS=2, FIELDS=3)\n"
+					"pivot: (KEYS=2, FIELDS=1, SKIP_FIELDS_CHECK=1)\n"
+					"wfp: (WFP=1)\n";
 	
 	char config_path[LDB_MAX_PATH] = "";
 	
@@ -1132,11 +1134,12 @@ bool ldb_create_db_config_default(char * dbname)
 	return false;
 }
 
-static bool load_import_config(ldb_importation_config_t * config)
+static int load_import_config(ldb_importation_config_t * config)
 {
 	char config_path[LDB_MAX_PATH] = "";
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
-	bool result = false;
+	int result = -1;
+	bool found = false;
 	if (ldb_file_exists(config_path))
 	{
 		FILE *cfg = fopen(config_path, "r");
@@ -1147,17 +1150,6 @@ static bool load_import_config(ldb_importation_config_t * config)
     		ssize_t read;
 			while ((read = getline(&line, &len, cfg)) != -1) 
 			{
-				char * table_cfg = strstr(line, config->table);
-				if (table_cfg)
-				{
-				//	if (config->opt.params.verbose)
-				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
-					
-					ldb_importation_config_parse(config, table_cfg + strlen(config->table));
-					result = true;
-					break;
-				}
-
 				const char global_def[]= "GLOBAL:";
 				char * global_cfg = strstr(line, global_def);
 				if (global_cfg)
@@ -1167,13 +1159,32 @@ static bool load_import_config(ldb_importation_config_t * config)
 					
 					ldb_importation_config_parse(config, global_cfg + strlen(global_def));
 				}
+				else
+				{
+					result++;
+				}
+
+				char * table_cfg = strstr(line, config->table);
+				if (table_cfg)
+				{
+				//	if (config->opt.params.verbose)
+				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
+					
+					ldb_importation_config_parse(config, table_cfg + strlen(config->table));
+					found = true;
+					free(line);
+					break;
+				}
 
     		}
 		}
 		fclose(cfg);
 
 	}
-	return result;
+	if (found)
+		return result;
+	else
+		return -1;
 }
 
 bool import_collate_sector(ldb_importation_config_t * config)
@@ -1245,7 +1256,7 @@ bool ldb_import(ldb_importation_config_t * config)
 	else
 		config->opt.params.is_wfp_table = false;
 
-	load_import_config(config);
+	//load_import_config(config);
 
 	if (config->opt.params.binary_mode && !decode)
 		ldb_import_decoder_lib_load();
@@ -1275,6 +1286,17 @@ bool ldb_import(ldb_importation_config_t * config)
 	return result;
 }
 
+static int sector_from_path(char * path)
+{
+	char *ptr = NULL;
+	char * filename = basename(path);
+	long sector = strtol(filename, &ptr, 16);
+	if (ptr - filename < 2 || (ptr && *ptr != '.'))
+			sector = -1;
+	
+	return sector;
+}
+
 static char * table_name_from_path(char * path)
 {
 	char * table_name = strrchr(path, '/');
@@ -1293,7 +1315,18 @@ static char * table_name_from_path(char * path)
 	return out;
 }
 
-static void recurse_directory(ldb_importation_config_t * job, char *name, char * father, bool child)
+#define LDB_DEFAULT_TABLES_NUMBER 20
+struct ldb_importation_jobs_s
+{
+	ldb_importation_config_t ** job;
+	char dbname[LDB_MAX_NAME];
+	int number;
+	int sorted[LDB_DEFAULT_TABLES_NUMBER];
+	int unsorted[LDB_DEFAULT_TABLES_NUMBER];
+	int unsorted_index;
+};
+
+static void  recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -1306,42 +1339,54 @@ static void recurse_directory(ldb_importation_config_t * job, char *name, char *
 		if (!strcmp(entry->d_name,".") || !strcmp(entry->d_name,"..")) continue;
 
 		read = true;
-		char *path =calloc (LDB_MAX_PATH, 1);
+		char path[LDB_MAX_PATH] = "\0";
 		sprintf (path, "%s/%s", name, entry->d_name);
 			
 		if (entry->d_type == DT_DIR)
 		{
 			father = entry->d_name;
-			ldb_importation_config_t * job_r = calloc(1, sizeof(ldb_importation_config_t));
-			memcpy(job_r, job, sizeof(ldb_importation_config_t));
-			memset(job->table, 0, sizeof(job->table));
-			memset(job->csv_path, 0, sizeof(job->csv_path));
-			recurse_directory(job_r, path, father, true);
-			free(job_r);
+			recurse_directory(jobs, path, father);
 		}
 		else if (ldb_file_exists(path))
 		{
-			if (!*job->table)
-			{
-				if (father && *father && child)
-				{
-					strcpy(job->table,father);
-				}
-				else
-				{
-					char * table_name = table_name_from_path(path);
-					strcpy(job->table,table_name);
-					free(table_name);
-				}
-			}
 			if (strstr(path, ".json"))
 				continue;
- 
-			strcpy(job->csv_path, path);
-			ldb_import(job);
-		}
 
-		free(path);
+			int sector = sector_from_path(path);
+			char * table_name = sector >= 0 ? strdup(father) : table_name_from_path(path);
+			//printf("Path %s - Name %s - %d Prev %s\n", path, table_name, jobs->number, jobs->number > 0 ? jobs->job[jobs->number - 1]->table : "empty");
+			if (jobs->number == 0 || (strcmp(jobs->job[jobs->number - 1]->table, table_name)))
+			{
+				/*create new job*/
+				jobs->job = realloc(jobs->job, ((jobs->number+1) * sizeof(ldb_importation_config_t*)));
+				jobs->job[jobs->number] = calloc(1, sizeof(ldb_importation_config_t));
+				/* load default config*/
+				import_params_t opt = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+				jobs->job[jobs->number]->opt = opt;
+				strcpy(jobs->job[jobs->number]->dbname, jobs->dbname);
+				strncpy(jobs->job[jobs->number]->table, table_name, LDB_MAX_NAME);
+				
+				/*if the job is only one csv file, the file path is filled*/
+				if (sector < 0)
+					strncpy(jobs->job[jobs->number]->csv_path, path, LDB_MAX_PATH);
+				else
+					memset(jobs->job[jobs->number]->csv_path, 0, LDB_MAX_PATH);
+				
+				/*dir of the job*/
+				snprintf(jobs->job[jobs->number]->path, LDB_MAX_PATH, "%s", dirname(path));
+				
+				int sort = load_import_config(jobs->job[jobs->number]);
+				if (sort >= 0)
+					jobs->sorted[sort] = jobs->number;
+				else
+				{
+					jobs->unsorted[jobs->unsorted_index] = jobs->number;
+					jobs->unsorted_index++;
+				}
+				jobs->number++;
+			}
+			free(table_name);
+		}
 	}
 
 	if (read) 
@@ -1350,9 +1395,53 @@ static void recurse_directory(ldb_importation_config_t * job, char *name, char *
 	}
 }
 
+bool process_sectors(ldb_importation_config_t * job) {
+    DIR *dir;
+    struct dirent *ent;
+	
+	/*Process one file with multiples sectors inside*/
+	if (*job->csv_path)
+	{
+		if (ldb_file_exists(job->csv_path))
+		{
+			return ldb_import(job);
+		}
+
+		fprintf(stderr, "Could not be able to find the file: %s\n", job->csv_path);
+		return false;
+	}
+	
+	/*Process a directory with one sector per file*/
+    if ((dir = opendir(job->path)) != NULL) 
+	{
+        while ((ent = readdir(dir)) != NULL) 
+		{
+            if (ent->d_type == DT_REG) {
+                snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
+                ldb_import(job);
+            } 
+        }
+        closedir(dir);
+    } 
+	else 
+	{
+        fprintf(stderr, "Cannot open directory: %s\n", job->path);
+		return false;
+    }
+	return true;
+}
+
+
+
 bool ldb_import_command(char * dbtable, char * path, char * config)
 {
-	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	if (!ldb_file_exists(path) && !ldb_dir_exists(path))
+	{
+		fprintf(stderr, "Error: file or directory %s not exist\n", path);
+		return false;
+	}
+
+	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT, .csv_path = "\0", .path = "\0"};
 	
 	char *table = strchr(dbtable, '/');
 
@@ -1378,22 +1467,53 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	if (!ldb_database_exists(job.dbname))
 		ldb_create_database(job.dbname);
 
+	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0};
+	strcpy(jobs.dbname, job.dbname);
+	jobs.unsorted_index = 0;
+	for (int i = 0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+	{
+		jobs.sorted[i] = -1;
+		jobs.unsorted[i] = -1;
+	}
+
 	if (!table && ldb_dir_exists(path))
 	{
 		strcpy(job.path, path);
-		recurse_directory(&job, path, job.table, false);
+		recurse_directory(&jobs, path, NULL);
+		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+		{
+			if (jobs.sorted[i] != -1)
+			{
+				//printf("%d - %d - %s\n", i, jobs.sorted[i], jobs.job[jobs.sorted[i]]->table);
+				process_sectors(jobs.job[jobs.sorted[i]]);
+				free(jobs.job[jobs.sorted[i]]);
+			}
+		}
+		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+		{
+			if (jobs.unsorted[i] != -1)
+			{
+				//printf("%d - %d - %s\n", i, jobs.unsorted[i], jobs.job[jobs.unsorted[i]]->table);
+				process_sectors(jobs.job[jobs.unsorted[i]]);
+				free(jobs.job[jobs.unsorted[i]]);
+			}
+		}
+		free(jobs.job);
 	}
 	else if (table)
 	{
 		strcpy(job.table, table + 1);
-		strcpy(job.path,path);
-		if(ldb_dir_exists(path))
-			recurse_directory(&job, path, job.table, true);
+		if (ldb_file_exists(path))
+		{
+			strcpy(job.csv_path,path);
+			strcpy(job.path, dirname(path));
+		}
 		else
 		{
-			strcpy(job.csv_path, path);
-			ldb_import(&job);
+			strcpy(job.path,path);
 		}
+
+		process_sectors(&job);
 	}
 	else
 	{
