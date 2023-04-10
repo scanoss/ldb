@@ -334,7 +334,7 @@ void ldb_join_mz(char * table, char *source, char *destination, bool skip_delete
 void ldb_join_snippets(char * table, char *source, char *destination, bool skip_delete);
 bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets, bool delete);
 bool ldb_create_dir(char *path);
-bool ldb_import(ldb_importation_config_t * config);
+bool ldb_import(ldb_importation_config_t * job);
 bool ldb_create_db_config_default(char * dbname);
 bool ldb_import_command(char * dbtable, char * path, char * config);
 //normalized_license *load_licenses();

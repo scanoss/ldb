@@ -37,12 +37,14 @@
 #include "ldb.h"
 #include "bsort.h"
 #include "join.h"
+#include <pthread.h>
+#include <sys/sysinfo.h>
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
 #define REC_SIZE_LEN 2
 
-
+pthread_mutex_t lock;
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 
 int (*decode) (int op, unsigned char *key, unsigned char *nonce,
@@ -53,13 +55,15 @@ double progress_timer = 0;
 void * lib_handle = NULL;
 bool ldb_import_decoder_lib_load(void)
 {
+	if (lib_handle != NULL)
+		return true;
 	/*set decode funtion pointer to NULL*/
 	decode = NULL;
 	lib_handle = dlopen("libscanoss_encoder.so", RTLD_NOW);
 	char * err;
     if (lib_handle) 
 	{
-		fprintf(stderr, "Lib scanoss-enocder present\n");
+		fprintf(stderr, "Lib scanoss_encoder present\n");
 		decode = dlsym(lib_handle, "scanoss_decode");
 		if ((err = dlerror())) 
 		{
@@ -255,7 +259,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_wfp.db,oss_wfp.table);
-	ldb_lock(lock_file);
+	//ldb_lock(lock_file);
 
 	uint64_t wfp_counter = 0;
 	uint64_t ignore_counter = 0;
@@ -365,7 +369,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 
 
 	/* Lock DB */
-	ldb_unlock(lock_file);
+	//ldb_unlock(lock_file);
 
 	return true;
 }
@@ -550,10 +554,13 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	ldb_hex_to_bin(basename(job->csv_path), 2, &first_byte);
 
 	/* Create table if it doesn't exist */
+	pthread_mutex_lock(&lock);
 	if (!ldb_database_exists(job->dbname))
 		ldb_create_database(job->dbname);
+
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number > 1 ? true : false);
+		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number - 1);
+	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
 	char db_table[LDB_MAX_NAME];
@@ -574,14 +581,12 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_bulk.db,oss_bulk.table);
-	ldb_lock(lock_file);
+	//ldb_lock(lock_file);
 	
 	/*sort the csv*/
 	csv_sort(job);
-
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
-		
 		bytecounter += lineln;
 		
 		/* Skip records with sizes out of range */
@@ -609,6 +614,9 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		/* First CSV field is the data key. Data starts with the second CSV field */
 		char *data = field_n(2, line);
 		bool skip = false;
+
+		if (!data)
+			continue;
 
 		/* File table will have the url id as the second field, which will be
 			 converted to binary. Data then starts on the third field. Also file extensions
@@ -647,7 +655,11 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			if (bin_mode)
 			{	
 				if (decode)
+				{
+					//pthread_mutex_lock(&lock);
 					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
+					//pthread_mutex_unlock(&lock);
+				}
 				else
 					ldb_error("libscanoss_encoder.so it is not available, \".enc\" files cannot be processed\n");
 			}
@@ -810,7 +822,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	{
 		for (int i=0; i < 256; i++)
 		{
-			printf("<sector %d: %d>\n", i,sectors_modified[i]);
+			//printf("<sector %d: %d>\n", i,sectors_modified[i]);
 			if (sectors_modified[i])
 			{
 				if (job->opt.params.verbose)
@@ -822,8 +834,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 
 	}
 			/* Lock DB */
-	ldb_unlock(lock_file);
-
+//	ldb_unlock(lock_file);
 	return true;
 }
 
@@ -1232,56 +1243,58 @@ bool import_collate_sector(ldb_importation_config_t * config)
 }
 
 #define DEFAULT_TMP_PATH "/tmp/"
-bool ldb_import(ldb_importation_config_t * config)
+bool ldb_import(ldb_importation_config_t * job)
 {
 	bool result = false;
-	if (config->opt.params.version_validation && !version_import(config))
+	ldb_importation_config_t config = *job;
+	if (config.opt.params.version_validation && !version_import(&config))
 	{
-		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config->path);
+		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
 		exit(EXIT_FAILURE);
 	}
 	
-	if (strstr(config->csv_path, ".mz"))
-		config->opt.params.is_mz_table = true;
+	if (strstr(config.csv_path, ".mz"))
+		config.opt.params.is_mz_table = true;
 	else
-		config->opt.params.is_mz_table = false;
+		config.opt.params.is_mz_table = false;
 	
-	if (strstr(config->csv_path, ".enc"))
-		config->opt.params.binary_mode = true;
+	if (strstr(config.csv_path, ".enc"))
+		config.opt.params.binary_mode = true;
 	else
-		config->opt.params.binary_mode = false;
+		config.opt.params.binary_mode = false;
 
-	if (strstr(config->csv_path, ".bin"))
-		config->opt.params.is_wfp_table = true;
+	if (strstr(config.csv_path, ".bin"))
+		config.opt.params.is_wfp_table = true;
 	else
-		config->opt.params.is_wfp_table = false;
+		config.opt.params.is_wfp_table = false;
 
 	//load_import_config(config);
-
-	if (config->opt.params.binary_mode && !decode)
+pthread_mutex_lock(&lock);
+	if (config.opt.params.binary_mode && !decode)
 		ldb_import_decoder_lib_load();
+pthread_mutex_unlock(&lock);
 
-	if (!config->tmp_path)
+	if (!config.tmp_path)
 	{
-		sprintf(config->tmp_path, DEFAULT_TMP_PATH);
+		sprintf(config.tmp_path, DEFAULT_TMP_PATH);
 	}
 	
-	if (config->opt.params.is_mz_table)
+	if (config.opt.params.is_mz_table)
 	{
 		char dest_path[LDB_MAX_PATH];
-		sprintf(dest_path, "%s/%s/%s/%s", ldb_root, config->dbname, config->table, basename(config->csv_path));
-		result = ldb_bin_join(config->csv_path, dest_path, config->opt.params.overwrite, false, config->opt.params.delete_after_import);
+		sprintf(dest_path, "%s/%s/%s/%s", ldb_root, config.dbname, config.table, basename(config.csv_path));
+		result = ldb_bin_join(config.csv_path, dest_path, config.opt.params.overwrite, false, config.opt.params.delete_after_import);
 	}
-	else if (config->opt.params.is_wfp_table)
+	else if (config.opt.params.is_wfp_table)
 	{
-		if (bin_sort(config->csv_path, config->opt.params.skip_sort))
-			result = ldb_import_snippets(config);
+		if (bin_sort(config.csv_path, config.opt.params.skip_sort))
+			result = ldb_import_snippets(&config);
 	}
 	else
 	{
-		result = ldb_import_csv(config);
+		result = ldb_import_csv(&config);
 	}
-	import_collate_sector(config);
+	import_collate_sector(&config);
 	
 	return result;
 }
@@ -1395,10 +1408,28 @@ static void  recurse_directory(struct ldb_importation_jobs_s * jobs, char *name,
 	}
 }
 
+
+int num_threads = 0;
+
+void * thread_process_sector(void * arg)
+{
+	ldb_importation_config_t * job = arg;
+	printf("<<NEW THREAD: %d - %s>>\n", num_threads, job->csv_path);
+	ldb_import(job);
+	pthread_mutex_lock(&lock);
+	num_threads--;
+	free(job);
+	pthread_mutex_unlock(&lock);
+	printf("<<THREAD END: %d>>\n", num_threads);
+	pthread_exit(NULL);
+}
+
+#define LDB_MULTITHREADING_IMPORT 1
 bool process_sectors(ldb_importation_config_t * job) {
     DIR *dir;
     struct dirent *ent;
-	
+	int max_threads = get_nprocs() / 2;
+	fprintf(stderr, "Max threads set to: %d\n", max_threads);
 	/*Process one file with multiples sectors inside*/
 	if (*job->csv_path)
 	{
@@ -1414,14 +1445,46 @@ bool process_sectors(ldb_importation_config_t * job) {
 	/*Process a directory with one sector per file*/
     if ((dir = opendir(job->path)) != NULL) 
 	{
-        while ((ent = readdir(dir)) != NULL) 
+        pthread_t tid;
+    	pthread_mutex_init(&lock, NULL);
+		while ((ent = readdir(dir)) != NULL) 
 		{
-            if (ent->d_type == DT_REG) {
+            if (ent->d_type == DT_REG) 
+			{
+#ifdef LDB_MULTITHREADING_IMPORT
+				if (num_threads < max_threads)
+				{
+					pthread_mutex_lock(&lock);
+					snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
+					ldb_importation_config_t * job_cpy = malloc(sizeof(ldb_importation_config_t));
+					memcpy(job_cpy,job,sizeof(ldb_importation_config_t));
+					pthread_create(&tid, NULL, thread_process_sector, (void*) job_cpy);
+					//pthread_join(tid, NULL);
+					num_threads++;
+					pthread_mutex_unlock(&lock);
+				}
+				else
+				{
+					snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
+					ldb_import(job);
+				}
+#else
                 snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
-                ldb_import(job);
+				ldb_import(job);
+#endif
             } 
         }
+#ifdef LDB_MULTITHREADING_IMPORT
+	while(num_threads>0)
+	{
+		printf("num t: %d", num_threads);
+		sleep(1);
+	}
+#endif
+
+
         closedir(dir);
+		pthread_mutex_destroy(&lock);
     } 
 	else 
 	{
@@ -1512,7 +1575,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		{
 			strcpy(job.path,path);
 		}
-
+		load_import_config(&job);
 		process_sectors(&job);
 	}
 	else
