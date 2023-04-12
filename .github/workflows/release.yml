@@ -1,0 +1,64 @@
+name: tagged-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  tagged-release:
+    name: "Tagged Release"
+    runs-on: ubuntu-20.04
+    #container:
+    #  image: debian:buster
+
+    steps:
+
+      - name: Install third party dependencies
+        run: sudo apt install build-essential libssl-dev zlib1g-dev
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Build
+        run: |
+          make all
+          mkdir -p ./artifacts/
+          cp ldb ./artifacts/ldb
+          cp libldb.so ./artifacts/libldb.so
+          cp LICENSE ./artifacts/LICENSE
+          echo "Produced artifact at ${PWD}/artifacts/ldb"
+
+      - name: 'Tar files'
+        run: tar czvf ldb-${{ github.ref_name }}-linux-amd64.tar.gz -C artifacts/ .
+
+      - name: Prepare deb package
+        id: build_deb
+        run: |
+          make prepare_deb_package
+          echo "debpkg_file_name=$(ls *.deb)" >> $GITHUB_OUTPUT
+
+      - name: Prepare rpm package
+        run: |
+          make prepare_rpm_package
+          echo "rpmpkg_file_name=$(ls dist/rpm/RPMS/x86_64/*.rpm)" >> $GITHUB_OUTPUT
+
+      - name: Show the artifacts
+        # Items placed in /artifacts in the container will be in
+        # ${PWD}/artifacts on the host.
+        run: |
+          ls -al "${PWD}/artifacts"
+          ls -al "${PWD}"
+          ls -al "${PWD}/dist/rpm/RPMS/x86_64/"
+
+      - name: Create Draft Release ${{ github.ref_type }} - ${{ github.ref_name }}
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          files: |
+            ./*.tar.gz
+            ./*.deb
+            ./dist/rpm/RPMS/x86_64/*.rpm

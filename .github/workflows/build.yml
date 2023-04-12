@@ -1,0 +1,41 @@
+name: build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ 'main' ]
+  push:
+    branches:        
+      - '*' 
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install third party dependencies
+        run: sudo apt install build-essential libssl-dev zlib1g-dev libsqlite3-dev libz-dev curl gem ruby unzip p7zip-full unrar-free
+
+      - uses: actions/checkout@v3
+
+      - name: Install ldb
+        run: make all
+
+      - name: version
+        run: echo "::set-output name=version::$(./ldb -version)"
+        id: version
+      
+      - name: Test output
+        run: echo ${{ steps.version.outputs.version }}
+
+      - name: 'Tar files'
+        run: tar czvf ldb-${{ steps.version.outputs.version }}-amd64.tar.gz ldb libldb.so LICENSE
+
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ldb
+          path: |
+            ldb-${{ steps.version.outputs.version }}-amd64.tar.gz
+          retention-days: 5
