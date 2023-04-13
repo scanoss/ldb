@@ -98,7 +98,6 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	if (!cfg)
 	{
 		printf("Warning: cannot config file \"%s\" does not exist. Using table's default config\n", path);
-		fclose(cfg);
 		return tablecfg;
 	}
 
@@ -141,7 +140,7 @@ void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int sec_key)
 	char *path = malloc(LDB_MAX_PATH);
 	sprintf(path, "%s/%s/%s.cfg", ldb_root, db, table);
 
-	FILE *cfg = fopen(path, "w");
+	FILE *cfg = fopen(path, "w+");
 	fprintf(cfg,"%d,%d,%d\n", keylen, reclen, sec_key);
 	fclose(cfg);
 

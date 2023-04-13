@@ -374,7 +374,8 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 		}
 	}
 
-	if (ldb_sector) fclose(ldb_sector);
+	if (ldb_sector) 
+		ldb_close_unlock(ldb_sector);
 }
 
 /**

@@ -337,4 +337,5 @@ bool ldb_create_dir(char *path);
 bool ldb_import(ldb_importation_config_t * job);
 bool ldb_create_db_config_default(char * dbname);
 bool ldb_import_command(char * dbtable, char * path, char * config);
+int ldb_close_unlock(FILE *fp);
 //normalized_license *load_licenses();

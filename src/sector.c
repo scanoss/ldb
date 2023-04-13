@@ -21,7 +21,11 @@
  */
 #include "ldb.h"
 #include <sys/file.h> 
-
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
 /**
   * @file sector.c
   * @date 12 Jul 2020
@@ -31,6 +35,79 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/sector.c
   */
 
+FILE *lock_file(const char *filename, int wait_s, const char *mode)
+{
+
+	int fd = open(filename, O_RDWR);
+
+	if (fd == -1)
+	{
+		perror("open");
+		return NULL;
+	}
+
+	struct flock fl;
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+
+	int ret;
+	time_t start_time = time(NULL);
+	while ((ret = fcntl(fd, F_SETLK, &fl)) == -1)
+	{
+		if (errno != EACCES && errno != EAGAIN)
+		{
+			perror("fcntl");
+			close(fd);
+			return NULL;
+		}
+
+		if (difftime(time(NULL), start_time) >= wait_s)
+		{
+			fprintf(stderr, "Timeout waiting for lock\n");
+			close(fd);
+			return NULL;
+		}
+
+		usleep(250); // Wait 1 millisecond before trying again
+	}
+
+	FILE *fp = fdopen(fd, mode);
+
+	if (fp == NULL)
+	{
+		perror("fdopen");
+		close(fd);
+		//return NULL;
+		exit(1);
+	}
+	return fp;
+}
+
+int ldb_close_unlock(FILE *fp) 
+{
+    int fd = fileno(fp);
+    struct flock fl;
+    fl.l_type = F_UNLCK;
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;
+
+    int ret = fcntl(fd, F_SETLK, &fl);
+    if (ret == -1) 
+	{
+        perror("fcntl");
+        return -1;
+    }
+
+    if (fclose(fp) == EOF) 
+	{
+        perror("fclose");
+        return -1;
+    }
+    return 0;
+}
 /**
  * @brief Opens an LDB sector and returns the file descriptor. If read mode, returns NULL
  *  in case it does not exist. Otherwise an empty sector file is created in case it
@@ -45,22 +122,19 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 	/* Create sector (file) if it doesn't already exist */
 	char *sector_path = ldb_sector_path(table, key, mode);
-	if (!sector_path) return NULL;
+	if (!sector_path) 
+		return NULL;
 
+	FILE *out = NULL;
+	
 	/* Open data sector */
-	FILE *out = fopen(sector_path, mode);
+	if (strcmp(mode, "r"))
+		out = lock_file(sector_path, 5, mode);
+	else
+		out = fopen(sector_path, mode);
 	
 	if (!out) 
-		fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));
-	
-	int lock_result = flock(fileno(out),LOCK_EX);
-	
-	if (lock_result < 0)
-	{
-		fprintf(stderr, "Cannot lock LDB file %s: %s\n", sector_path, strerror(errno));
-		fclose(out);
-		out = NULL;
-	}
+		fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));	
 
 	free(sector_path);
 	return out;
@@ -68,13 +142,6 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 bool ldb_close(FILE * sector)
 {
-	int lock_result = flock(fileno(sector),LOCK_UN);
-	if (lock_result < 0)
-	{
-		fprintf(stderr, "Failed to relese lock LDB file %s\n", strerror(errno));
-		return false;
-	}
-	
 	if (fclose(sector) != 0)
 	{
 		printf("error closing sector\n");
@@ -83,6 +150,7 @@ bool ldb_close(FILE * sector)
 
 	return true;
 }
+
 
 /**
  * @brief Creates a table in the ldb directory
