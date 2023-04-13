@@ -409,7 +409,7 @@ void ldb_command_unlink_list(char *command)
 			FILE *sector;
 			sector = ldb_open(ldbtable, keybin, "r+");
 			ldb_list_unlink(sector, keybin);
-			fclose(sector);
+			ldb_close_unlock(sector);
 		}
 	}
 
@@ -470,7 +470,7 @@ void ldb_command_insert(char *command, commandtype type)
 			else
 				ldb_node_write(ldbtable, sector, keybin, (uint8_t *) data, dataln, 0); // TODO Ditto
 
-			fclose(sector);
+			ldb_close_unlock(sector);
 		}
 	}
 
