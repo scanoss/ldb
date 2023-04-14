@@ -48,7 +48,7 @@
 #define LDB_MAX_COMMAND_SIZE (64 * 1024)   // Maximum length for an LDB command statement
 #define COLLATE_REPORT_SEC 5 // Report interval for collate status
 #define MD5_LEN 16
-#define MD5_LEN_HEX 33
+#define MD5_LEN_HEX 32
 #define BUFFER_SIZE 1048576
 
 #ifndef _LDB_GLOBAL_

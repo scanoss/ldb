@@ -576,7 +576,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		oss_bulk.tmp = true;
 
 	int field2_ln = oss_bulk.sec_key ? 16 : 0;
-	char last_url_id[MD5_LEN_HEX] = "\0";
+	char last_url_id[MD5_LEN_HEX+1] = "\0";
 
 	fprintf(stderr, "Importing %s to %s/%s\n", job->csv_path, job->dbname, job->table);
 
