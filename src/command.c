@@ -201,6 +201,15 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 	return keyblob;
 }
 
+void job_delete_tuples_free(job_delete_tuples_t * job)
+{
+	for (int i = 0; i < job->tuples_number; i++)
+	{
+		free(job->tuples[i]->data);
+		free(job->tuples[i]);
+	}
+	free(job->tuples);
+}
 /**
  * @brief LDB console command to delete keys
  * 
@@ -244,8 +253,8 @@ void ldb_command_delete(char *command)
 
 		/* Unlock DB */
 		ldb_unlock(dbtable);
+		job_delete_tuples_free(&del_job);
 	}
-
 	/* Free memory */
 	free(dbtable);
 }
@@ -257,8 +266,9 @@ void ldb_command_delete_records(char *command)
 	char * mode  = ldb_extract_word(4, command);
 	bool single_mode = !strcmp(mode, "record");
 	char * path = NULL;
-
-	//path = ldb_extract_word(6, command);
+	
+	if (!single_mode)
+		path = ldb_extract_word(6, command);
 
 	if (ldb_valid_table(dbtable))
 	{
@@ -278,7 +288,27 @@ void ldb_command_delete_records(char *command)
 
 		int tuples_number = 0;
 		if (single_mode)
+		{
+			printf("ACA1");
 			tuples_number = load_del_keys(&del_job, keys_start(command, " record "),"\n", ldbtable);
+		}
+		else if (path && ldb_file_exists(path))
+		{
+			char * buffer = NULL;
+			FILE * fp = fopen(path, "r");
+
+			if (fp)
+			{
+				fseek(fp, 0, SEEK_END);
+    			long file_size = ftell(fp);
+    			rewind(fp);
+				buffer = (char *)malloc(file_size * sizeof(char));
+				fread(buffer, file_size, 1, fp);
+			}
+
+			if (buffer)
+				tuples_number = load_del_keys(&del_job, buffer,"\n", ldbtable);
+		}
 		// if (ldbtable.key_ln > keys_ln)
 		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
 		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
@@ -291,13 +321,15 @@ void ldb_command_delete_records(char *command)
 			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
 			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 		}
-
+		job_delete_tuples_free(&del_job);
 		/* Unlock DB */
 		ldb_unlock(dbtable);
 	}
-
+	
 	/* Free memory */
 	free(dbtable);
+	free(mode);
+	free(path);
 }
 
 

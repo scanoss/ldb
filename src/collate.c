@@ -59,8 +59,6 @@ int ldb_collate_tuple_cmp(const void * a, const void * b)
 	/* Compare each byte until the end of the shorter record */
     for (int i = 0; i < 16; i++)
     {
-        printf("aca %d, %x, %x\n", i, va->key[i], vb->key[i]);
-
 		if (va->key[i] > vb->key[i]) 
 			return 1;
         if (va->key[i] < vb->key[i]) 
@@ -451,9 +449,10 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 	if (tuple_index == -1)
 		return false;
-		
+
 	for (int i = tuple_index; i < collate->del_tuples->tuples_number; i++)
-	{
+	{ 
+		/* Out if first byte doesnt match*/
 		if (collate->del_tuples->map[collate->del_tuples->tuples[i]->key[1]] != tuple_index)
 			return false;
 
@@ -466,8 +465,9 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 		char key_hex2[MD5_LEN*2+1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
-		//printf("\ncomparing: %s / %s\n", key_hex1, key_hex2);
 		
+		//printf("\ncomparing: %s / %s\n", key_hex1, key_hex2);
+		/*Math the rest of the key*/
 		if (!memcmp(subkey, &collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln))
 		{
 			bool result = true;
@@ -475,13 +475,14 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 			{
 				int char_to_skip = 0;
 				//printf("<<%s / %s - %d - %d>>\n", (char*)(data), collate->del_tuples->tuples[i]->data, collate->del_tuples->keys_number, collate->del_tuples->key_ln);
+				char * data_key_hex = collate->del_tuples->tuples[i]->data;
 				//compare secudary keys
 				for (int i =0; i < collate->del_tuples->keys_number-1; i++)
 				{
-					char * data_key_hex = collate->del_tuples->tuples[i]->data + char_to_skip;
+					data_key_hex += char_to_skip;
 					char * key_end = strchr(data_key_hex, ',');
 					if (!key_end)
-						return false;
+						break;
 					
 					int len = key_end - data_key_hex;
 					char_to_skip += len + 1;
@@ -639,7 +640,6 @@ int load_del_keys(job_delete_tuples_t * job, char * buffer, char * d, struct ldb
 	int key_len = table.key_ln;
     while (line != NULL) 
 	{
-        printf("%s\n", line);
 		tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
 		tuples[tuples_index] = calloc(1, sizeof(tuple_t));
 		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
@@ -667,7 +667,7 @@ int load_del_keys(job_delete_tuples_t * job, char * buffer, char * d, struct ldb
 	{
 		char key_hex[MD5_LEN*2+1];
 		ldb_bin_to_hex(job->tuples[i]->key, key_len, key_hex);
-		printf("<<key: %s>>\n", key_hex);
+		printf("<key: %s>\n", key_hex);
 		if (job->tuples[i]->data)
 			printf("<<data: %s>>\n", job->tuples[i]->data);
 	}
