@@ -129,9 +129,8 @@ bool ldb_syntax_check(char *command, int *command_nr, int *word_nr)
  * @param command input string command
  * @return pointer to start key
  */
-char *keys_start(char *command)
+char *keys_start(char *command, char * keyword)
 {
-	char keyword[] = " keys ";
 	char *keys_word = strstr(command, keyword);
 	if (keys_word) return keys_word + strlen(keyword);
 	return NULL;
@@ -227,23 +226,21 @@ void ldb_command_delete(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		long keys_ln = 0;
-		uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
-
-		if (ldbtable.key_ln > keys_ln)
-			printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
-		else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		else if (max < ldbtable.key_ln)
-			printf("E076 Max record length cannot be smaller than table key\n");
-		else
+		//long keys_ln = 0;
+		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+		int tuples_number = load_del_keys(&del_job, keys_start(command, " keys "),",", ldbtable);
+		// if (ldbtable.key_ln > keys_ln)
+		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
+		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+		// 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		// else if (max < ldbtable.key_ln)
+		// 	printf("E076 Max record length cannot be smaller than table key\n");
+		// else
+		if (tuples_number)
 		{
-			qsort(keys, keys_ln / ldbtable.key_ln, ldbtable.key_ln, ldb_collate_cmp);
-			printf("Removing %ld keys\n", keys_ln / ldbtable.key_ln);
-			ldb_collate(ldbtable, tmptable, max, false, -1, keys, keys_ln);
+			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 		}
-
-		free(keys);
 
 		/* Unlock DB */
 		ldb_unlock(dbtable);
@@ -252,6 +249,58 @@ void ldb_command_delete(char *command)
 	/* Free memory */
 	free(dbtable);
 }
+
+void ldb_command_delete_records(char *command)
+{
+	/* Extract values from command */
+	char * dbtable = ldb_extract_word(3, command);
+	char * mode  = ldb_extract_word(4, command);
+	bool single_mode = !strcmp(mode, "record");
+	char * path = NULL;
+
+	//path = ldb_extract_word(6, command);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Lock DB */
+		ldb_lock(dbtable);
+		
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		struct ldb_table tmptable = ldb_read_cfg(dbtable);
+				
+		tmptable.tmp = true;
+		tmptable.key_ln = LDB_KEY_LN;
+
+		//long keys_ln = 0;
+		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+
+		int tuples_number = 0;
+		if (single_mode)
+			tuples_number = load_del_keys(&del_job, keys_start(command, " record "),"\n", ldbtable);
+		// if (ldbtable.key_ln > keys_ln)
+		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
+		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+		// 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		// else if (max < ldbtable.key_ln)
+		// 	printf("E076 Max record length cannot be smaller than table key\n");
+		// else
+		if (tuples_number)
+		{
+			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
+			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+		}
+
+		/* Unlock DB */
+		ldb_unlock(dbtable);
+	}
+
+	/* Free memory */
+	free(dbtable);
+}
+
+
 
 /**
  * @brief Execute the LDB command collate

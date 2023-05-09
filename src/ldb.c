@@ -74,6 +74,8 @@ char *ldb_commands[] =
 	"select from {ascii} key {hex} csv hex {ascii}",
 	"select from {ascii} key {hex} hex",
 	"delete from {ascii} max {ascii} keys {ascii}",
+	"delete from {ascii} record {ascii}",
+	"delete from {ascii} records from {ascii}",
 	"collate {ascii} max {ascii}",
 	"bulk insert {ascii} from {ascii} with {ascii}",
 	"bulk insert {ascii} from {ascii}",

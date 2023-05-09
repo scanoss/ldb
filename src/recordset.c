@@ -119,19 +119,10 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 						/* Get record length */
 						int record_size = uint16_read(dataset + dataset_ptr);
 						dataset_ptr += 2;
-/*
-						char * msg = NULL;
-						int msg_len = ldb_extract_record(&msg, dataset, dataset_ptr, record_size, table, key, subkey);
-
-						if (record_size + 32 < LDB_MAX_REC_LN)
-							done = ldb_record_handler(key, subkey, subkey_ln, (uint8_t*) msg, msg_len, records++, void_ptr);*/
 
 						/* We drop records longer than the desired limit */
 						if (record_size + 32 < LDB_MAX_REC_LN)
 							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
-						
-					//	free(msg);
-
 						/* Move pointer to end of record */
 						dataset_ptr += record_size;
 					}

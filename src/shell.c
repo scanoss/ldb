@@ -222,6 +222,10 @@ bool execute(char *raw_command)
 		case DELETE:
 			ldb_command_delete(command);
 			break;
+		case DELETE_RECORD:
+		case DELETE_RECORDS:
+			ldb_command_delete_records(command);
+			break;
 
 		case MERGE:
 			ldb_command_merge(command);

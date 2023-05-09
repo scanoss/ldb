@@ -19,6 +19,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+
+#ifndef _LDB_GLOBAL_
+#define _LDB_GLOBAL_
+
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -51,9 +56,6 @@
 #define MD5_LEN_HEX 32
 #define BUFFER_SIZE 1048576
 
-#ifndef _LDB_GLOBAL_
-#define _LDB_GLOBAL_
-
 extern char ldb_root[];
 extern char ldb_lock_path[];
 extern char *ldb_commands[];
@@ -79,6 +81,8 @@ SELECT_ASCII,
 SELECT_CSV,
 SELECT, 
 DELETE,
+DELETE_RECORD,
+DELETE_RECORDS,
 COLLATE,
 BULK_INSERT,
 BULK_INSERT_DEFAULT,
@@ -127,6 +131,29 @@ struct ldb_recordset
     uint8_t ts_ln;      // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 };
 
+typedef bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *);
+
+struct ldb_collate_data;
+typedef bool (*collate_handler)(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size);
+
+
+typedef struct tuple_t
+{
+	uint8_t key[MD5_LEN];
+	int keys;
+	char * data;
+} tuple_t;
+
+typedef struct job_delete_tuples_t
+{
+	tuple_t ** tuples;
+	int tuples_number;
+	int key_ln;
+	int keys_number;
+	collate_handler handler;
+	int map[256];
+} job_delete_tuples_t;
+
 struct ldb_collate_data
 {
 	void *data; 
@@ -142,11 +169,13 @@ struct ldb_collate_data
 	uint8_t last_key[LDB_KEY_LN];
 	time_t last_report;
 	bool merge;
-	uint8_t *del_keys;
-	long del_ln;
+	//uint8_t *del_keys;
+	//long del_ln;
 	long del_count;
-	long *del_map;
+	//long *del_map;
 	long key_rec_count;
+	job_delete_tuples_t * del_tuples;
+	collate_handler handler;
 };
 
 /* MZ  */
@@ -226,10 +255,6 @@ typedef struct ldb_importation_config_t
 
 
 bool ldb_importation_config_parse(ldb_importation_config_t * conf, char * line);
-
-
-#endif
-
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
 bool ldb_locked();
@@ -302,13 +327,16 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
 bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
-void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, uint8_t *del_keys, long del_ln);
+int load_del_keys(job_delete_tuples_t* job, char * buffer, char * d, struct ldb_table table);
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, job_delete_tuples_t * delete, collate_handler handler);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes, int sector);
 void ldb_dump_keys(struct ldb_table table);
 int ldb_collate_cmp(const void * a, const void * b);
 uint64_t ldb_file_size(char *path);
+
+void ldb_command_delete_records(char *command);
 
 bool mz_key_exists(struct mz_job *job, uint8_t *key);
 bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id);
@@ -338,4 +366,6 @@ bool ldb_import(ldb_importation_config_t * job);
 bool ldb_create_db_config_default(char * dbname);
 bool ldb_import_command(char * dbtable, char * path, char * config);
 int ldb_close_unlock(FILE *fp);
+
 //normalized_license *load_licenses();
+#endif
