@@ -235,20 +235,20 @@ void ldb_command_delete(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		//long keys_ln = 0;
-		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
 		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
 		int tuples_number = load_del_keys(&del_job, keys_start(command, " keys "),",", ldbtable);
-		// if (ldbtable.key_ln > keys_ln)
-		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
-		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-		// 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		// else if (max < ldbtable.key_ln)
-		// 	printf("E076 Max record length cannot be smaller than table key\n");
-		// else
-		if (tuples_number)
+		
+		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+		 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		else if (max < ldbtable.key_ln)
+		 	printf("E076 Max record length cannot be smaller than table key\n");
+		else if (tuples_number)
 		{
 			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+		}
+		else
+		{
+			fprintf(stderr, "There are any key to be processed\n");
 		}
 
 		/* Unlock DB */
@@ -289,7 +289,6 @@ void ldb_command_delete_records(char *command)
 		int tuples_number = 0;
 		if (single_mode)
 		{
-			printf("ACA1");
 			tuples_number = load_del_keys(&del_job, keys_start(command, " record "),"\n", ldbtable);
 		}
 		else if (path && ldb_file_exists(path))
@@ -305,9 +304,17 @@ void ldb_command_delete_records(char *command)
 				buffer = (char *)malloc(file_size * sizeof(char));
 				fread(buffer, file_size, 1, fp);
 			}
+			else
+			{
+				fprintf(stderr, "File %s could not be loaded\n", path);
+			}
 
 			if (buffer)
 				tuples_number = load_del_keys(&del_job, buffer,"\n", ldbtable);
+		}
+		else
+		{
+			fprintf(stderr, "File %s does not exist\n", path);
 		}
 		// if (ldbtable.key_ln > keys_ln)
 		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
@@ -321,6 +328,11 @@ void ldb_command_delete_records(char *command)
 			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
 			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 		}
+		else
+		{
+			fprintf(stderr, "No csv record could be read from %s\n", path);
+		}
+
 		job_delete_tuples_free(&del_job);
 		/* Unlock DB */
 		ldb_unlock(dbtable);

@@ -78,6 +78,7 @@ void help()
 	printf("			KEYS: number of binary keys in the csv file.\n");
 	printf("			MZ: is MZ file.\n");
 	printf("			BIN: is binary file.\n");
+	printf("			WFP: is wfp file.\n");
 	printf("			OVERWRITE: the destination table will be overwritten.\n");
 	printf("			SKIP_SORT: skip sort.\n");
 	printf("			FIELDS: CSV fields number.\n");
@@ -107,6 +108,14 @@ void help()
 	
 	printf("	delete from DBNAME/TABLENAME max LENGTH keys KEY_LIST\n");
 	printf("    	Deletes all records for the given comma separated hex key list from the db/table. Max record length expected\n\n");
+
+	printf("	delete from DBNAME/TABLENAME record CSV_RECORD\n");
+	printf("    	Deletes the specific CSV record from the specified table. Some field of the CSV may be skippet from the comparation using '*'\n");
+	printf("    	Example 1: delete from db/url record key,madler,*,2.4,20171227,zlib,pkg:github/madler/pigz,https://github.com/madler/pigz/archive/v2.4.zip\n");
+	printf("    	All the records matching the all the csv's field with exception of the second thirdone will be removed\n\n");
+
+	printf("	delete from DBNAME/TABLENAME records from PATH\n");
+	printf("    	Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH\n");
 	
 	printf("	collate DBNAME/TABLENAME max LENGTH\n");
 	printf("    	Collates all lists in a table, removing duplicates and records greater than LENGTH bytes\n\n");

@@ -397,7 +397,7 @@ static bool data_compare(char * a, char * b)
 	if (!a || !b)
 		return false;
 
-	printf("a: %s, b: %s\n",a ,b);
+	//printf("a: %s, b: %s\n",a ,b);
 	while (*a && *b)
 	{
 		bool skip_field = false;
@@ -645,7 +645,7 @@ int load_del_keys(job_delete_tuples_t * job, char * buffer, char * d, struct ldb
 		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
 		if (tuples[tuples_index]->key[0] != tuples[0]->key[0])
 		{
-			printf("Error, different sector: %s", line);
+			fprintf(stderr,"Error, different sector: %s", line);
 			free(tuples);
 			return 0;
 		}
