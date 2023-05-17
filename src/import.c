@@ -39,20 +39,23 @@
 #include "join.h"
 #include <pthread.h>
 #include <sys/sysinfo.h>
+#include <stdarg.h>
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
 #define REC_SIZE_LEN 2
 
 pthread_mutex_t lock;
-int max_threads = 0;
 
+int max_threads = 0;
+pthread_t * threads_list;
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 
 int (*decode) (int op, unsigned char *key, unsigned char *nonce,
 		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out) = NULL;
 
 double progress_timer = 0;
+int logger_offset = 0;
 
 void * lib_handle = NULL;
 bool ldb_import_decoder_lib_load(void)
@@ -78,7 +81,43 @@ bool ldb_import_decoder_lib_load(void)
 	 return false;
 }
 
+#define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
+void import_logger(const char * fmt, ...)
+{
+	pthread_mutex_lock(&lock);
+	pthread_t t = pthread_self();
+	int i = 0;
+	bool found = false;
+	for (; i<max_threads; i++)
+	{
+		if (t == threads_list[i])
+		{
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+		i = 0;
+	va_list ap;
+	va_start(ap, fmt);
+	gotoxy(0, i + 1 + logger_offset);
+	fprintf(stderr, "\33[2K\r");
+	gotoxy(10, i + 1 + logger_offset);
+	//fprintf(stderr, "%d - ", i);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	pthread_mutex_unlock(&lock);
+}
 
+void import_logger_clear()
+{
+	logger_offset += max_threads;
+	/*for (int i = 0; i < max_threads; i++)
+	{
+		gotoxy(0,i);
+		fprintf(stderr, "\33[2K\r");
+	}*/
+}
 
 /**
  * @brief Sort a csv file invokinkg a new process and executing a sort command
@@ -187,20 +226,22 @@ uint8_t first_byte(char *filename)
  * @param max maximum value
  * @param percent true for percent mode
  */
-void progress(char *prompt, size_t count, size_t max, bool percent)
+void progress(char * path, char * table, size_t count, size_t max, bool percent)
 {
 	struct timeval t;
 	gettimeofday(&t, NULL);
 	double tmp = (double)(t.tv_usec) / 1000000 + (double)(t.tv_sec);
-	if ((tmp - progress_timer) < 1)
+	if ((tmp - progress_timer) < 5)
 		return;
+	pthread_mutex_lock(&lock);
 	progress_timer = tmp;
+	pthread_mutex_unlock(&lock);
 
 	if (percent)
-		printf("%s%.2f%%\r", prompt, ((double)count / (double)max) * 100);
+		import_logger("Importing %s to %s: %s%.2f%%\r", path, table, ((double)count / (double)max) * 100);
 	else
-		printf("%s%lu\r", prompt, count);
-	fflush(stdout);
+		import_logger("Importing %s to %s: %s%lu\r", path, table, count);
+	//fflush(stdout);
 }
 
 /**
@@ -291,7 +332,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	bool first_read = true;
 	uint32_t bytes_read = 0;
 
-	fprintf(stderr, "Importing %s to %s/%s\n", config->csv_path, config->dbname, config->table);
+	//import_logger("Importing %s to %s/%s\n", config->csv_path, config->dbname, config->table);
 
 	while ((bytes_read = fread(buffer, 1, buffer_ln, in)) > 0)
 	{
@@ -345,13 +386,13 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 			if (++reccounter > tick)
 			{
 				bytecounter += (rec_ln * reccounter);
-				progress("Importing: ", bytecounter, totalbytes, true);
+				progress(config->csv_path,config->table, bytecounter, totalbytes, true);
 				reccounter = 0;
 			}
 		}
 	}
-	progress("Importing: ", 100, 100, true);
-	printf("%'lu wfp imported, %'lu ignored\n", wfp_counter, ignore_counter);
+	//progress(config->csv_path, config->table, 100, 100, true);
+	import_logger("%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
 
 	if (record_ln)
 		ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
@@ -578,7 +619,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	int field2_ln = oss_bulk.sec_key ? 16 : 0;
 	char last_url_id[MD5_LEN_HEX+1] = "\0";
 
-	fprintf(stderr, "Importing %s to %s/%s\n", job->csv_path, job->dbname, job->table);
+	//import_logger("Importing %s to %s/%s\n", job->csv_path, job->dbname, job->table);
 
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
@@ -781,9 +822,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			}
 			imported++;
 		}
-		progress("Importing: ", bytecounter, totalbytes, true);
+		progress(job->csv_path, job->table, bytecounter, totalbytes, true);
+		//import_logger("Importing %s to %s: %lu of %lu bytes\n", job->csv_path, job->table, bytecounter, totalbytes);
 	}
-	progress("Importing: ", 100, 100, true);
+	//progress("Importing: ", 100, 100, true);
 
 	/* Flush buffer */
 	if (item_rg_size > 0)
@@ -803,7 +845,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (item_sector)
 		ldb_close_unlock(item_sector);
 
-	printf("%u records imported, %u skipped\n", imported, skipped);
+	import_logger("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
 
 	if (fclose(fp))
 		fprintf(stderr,"error closing %d\n", fileno(fp));
@@ -828,7 +870,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			if (sectors_modified[i])
 			{
 				if (job->opt.params.verbose)
-					fprintf(stderr, "Overwriting sector %02x of %s\n", i, job->table);
+					import_logger("Overwriting sector %02x of %s\n", i, job->table);
 				uint8_t k = i;
 				ldb_sector_update(oss_bulk, &k);
 			}
@@ -1430,24 +1472,25 @@ void * thread_process_sector(void * arg)
 	pthread_exit(NULL);
 }
 
+void threads_end(pthread_t * tlist)
+{
+	for (int j =0; j < max_threads; j++)
+	{
+		if (!tlist[j])
+			continue;
+		if (pthread_join(tlist[j], NULL) == 0)
+			num_threads--;	
+	
+		tlist[j] = 0;
+	}
+}
+
 pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 {
 	pthread_t tid;
 	
 	if (num_threads >= max_threads)
-	{
-		for (int j =0; j < max_threads; j++)
-		{
-			if (!tlist[j])
-				continue;
-			if (pthread_join(tlist[j], NULL) == 0)
-			{
-				num_threads--;	
-			}
-			
-			tlist[j] = 0;
-		}
-	}
+		threads_end(tlist);
 	
 	pthread_mutex_lock(&lock);
 	ldb_importation_config_t * job_cpy = malloc(sizeof(ldb_importation_config_t));
@@ -1481,14 +1524,14 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 	{
 		if (ldb_file_exists(job->csv_path))
 		{
-#ifdef LDB_MULTITHREADING_IMPORT
+#ifdef LDB_MULTITHREADING_IMPORT_DIFF_TABLES
 			pthread_t pid = thread_start(job, tlist);
 			if (pid == 0)
 				return ldb_import(job);
 			else
 				return true;
 #else
-			return ldb_import(job);
+			return ldb_import(job); //wait for a table to start a new one
 #endif
 		}
 		else
@@ -1509,10 +1552,10 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 			if (ent->d_type == DT_REG) 
 			{
 #ifdef LDB_MULTITHREADING_IMPORT
-					snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
-					pthread_t tid = thread_start(job, tlist);
-					if (tid == 0)
-						ldb_import(job);
+				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
+				pthread_t tid = thread_start(job, tlist);
+				if (tid == 0)
+					ldb_import(job);
 #else
                 snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
 				ldb_import(job);
@@ -1600,8 +1643,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	fprintf(stderr, "Max threads set to: %d\n", max_threads);
 	pthread_mutex_init(&lock, NULL);
 #endif
-	pthread_t threads_list[max_threads];
-
+	threads_list = calloc(max_threads, sizeof(pthread_t));
 	if (!table && ldb_dir_exists(path))
 	{
 		strcpy(job.path, path);
@@ -1611,18 +1653,38 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		/* Process jobs*/
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
+			int to_add = 0;
 			if (jobs.sorted[i] != -1)
 			{
+				if (*jobs.job[jobs.sorted[i]]->csv_path)
+					to_add = 1;
+				else
+					to_add = max_threads;
 				process_sectors(jobs.job[jobs.sorted[i]], threads_list);
 				free(jobs.job[jobs.sorted[i]]);
+				//wait for each table to finish
+				threads_end(threads_list);
+				fflush(stdout);
+				logger_offset += to_add;				
+			//	import_logger_clear();
 			}
 		}
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
+			int to_add = 0;
 			if (jobs.unsorted[i] != -1)
 			{
+				if (*jobs.job[jobs.sorted[i]]->csv_path)
+					to_add = 1;
+				else
+					to_add = max_threads;
 				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
 				free(jobs.job[jobs.unsorted[i]]);
+				//wait for each table to finish
+				threads_end(threads_list);
+				fflush(stdout);
+				logger_offset += to_add;
+				//import_logger_clear();
 			}
 		}
 
@@ -1649,9 +1711,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	}
 
 #ifdef LDB_MULTITHREADING_IMPORT
-	for (int j =0; j < num_threads; j++)
-		pthread_join(threads_list[j], NULL);
-	
+	threads_end(threads_list);
+	free(threads_list);
 	pthread_mutex_destroy(&lock);
 #endif
 

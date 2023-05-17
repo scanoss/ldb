@@ -134,7 +134,7 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 	/* If destination does not exist. Source is moved */
 	else
 	{
-		printf("Moving %s into %s\n", source, destination);
+		//printf("Moving %s into %s\n", source, destination);
 		if (!move_file(source, destination, delete))
 		{
 			printf("Cannot move file\n");
@@ -143,7 +143,7 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 		return true;
 	}
 
-	printf("Joining into %s\n", destination);
+	//printf("Joining into %s\n", destination);
 	file_append(source, destination, delete);
 	if (delete) unlink(source);
 
