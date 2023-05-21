@@ -30,6 +30,7 @@
   */
 
 #include "ldb.h"
+#include "ldb_string.h"
 /**
  * @brief Verifies if a buffer contains printable characters
  * 

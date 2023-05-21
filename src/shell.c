@@ -43,9 +43,8 @@
 #include <openssl/md5.h>
 #include <popt.h>
 #include "ldb.h"
-#include "mz.c"
-#include "command.c"
-
+#include "command.h"
+#include "ldb_string.h"
 /**
  * @brief Contains the shell help text
  * 

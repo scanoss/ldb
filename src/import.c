@@ -43,6 +43,7 @@
 #include <sys/ioctl.h>
 #include "ignored.h"
 #include <signal.h>
+#include "collate.h"
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
@@ -86,7 +87,7 @@ bool ldb_import_decoder_lib_load(void)
 
 struct winsize logger_window;
 #define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
-char import_logger_path[LDB_MAX_PATH] = "/usr/local/etc/scanoss/ldb/logs/";
+char import_logger_path[LDB_MAX_PATH] = LDB_CFG_PATH"/logs/";
 
 void import_logger(bool to_file, const char * fmt, ...)
 {
@@ -1668,6 +1669,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	}
 
 	ioctl(0, TIOCGWINSZ, &logger_window);
+	ldb_prepare_dir(import_logger_path);
 	strcat(import_logger_path,jobs.dbname);
 	strcat(import_logger_path,".log");
 

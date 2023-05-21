@@ -21,6 +21,7 @@
  */
 #include "ldb.h"
 #include <stdio.h>
+#include "ldb_string.h"
  /**
   * @file dump.c
   * @date 12 Jul 2020 

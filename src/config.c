@@ -29,6 +29,7 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
   */
 #include "ldb.h"
+#include "ldb_string.h"
 /**
  * @brief Loads table configuration from .cfg file
  * 

@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <time.h>
+#include "ldb_string.h"
 /**
   * @file sector.c
   * @date 12 Jul 2020

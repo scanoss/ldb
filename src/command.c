@@ -42,6 +42,39 @@
 #include <openssl/md5.h>
 #include <libgen.h>
 #include "ldb.h"
+#include "mz.h"
+#include "command.h"
+#include "ldb_string.h"
+#include "import.h"
+#include "collate.h"
+char *ldb_commands[] = 
+{
+	"help",
+	"create database {ascii}",
+	"create table {ascii} keylen {ascii} reclen {ascii} seckey {ascii}",
+	"create config {ascii}",
+	"show databases",
+	"show tables from {ascii}",
+	"insert into {ascii} key {hex} ascii {ascii}",
+	"insert into {ascii} key {hex} hex {hex}",
+	"select from {ascii} key {hex} ascii",
+	"select from {ascii} key {hex} csv hex {ascii}",
+	"select from {ascii} key {hex} hex",
+	"delete from {ascii} max {ascii} keys {ascii}",
+	"delete from {ascii} record {ascii}",
+	"delete from {ascii} records from {ascii}",
+	"collate {ascii} max {ascii}",
+	"bulk insert {ascii} from {ascii} with {ascii}",
+	"bulk insert {ascii} from {ascii}",
+	"merge {ascii} into {ascii} max {ascii}",
+	"version",
+	"unlink list from {ascii} key {hex}",
+	"dump {ascii} hex {ascii} sector {hex}",
+	"dump {ascii} hex {ascii}",
+	"dump keys from {ascii}",
+	"cat {hex} from {ascii}"
+};
+int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 
 /**
  * @brief Normalize the command to LDB console-
@@ -236,7 +269,7 @@ void ldb_command_delete(char *command)
 		tmptable.key_ln = LDB_KEY_LN;
 
 		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
-		int tuples_number = load_del_keys(&del_job, keys_start(command, " keys "),",", ldbtable);
+		int tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " keys "),",", ldbtable);
 		
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
 		 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
@@ -289,7 +322,7 @@ void ldb_command_delete_records(char *command)
 		int tuples_number = 0;
 		if (single_mode)
 		{
-			tuples_number = load_del_keys(&del_job, keys_start(command, " record "),"\n", ldbtable);
+			tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " record "),"\n", ldbtable);
 		}
 		else if (path && ldb_file_exists(path))
 		{
@@ -310,7 +343,7 @@ void ldb_command_delete_records(char *command)
 			}
 
 			if (buffer)
-				tuples_number = load_del_keys(&del_job, buffer,"\n", ldbtable);
+				tuples_number = ldb_collate_load_tuples_to_delete(&del_job, buffer,"\n", ldbtable);
 		}
 		else
 		{

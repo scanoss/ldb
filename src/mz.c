@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include <zlib.h>
 #include "ldb.h"
-
+#include "mz.h"
 /**
  * @brief Returns the hexadecimal md5 sum for "path"
  * 

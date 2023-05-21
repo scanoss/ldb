@@ -20,6 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ldb.h"
+#include "mz.h"
+#include "collate.h"
 /**
   * @file collate.c
   * @date 19 Aug 2020 
@@ -631,7 +633,7 @@ void map_from_tuples(job_delete_tuples_t * job)
 }
 
 
-int load_del_keys(job_delete_tuples_t * job, char * buffer, char * d, struct ldb_table table)
+int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, char * d, struct ldb_table table)
 {
 	char *delimiter = d;
 	tuple_t **tuples = NULL;
@@ -696,6 +698,9 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 {
 
 	long *del_map = NULL;
+
+	if (!strcmp(table.table, "sources") || strcmp(table.table, "notices"))
+		return ldb_collate_mz_table(table, p_sector);
 
 	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
