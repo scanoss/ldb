@@ -403,12 +403,20 @@ void ldb_command_collate(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		else if (max < ldbtable.key_ln)
-			printf("E076 Max record length cannot be smaller than table key\n");
+		if (!strcmp(ldbtable.table, "sources") || strcmp(ldbtable.table, "notices"))
+		{
+			ldb_collate_mz_table(ldbtable, -1);
+		}
 		else
-			ldb_collate(ldbtable, tmptable, max, false,-1, NULL, 0);
+		{
+
+			if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+				printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+			else if (max < ldbtable.key_ln)
+				printf("E076 Max record length cannot be smaller than table key\n");
+			else
+				ldb_collate(ldbtable, tmptable, max, false,-1, NULL, 0);
+		}
 	}
 
 	/* Unlock DB */

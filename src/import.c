@@ -44,6 +44,7 @@
 #include "ignored.h"
 #include <signal.h>
 #include "collate.h"
+#include "mz.h"
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
@@ -1287,7 +1288,12 @@ bool import_collate_sector(ldb_importation_config_t * config)
 				sector = -1;
 			
 			fprintf(stderr, "Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
-			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, 0); 			//rec_len MUST be 18 if table is wfp (fixed sector size).	
+			if (!strcmp(config->table, "sources") || strcmp(config->table, "notices"))
+			{
+				ldb_collate_mz_table(ldbtable, sector);
+			}
+			else
+				ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, 0); 			//rec_len MUST be 18 if table is wfp (fixed sector size).
 
 		}
 	}

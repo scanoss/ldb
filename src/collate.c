@@ -699,9 +699,6 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 	long *del_map = NULL;
 
-	if (!strcmp(table.table, "sources") || strcmp(table.table, "notices"))
-		return ldb_collate_mz_table(table, p_sector);
-
 	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
 	if (p_sector >= 0)

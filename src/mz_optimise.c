@@ -84,20 +84,24 @@ void mz_collate(struct mz_job *job)
 
 void ldb_collate_mz_table(struct ldb_table table, int p_sector)
 {
-	char sector_path[LDB_MAX_PATH] = "\0";
 	/* Start with sector 0*/
-	uint8_t k0 = 0;
+	uint16_t k0 = 0;
 	if (p_sector >= 0)
 	{
 		k0 = p_sector;
 	}
-
 	do {
-		sprintf(sector_path, "%s/%s/%s/%2x", ldb_root, table.db, table.table, k0);
-		if (ldb_file_exists(sector_path))
+		char sector_path[LDB_MAX_PATH] = "\0";
+		sprintf(sector_path, "%s/%s/%s/%.4x.mz", ldb_root, table.db, table.table, k0);
+		bool file_exist = ldb_file_exists(sector_path);
+		if (!file_exist) //check for encoded files
 		{
-			if (!strstr(sector_path, ".enc"))
-				continue;
+			strcat(sector_path, ".enc");
+			file_exist = ldb_file_exists(sector_path);
+		}
+		if (file_exist)
+		{
+			fprintf(stderr, "Processing %s (remove duplicates)\n", sector_path);
 			char *src = calloc(MAX_FILE_SIZE + 1, 1);
 			uint8_t *zsrc = calloc((MAX_FILE_SIZE + 1) * 2, 1);
 
