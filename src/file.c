@@ -180,7 +180,7 @@ bool ldb_create_dir(char *path)
 	else if (!mkdir(path, 0755)) 
 	{
   		result = true;
-		fprintf(stderr, "Created dir: %s\n", path);
+		//fprintf(stderr, "Created dir: %s\n", path);
 	}
 
 	return result;

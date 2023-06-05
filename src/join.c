@@ -14,6 +14,7 @@
 #include <libgen.h>
 #include "ldb.h"
 #include "import.h"
+#include "logger.h"
 
 /**
  * @brief Creates a directory with 0755 permissions.
@@ -134,7 +135,7 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 	/* If destination does not exist. Source is moved */
 	else
 	{
-		import_logger(true, "Moving %s into %s\n", source, destination);
+		import_logger(NULL, "Moving %s into %s\n", source, destination);
 		if (!move_file(source, destination, delete))
 		{
 			printf("Cannot move file\n");
@@ -143,7 +144,7 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 		return true;
 	}
 
-	import_logger(true, "Joining into %s\n", destination);
+	import_logger(NULL, "Joining into %s\n", destination);
 	file_append(source, destination, delete);
 	if (delete) unlink(source);
 

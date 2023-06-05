@@ -39,12 +39,11 @@
 #include "join.h"
 #include <pthread.h>
 #include <sys/sysinfo.h>
-#include <stdarg.h>
-#include <sys/ioctl.h>
 #include "ignored.h"
 #include <signal.h>
 #include "collate.h"
 #include "mz.h"
+#include "logger.h"
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
@@ -60,7 +59,7 @@ int (*decode) (int op, unsigned char *key, unsigned char *nonce,
 		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out) = NULL;
 
 double progress_timer = 0;
-int logger_offset = 20;
+
 
 void * lib_handle = NULL;
 bool ldb_import_decoder_lib_load(void)
@@ -73,64 +72,17 @@ bool ldb_import_decoder_lib_load(void)
 	char * err;
     if (lib_handle) 
 	{
-		fprintf(stderr, "Lib scanoss_encoder present\n");
+		import_logger(NULL, "\nLib scanoss_encoder present\n");
 		decode = dlsym(lib_handle, "scanoss_decode");
 		if ((err = dlerror())) 
 		{
-			fprintf(stderr,"%s\n", err);
+			import_logger(NULL,"%s\n", err);
 			return false;
 		}
 		return true;
      }
 	 
 	 return false;
-}
-
-struct winsize logger_window;
-#define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
-char import_logger_path[LDB_MAX_PATH] = LDB_CFG_PATH"/logs/";
-
-void import_logger(bool to_file, const char * fmt, ...)
-{
-	pthread_mutex_lock(&lock);
-	pthread_t t = pthread_self();
-	int i = 0;
-	bool found = false;
-	for (; i<max_threads; i++)
-	{
-		if (t == threads_list[i])
-		{
-			found = true;
-			break;
-		}
-	}
-	if (!found)
-		i = 0;
-	va_list ap;
-	va_start(ap, fmt);
-	if (i+logger_offset+max_threads/2 > logger_window.ws_row)
-	{
-		logger_offset = 0;
-		system("clear");
-	}
-	gotoxy(0, i + 1 + logger_offset);
-	fprintf(stderr, "\33[2K\r");
-	gotoxy(1, i + 1 + logger_offset);
-	fprintf(stderr, "Thread %d: ", i);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	if (to_file)
-	{
-		FILE * f = fopen(import_logger_path, "a");
-		if (f)
-		{
-			va_start(ap, fmt);
-			vfprintf(f, fmt, ap);
-			va_end(ap);
-			fclose(f);
-		}
-	}
-	pthread_mutex_unlock(&lock);
 }
 
 
@@ -150,7 +102,7 @@ bool csv_sort(ldb_importation_config_t * config)
 	char *command = malloc(MAX_CSV_LINE_LEN + 3 * LDB_MAX_PATH);
 	sprintf(command, "sort -T %s -u -o %s %s", config->tmp_path, config->csv_path, config->csv_path);
 	
-	import_logger(false, "Sorting %s\n", config->csv_path);
+	import_logger(NULL, "Sorting %s\n", config->csv_path);
 	
 	FILE *p = popen(command, "r");
 	if (p)
@@ -178,7 +130,7 @@ bool bin_sort(char *file_path, bool skip_sort)
 		return false;
 	if (skip_sort)
 		return true;
-	import_logger(false,"Sorting %s", file_path);
+	import_logger(NULL, "Sorting %s", file_path);
 	return bsort(file_path);
 }
 
@@ -252,9 +204,9 @@ void progress(char * path, char * table, size_t count, size_t max, bool percent)
 	pthread_mutex_unlock(&lock);
 
 	if (percent)
-		import_logger(false, "Importing %s to table %s: %.2f%%\r", path, table, ((double)count / (double)max) * 100);
+		import_logger(table, "Importing %s to table %s: %.2f%%\r", path, table, ((double)count / (double)max) * 100);
 	else
-		import_logger(false, "Importing %s to table %s: %lu\r", path, table, count);
+		import_logger(table, "Importing %s to table %s: %lu\r", path, table, count);
 	//fflush(stdout);
 }
 
@@ -403,8 +355,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 			}
 		}
 	}
-	//progress(config->csv_path, config->table, 100, 100, true);
-	import_logger(true, "%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
+	import_logger(NULL, "%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
 
 	if (record_ln)
 		ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
@@ -566,7 +517,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	FILE *fp = fopen(job->csv_path, "r");
 	if (fp == NULL)
 	{
-		fprintf(stderr, "File does not exist %s\n", job->csv_path);
+		import_logger(NULL, "File does not exist %s\n", job->csv_path);
 		return false;
 	}
 
@@ -637,15 +588,15 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	
 	/*sort the csv*/
 	csv_sort(job);
+	uint line_number = 0;
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		bytecounter += lineln;
-		
+		line_number++;
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
-			if (job->opt.params.verbose)
-				fprintf(stderr, "Line %s -- Skipped, %ld exceed MAX line size %d.\n", line, lineln, MAX_CSV_LINE_LEN);
+			LOG_INF("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
 
 			skipped++;
 			continue;
@@ -678,8 +629,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			/* Skip line if the URL is the same as last, importing unique files per url */
 			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
 			{
-				if (job->opt.params.verbose)
-					fprintf(stderr, "Line %s -- Skipped, repeated URL ID.\n", line);
+				LOG_INF("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
 				skip = true;
 			}
 			else
@@ -690,8 +640,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				data = field_n(3, line);
 				if (!data)
 				{
-					if (job->opt.params.verbose)
-						fprintf(stderr, "%s to  %s - %d - Error in line: %s -- Skipped\n", job->csv_path, job->table,job->opt.params.csv_fields, line);
+					LOG_INF("%s: Error in line: %d -- Skipped\n", job->csv_path, line_number);
 					skipped++;
 				}
 			}
@@ -724,8 +673,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			if (expected_fields)
 				if (csv_fields(line) != expected_fields)
 				{
-					if (job->opt.params.verbose)
-						fprintf(stderr, "Line %s -- Skipped, Missing CSV fields. Expected: %d.\n", line, expected_fields);
+					LOG_INF("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
 					skip = true;
 				}
 		/*	Disabled, we should have a ignored extension entry at this time 
@@ -744,8 +692,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
 			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
-				if (job->opt.params.verbose)
-					fprintf(stderr, "failed to parse key: %s\n", line);
+				log_info("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
 				continue;
 			}
 
@@ -852,7 +799,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (item_sector)
 		ldb_close_unlock(item_sector);
 
-	import_logger(true, "%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
+	import_logger(NULL, "%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
 
 	if (fclose(fp))
 		fprintf(stderr,"error closing %d\n", fileno(fp));
@@ -875,7 +822,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		{
 			if (sectors_modified[i])
 			{
-				import_logger(false, "Overwriting sector %02x of %s\n", i, job->table);
+				import_logger(NULL, "Overwriting sector %02x of %s\n", i, job->table);
 				uint8_t k = i;
 				ldb_sector_update(oss_bulk, &k);
 			}
@@ -1011,7 +958,7 @@ bool version_import(ldb_importation_config_t *job)
 		snprintf(path, LDB_MAX_PATH, "%s/version.json", dirname(job->path));
 		if(!ldb_file_exists(path))
 		{
-			fprintf(stderr, "Cannot find version file in path %s\n",job->path);
+			import_logger(NULL, "Cannot find version file in path %s\n",job->path);
 			return false;
 		}
 	}
@@ -1030,7 +977,7 @@ bool version_import(ldb_importation_config_t *job)
 	//exit if cannot find daily or monthly or there are am excess of characteres in the json
 	if ((!daily_date_i && !monthly_date_i) || test_len > 10)
 	{
-		fprintf(stderr, "Failed to process version file: %s\n", vf_import);
+		import_logger(NULL, "Failed to process version file: %s\n", vf_import);
 		free(vf_import);
 		free(daily_date_i);
 		free(monthly_date_i);
@@ -1059,7 +1006,7 @@ bool version_import(ldb_importation_config_t *job)
 	
 	if (!f)
 	{
-		fprintf(stderr, "Cannot create destination file: %s\n", path);
+		import_logger(NULL, "Cannot create destination file: %s\n", path);
 		return false;
 	}
 
@@ -1287,7 +1234,7 @@ bool import_collate_sector(ldb_importation_config_t * config)
 			if (ptr - filename < 2 || (ptr && *ptr != '.'))
 				sector = -1;
 			
-			fprintf(stderr, "Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
+			import_logger("Collating", "Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
 			if (!strcmp(config->table, "sources") || strcmp(config->table, "notices"))
 			{
 				ldb_collate_mz_table(ldbtable, sector);
@@ -1306,9 +1253,12 @@ bool ldb_import(ldb_importation_config_t * job)
 {
 	bool result = false;
 	ldb_importation_config_t config = *job;
+	if (config.opt.params.verbose)
+		logger_set_level(LOG_INFO);
 	if (config.opt.params.version_validation && !version_import(&config))
 	{
-		fprintf(stderr,"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
+		import_logger("Failed to validate version.json",
+		"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
 		exit(EXIT_FAILURE);
 	}
 	
@@ -1508,7 +1458,7 @@ void signalHandler(int signal) {
 
 	if (signal == SIGINT) 
 	{
-        printf("Safe abort, waiting threads to finish\n");
+        printf("\n\n Safe abort, waiting threads to finish\n");
         threads_end(threads_list);
 		exit(EXIT_FAILURE);
     }
@@ -1565,7 +1515,7 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 		}
 		else
 		{
-			fprintf(stderr, "Could not be able to find the file: %s\n", job->csv_path);
+			import_logger(NULL, "Could not be able to find the file: %s\n", job->csv_path);
 			return false;
 		}
 	}
@@ -1596,7 +1546,7 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
     } 
 	else 
 	{
-        fprintf(stderr, "Cannot open directory: %s\n", job->path);
+        import_logger(NULL, "Cannot open directory: %s\n", job->path);
 		return false;
     }
 	return true;
@@ -1609,12 +1559,12 @@ void print_jobs(struct ldb_importation_jobs_s * jobs)
 	char timeString[64];
 	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", localTime);
 
-	import_logger(true, "\n %s Tables to be processed:\n", timeString);
+	log_info("\n %s Tables to be processed:\n", timeString);
 	for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
 			if (jobs->sorted[i] != -1)
 			{
-				import_logger(true, "	%s: %s\n", jobs->job[jobs->sorted[i]]->table, 
+				log_info("	%s: %s\n", jobs->job[jobs->sorted[i]]->table, 
 										*jobs->job[jobs->sorted[i]]->csv_path != 0 ? jobs->job[jobs->sorted[i]]->csv_path : jobs->job[jobs->sorted[i]]->path);
 			}
 		}
@@ -1622,7 +1572,7 @@ void print_jobs(struct ldb_importation_jobs_s * jobs)
 		{
 			if (jobs->unsorted[i] != -1)
 			{
-				import_logger(true, "	%s: %s\n", jobs->job[jobs->unsorted[i]]->table, 
+				log_info("	%s: %s\n", jobs->job[jobs->unsorted[i]]->table, 
 										*jobs->job[jobs->unsorted[i]]->csv_path != 0 ? jobs->job[jobs->unsorted[i]]->csv_path : jobs->job[jobs->unsorted[i]]->path);
 			}
 		}
@@ -1649,6 +1599,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		strcpy(job.dbname, dbtable);
 	
 	ldb_importation_config_parse(&job, config);
+	if (job.opt.params.verbose)
+		logger_set_level(LOG_INFO);
 
 	if (!table || !*config) 
 	{
@@ -1656,7 +1608,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
 		if (!ldb_file_exists(config_path))
 		{
-			fprintf(stderr,"Warning, %s does not exist, creating default\n", config_path);
+			fprintf(stderr, "Warning, %s does not exist, creating default\n", config_path);
 			if (!ldb_create_db_config_default(job.dbname))
 				ldb_error("Error creating ldb default config\n");
 		}
@@ -1674,57 +1626,56 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		jobs.unsorted[i] = -1;
 	}
 
-	ioctl(0, TIOCGWINSZ, &logger_window);
-	ldb_prepare_dir(import_logger_path);
-	strcat(import_logger_path,jobs.dbname);
-	strcat(import_logger_path,".log");
-
 #ifdef LDB_MULTITHREADING_IMPORT
 	max_threads = get_nprocs() / 2;
 	fprintf(stderr, "Max threads set to: %d\n", max_threads);
 	pthread_mutex_init(&lock, NULL);
 #endif
 	threads_list = calloc(max_threads, sizeof(pthread_t));
+	
+	logger_init(job.dbname, max_threads, threads_list);
+
 	if (!table && ldb_dir_exists(path))
 	{
 		strcpy(job.path, path);
-		recurse_directory(&jobs, path, NULL);
-		system("clear");
+		recurse_directory(&jobs, path, NULL);		
 		print_jobs(&jobs);
 		
 		/* Process jobs*/
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
-			int to_add = 0;
+			int lines_to_add = 0;
 			if (jobs.sorted[i] != -1)
 			{
 				if (*jobs.job[jobs.sorted[i]]->csv_path)
-					to_add = 1;
+					lines_to_add = 1;
 				else
-					to_add = max_threads;
+					lines_to_add = max_threads;
+				
+				import_logger(jobs.job[jobs.sorted[i]]->table, NULL);
 				process_sectors(jobs.job[jobs.sorted[i]], threads_list);
 				free(jobs.job[jobs.sorted[i]]);
 				//wait for each table to finish
 				threads_end(threads_list);
-				fflush(stdout);
-				logger_offset += to_add;				
+				logger_offset_increase(lines_to_add);
 			}
 		}
+	
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
-			int to_add = 0;
+			int lines_to_add = 0;
 			if (jobs.unsorted[i] != -1)
 			{
 				if (*jobs.job[jobs.unsorted[i]]->csv_path)
-					to_add = 1;
+					lines_to_add = 1;
 				else
-					to_add = max_threads;
+					lines_to_add = max_threads;
+				import_logger(jobs.job[jobs.unsorted[i]]->table, NULL);
 				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
 				free(jobs.job[jobs.unsorted[i]]);
 				//wait for each table to finish
 				threads_end(threads_list);
-				fflush(stdout);
-				logger_offset += to_add;
+				logger_offset_increase(lines_to_add);
 			}
 		}
 
