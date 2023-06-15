@@ -10,7 +10,7 @@ int logger_offset = 20;
 struct winsize logger_window;
 #define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
 
-#define LOGGER_DIR LDB_CFG_PATH"/logs/"
+#define LOGGER_DIR "/var/log/scanoss/"
 char import_logger_path[LDB_MAX_PATH] = "\0";
 static pthread_mutex_t logger_lock;
 static pthread_t * threads_list = NULL;
