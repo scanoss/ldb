@@ -41,7 +41,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <openssl/md5.h>
-#include <popt.h>
+#include <getopt.h>
 #include "ldb.h"
 #include "command.h"
 #include "ldb_string.h"
@@ -323,29 +323,30 @@ typedef enum
 
 
 ldb_mode_t mode = LDB_CONSOLE;
+static int collate = 0;
 int main(int argc, char **argv)
 {
-	int opt;
 	char * dbname = NULL;//[LDB_MAX_NAME] = "\0";
 	char * path = NULL;
-	int collate = false;
 
-    struct poptOption options[] = {
-        {"version", 'v', POPT_ARG_NONE, 0, 'v', "Print ldb version", NULL}, 
-		{"help", 'h', POPT_ARG_NONE, 0, 'h', "Print ldb shell help", NULL},
-		{"collate", 'c', POPT_ARG_NONE, &collate, 0, "Collate after update", NULL},
-        {"update", 'u', POPT_ARG_STRING, &path, 'u', "Update kb from [path]", NULL},
-        {"dbname", 'n', POPT_ARG_STRING, &dbname, 0, "set database name, \"oss\" by default", NULL},
-        POPT_AUTOHELP
-        {NULL, 0, 0, NULL, 0, NULL, NULL}
-    };
-	
-	poptContext optCon = poptGetContext(NULL, argc, (const char **)argv, options, 0);
-    poptSetOtherOptionHelp(optCon, "[OPTIONS]");
+	static struct option long_options[] =
+        {
+          {"version",     no_argument,       0, 'v'},
+          {"help",  no_argument,       0, 'h'},
+          {"collate",  no_argument, &collate, 1},
+          {"update",  required_argument, 0, 'u'},
+          {"name",    required_argument, 0, 'n'},
+          {0, 0, 0, 0}
+        };
+    
+	/* getopt_long stores the option index here. */
+    int option_index = 0;
+	int opt;
 
-    while ((opt = poptGetNextOpt(optCon)) >= 0) 
+    while ( (opt = getopt_long (argc, argv, ":u:n:chv", long_options, &option_index)) >= 0) 
 	{
 		/* Check valid alpha is entered */
+		printf("opt: %c\n", opt);
 		switch (opt)
 		{
 			case 'v':
@@ -357,25 +358,20 @@ int main(int argc, char **argv)
 			case 'u':
 			{
 				mode = LDB_UPDATE;
+				path = strdup(optarg);
+				break;
+			}
+			case 'n':
+			{
+				dbname = strdup(optarg);
 				break;
 			}
 			default:
-				poptPrintUsage(optCon, stderr, 0);
             	exit(1);
 			break;
 		}
 	}
 
-	if (opt < -1)
-	{
-		poptPrintUsage(optCon, stderr, 0);
-		 fprintf(stderr, "%s: %s\n",
-              poptBadOption(optCon, POPT_BADOPTION_NOALIAS),
-              poptStrerror(opt));
-			              	exit(1);
-	}
-
-	poptFreeContext(optCon);
 
 	switch (mode)
 	{
