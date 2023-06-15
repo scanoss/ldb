@@ -47,6 +47,7 @@
 #include "ldb_string.h"
 #include "import.h"
 #include "collate.h"
+
 char *ldb_commands[] = 
 {
 	"help",

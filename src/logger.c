@@ -9,9 +9,11 @@
 int logger_offset = 20;
 struct winsize logger_window;
 #define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
-char import_logger_path[LDB_MAX_PATH] = LDB_CFG_PATH"/logs/";
+
+#define LOGGER_DIR LDB_CFG_PATH"/logs/"
+char import_logger_path[LDB_MAX_PATH] = "\0";
 static pthread_mutex_t logger_lock;
-static pthread_t * threads_list;
+static pthread_t * threads_list = NULL;
 static int threads_number = 0;
 static log_level_t level = LOG_BASIC;
 static double progress_timer = 0;
@@ -62,12 +64,15 @@ void import_logger(char * basic, const char * fmt, ...)
         pthread_t t = pthread_self();
         int i = 0;
         bool found = false;
-        for (; i < threads_number; i++)
+        if (threads_list)
         {
-            if (t == threads_list[i])
+            for (; i < threads_number; i++)
             {
-                found = true;
-                break;
+                if (t == threads_list[i])
+                {
+                    found = true;
+                    break;
+                }
             }
         }
         if (!found)
@@ -100,19 +105,38 @@ void import_logger(char * basic, const char * fmt, ...)
 	pthread_mutex_unlock(&logger_lock);
 }
 
+void logger_dbname_set(char * db)
+{
+    ldb_prepare_dir(LOGGER_DIR);
+    sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
+    
+    time_t currentTime = time(NULL);
+	struct tm *localTime = localtime(&currentTime);
+	char timeString[64];
+	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", localTime);
+    FILE * f = fopen(import_logger_path, "a");
+    if (f)
+    {
+        fprintf(f, "%s\n", timeString);
+        fclose(f);
+    }
+}
+
 void logger_init(char * db, int tnumber,  pthread_t * tlist)
 {
     system("clear");
     pthread_mutex_init(&logger_lock, NULL);
-    threads_list = tlist;
-    threads_number = tnumber;
+    
+    if (tlist)
+    {
+        threads_list = tlist;
+        threads_number = tnumber;
+    }
+
     int stdout_fd = fileno(stderr);
     ioctl(stdout_fd, TIOCGWINSZ, &logger_window);
 	
-    ldb_prepare_dir(import_logger_path);
-	
-    strcat(import_logger_path, db);
-	strcat(import_logger_path,".log");
+    logger_dbname_set(db);
 }
 
 void logger_offset_increase(int off)
@@ -131,17 +155,23 @@ void log_info(const char * fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    import_logger(NULL, fmt, args);
+    char * string;
+    vasprintf(&string, fmt, args);
+    import_logger(NULL, "%s", string);
+    free(string);
     va_end(args);
 }
 
 void log_debug(const char * fmt, ...)
 {
-    if (level > LOG_BASIC)
+    if (level > LOG_INFO)
     {
         va_list args;
         va_start(args, fmt);
-        import_logger(NULL, fmt, args);
+        char * string;
+        vasprintf(&string, fmt, args);
+        import_logger(NULL, "%s", string);
+        free(string);
         va_end(args);
     }
 }

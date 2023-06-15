@@ -31,6 +31,7 @@
 #include "ldb.h"
 #include <string.h>
 #include "mz.h"
+#include "logger.h"
 #define MAX_FILE_SIZE (4 * 1048576)
 
 
@@ -75,7 +76,8 @@ void mz_collate(struct mz_job *job)
 	/* Write updated mz file */
 	file_write(job->path, job->ptr, job->ptr_ln);
 
-	if (job->dup_c) printf("%u duplicated files eliminated\n", job->dup_c);
+	if (job->dup_c) 
+		log_info("%u duplicated files eliminated\n", job->dup_c);
 
 	free(job->mz);
 	free(job->ptr);
@@ -86,6 +88,8 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector)
 {
 	/* Start with sector 0*/
 	uint16_t k0 = 0;
+	logger_dbname_set(table.db);
+	
 	if (p_sector >= 0)
 	{
 		k0 = p_sector;
@@ -101,7 +105,7 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector)
 		}
 		if (file_exist)
 		{
-			fprintf(stderr, "Processing %s (remove duplicates)\n", sector_path);
+			log_info("Processing %s (remove duplicates)\n", sector_path);
 			char *src = calloc(MAX_FILE_SIZE + 1, 1);
 			uint8_t *zsrc = calloc((MAX_FILE_SIZE + 1) * 2, 1);
 

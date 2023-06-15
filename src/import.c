@@ -130,7 +130,7 @@ bool bin_sort(char *file_path, bool skip_sort)
 		return false;
 	if (skip_sort)
 		return true;
-	import_logger(NULL, "Sorting %s", file_path);
+	import_logger(NULL, "Sorting %s\n", file_path);
 	return bsort(file_path);
 }
 
@@ -596,7 +596,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
-			LOG_INF("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
+			log_debug("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
 
 			skipped++;
 			continue;
@@ -629,7 +629,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			/* Skip line if the URL is the same as last, importing unique files per url */
 			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
 			{
-				LOG_INF("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
+				log_debug("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
 				skip = true;
 			}
 			else
@@ -640,7 +640,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				data = field_n(3, line);
 				if (!data)
 				{
-					LOG_INF("%s: Error in line: %d -- Skipped\n", job->csv_path, line_number);
+					log_debug("%s: Error in line: %d -- Skipped\n", job->csv_path, line_number);
 					skipped++;
 				}
 			}
@@ -673,7 +673,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			if (expected_fields)
 				if (csv_fields(line) != expected_fields)
 				{
-					LOG_INF("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
+					log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
 					skip = true;
 				}
 		/*	Disabled, we should have a ignored extension entry at this time 
@@ -692,7 +692,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
 			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
-				log_info("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
+				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
 				continue;
 			}
 
@@ -1235,7 +1235,7 @@ bool import_collate_sector(ldb_importation_config_t * config)
 				sector = -1;
 			
 			import_logger("Collating", "Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
-			if (!strcmp(config->table, "sources") || strcmp(config->table, "notices"))
+			if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
 			{
 				ldb_collate_mz_table(ldbtable, sector);
 			}
@@ -1253,8 +1253,8 @@ bool ldb_import(ldb_importation_config_t * job)
 {
 	bool result = false;
 	ldb_importation_config_t config = *job;
-	if (config.opt.params.verbose)
-		logger_set_level(LOG_INFO);
+
+	logger_set_level(config.opt.params.verbose);
 	if (config.opt.params.version_validation && !version_import(&config))
 	{
 		import_logger("Failed to validate version.json",
@@ -1348,6 +1348,7 @@ struct ldb_importation_jobs_s
 	int sorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted_index;
+	import_params_t common_opt;
 };
 
 static void  recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
@@ -1385,7 +1386,7 @@ static void  recurse_directory(struct ldb_importation_jobs_s * jobs, char *name,
 				jobs->job = realloc(jobs->job, ((jobs->number+1) * sizeof(ldb_importation_config_t*)));
 				jobs->job[jobs->number] = calloc(1, sizeof(ldb_importation_config_t));
 				/* load default config*/
-				import_params_t opt = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+				import_params_t opt = jobs->common_opt;
 				jobs->job[jobs->number]->opt = opt;
 				strcpy(jobs->job[jobs->number]->dbname, jobs->dbname);
 				strncpy(jobs->job[jobs->number]->table, table_name, LDB_MAX_NAME);
@@ -1458,7 +1459,8 @@ void signalHandler(int signal) {
 
 	if (signal == SIGINT) 
 	{
-        printf("\n\n Safe abort, waiting threads to finish\n");
+        system("clear");
+		printf("\n\n Safe abort, waiting threads to finish\n");
         threads_end(threads_list);
 		exit(EXIT_FAILURE);
     }
@@ -1554,28 +1556,25 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 
 void print_jobs(struct ldb_importation_jobs_s * jobs)
 {
-	time_t currentTime = time(NULL);
-	struct tm *localTime = localtime(&currentTime);
-	char timeString[64];
-	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", localTime);
-
-	log_info("\n %s Tables to be processed:\n", timeString);
+	log_info("\n Tables to be processed:\n");
 	for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+	{
+		if (jobs->sorted[i] != -1)
 		{
-			if (jobs->sorted[i] != -1)
-			{
-				log_info("	%s: %s\n", jobs->job[jobs->sorted[i]]->table, 
-										*jobs->job[jobs->sorted[i]]->csv_path != 0 ? jobs->job[jobs->sorted[i]]->csv_path : jobs->job[jobs->sorted[i]]->path);
-			}
+			log_info("	%s: %s\n", jobs->job[jobs->sorted[i]]->table, 
+									*jobs->job[jobs->sorted[i]]->csv_path != 0 ? jobs->job[jobs->sorted[i]]->csv_path : jobs->job[jobs->sorted[i]]->path);
 		}
-		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+	}
+	
+	for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
+	{
+		if (jobs->unsorted[i] != -1)
 		{
-			if (jobs->unsorted[i] != -1)
-			{
-				log_info("	%s: %s\n", jobs->job[jobs->unsorted[i]]->table, 
-										*jobs->job[jobs->unsorted[i]]->csv_path != 0 ? jobs->job[jobs->unsorted[i]]->csv_path : jobs->job[jobs->unsorted[i]]->path);
-			}
+			log_info("	%s: %s\n", jobs->job[jobs->unsorted[i]]->table, 
+									*jobs->job[jobs->unsorted[i]]->csv_path != 0 ? jobs->job[jobs->unsorted[i]]->csv_path : jobs->job[jobs->unsorted[i]]->path);
 		}
+	}
+
 }
 
 bool ldb_import_command(char * dbtable, char * path, char * config)
@@ -1617,7 +1616,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	if (!ldb_database_exists(job.dbname))
 		ldb_create_database(job.dbname);
 
-	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0};
+	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .common_opt = job.opt};
 	strcpy(jobs.dbname, job.dbname);
 	jobs.unsorted_index = 0;
 	for (int i = 0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
@@ -1640,7 +1639,6 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		strcpy(job.path, path);
 		recurse_directory(&jobs, path, NULL);		
 		print_jobs(&jobs);
-		
 		/* Process jobs*/
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{

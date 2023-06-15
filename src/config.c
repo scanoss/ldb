@@ -30,6 +30,7 @@
   */
 #include "ldb.h"
 #include "ldb_string.h"
+#include "logger.h"
 /**
  * @brief Loads table configuration from .cfg file
  * 
@@ -98,7 +99,7 @@ struct ldb_table ldb_read_cfg(char *db_table)
 
 	if (!cfg)
 	{
-		printf("Warning: cannot config file \"%s\" does not exist. Using table's default config\n", path);
+		log_info("Warning: config file \"%s\" does not exist. Using table's default config\n", path);
 		return tablecfg;
 	}
 

@@ -22,6 +22,7 @@
 #include "ldb.h"
 #include "mz.h"
 #include "collate.h"
+#include "logger.h"
 /**
   * @file collate.c
   * @date 19 Aug 2020 
@@ -412,7 +413,7 @@ static bool data_compare(char * a, char * b)
 		if (strchr(buffer_a, '*') && strlen(buffer_a) < 4)
 		{
 			skip_field = true;
-			printf("skipping");
+			log_debug("skipping");
 		}
 		
 		while (*b && *b != ',')
@@ -422,7 +423,7 @@ static bool data_compare(char * a, char * b)
 		}
 
 		int r = strcmp(buffer_a, buffer_b);
-		printf("<<<comparing: %s / %s : %d >>\n", buffer_a, buffer_b, r);
+		log_debug("<<<comparing: %s / %s : %d >>\n", buffer_a, buffer_b, r);
 		if (!skip_field && r)
 			return false;
 		a++;
@@ -590,13 +591,13 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 		time_t seconds = time(NULL);
 		if ((seconds - collate->last_report) > COLLATE_REPORT_SEC)
 		{
-			printf("%02x%02x%02x%02x: %'ld records read\n", key[0], key[1], key[2], key[3], collate->rec_count);
+			log_debug("%02x%02x%02x%02x: %'ld records read\n", key[0], key[1], key[2], key[3], collate->rec_count);
 			collate->last_report = seconds;
 		}
 	}
 	else
 	{
-		printf("%02x%02x%02x%02x: Ignored record with %d bytes\n", key[0], key[1], key[2], key[3], LDB_KEY_LN + subkey_ln + size);
+		log_debug("%02x%02x%02x%02x: Ignored record with %d bytes\n", key[0], key[1], key[2], key[3], LDB_KEY_LN + subkey_ln + size);
 	}
 
 	/* Save last key */
@@ -713,10 +714,11 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 	long total_records = 0;
 	setlocale(LC_NUMERIC, "");
-
+	
+	logger_dbname_set(table.db);
 	/* Read each DB sector */
 	do {
-		printf("Reading sector %02x\n", k0);
+		log_info("Collate Table %s - Reading sector %02x\n", table.table, k0);
 		uint8_t *sector = ldb_load_sector(table, &k0);
 		if (sector)
 		{
@@ -783,7 +785,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			}
 
 			total_records += collate.rec_count;
-			printf("%'ld records read\n", collate.rec_count);
+			log_info("%s - %02x: %'ld records read\n", table.table, k0, collate.rec_count);
 
 			/* Close .out sector */
 			fclose(collate.out_sector);
@@ -792,7 +794,8 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			if (collate.merge) ldb_sector_erase(table, k);
 			else ldb_sector_update(out_table, k);
 
-			if (collate.del_count) printf("%'ld records deleted\n", collate.del_count);
+			if (collate.del_count) 
+				log_info("%s - sector %02X: %'ld records deleted\n", table.table, k0, collate.del_count);
 
 			free(collate.data);
 			free(collate.tmp_data);
@@ -805,7 +808,11 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 	} while (k0++ < 255 && !delete);
 
 	/* Show processed totals */
-	printf("Collate completed with %'ld records\n", total_records);
+	if (p_sector >= 0)
+		log_info("Table %s - sector %2x: collate completed with %'ld records\n", table.table , total_records);
+	else
+		log_info("Table %s: collate completed with %'ld records\n", table.table, total_records);
+
 
 	fflush(stdout);
 
