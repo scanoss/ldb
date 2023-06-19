@@ -72,11 +72,11 @@ bool ldb_import_decoder_lib_load(void)
 	char * err;
     if (lib_handle) 
 	{
-		import_logger(NULL, "\nLib scanoss_encoder present\n");
+		log_info("Lib scanoss_encoder present\n");
 		decode = dlsym(lib_handle, "scanoss_decode");
 		if ((err = dlerror())) 
 		{
-			import_logger(NULL,"%s\n", err);
+			log_info("%s\n", err);
 			return false;
 		}
 		return true;
@@ -102,7 +102,7 @@ bool csv_sort(ldb_importation_config_t * config)
 	char *command = malloc(MAX_CSV_LINE_LEN + 3 * LDB_MAX_PATH);
 	sprintf(command, "sort -T %s -u -o %s %s", config->tmp_path, config->csv_path, config->csv_path);
 	
-	import_logger(NULL, "Sorting %s\n", config->csv_path);
+	log_info("Sorting %s\n", config->csv_path);
 	
 	FILE *p = popen(command, "r");
 	if (p)
@@ -130,7 +130,7 @@ bool bin_sort(char *file_path, bool skip_sort)
 		return false;
 	if (skip_sort)
 		return true;
-	import_logger(NULL, "Sorting %s\n", file_path);
+	log_info("Sorting %s\n", file_path);
 	return bsort(file_path);
 }
 
@@ -197,6 +197,7 @@ void progress(char * path, char * table, size_t count, size_t max, bool percent)
 	struct timeval t;
 	gettimeofday(&t, NULL);
 	double tmp = (double)(t.tv_usec) / 1000000 + (double)(t.tv_sec);
+	logger_basic(NULL);
 	if ((tmp - progress_timer) < 5)
 		return;
 	pthread_mutex_lock(&lock);
@@ -204,9 +205,15 @@ void progress(char * path, char * table, size_t count, size_t max, bool percent)
 	pthread_mutex_unlock(&lock);
 
 	if (percent)
-		import_logger(table, "Importing %s to table %s: %.2f%%\r", path, table, ((double)count / (double)max) * 100);
+	{
+		logger_basic("%s", table);
+		log_info("Importing %s to table %s: %.2f%%\r", path, table, ((double)count / (double)max) * 100);
+	}
 	else
-		import_logger(table, "Importing %s to table %s: %lu\r", path, table, count);
+	{
+		logger_basic("%s\n", table);
+		log_info("Importing %s to table %s: %lu\r", path, table, count);
+	}
 	//fflush(stdout);
 }
 
@@ -355,7 +362,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 			}
 		}
 	}
-	import_logger(NULL, "%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
+	log_info("%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
 
 	if (record_ln)
 		ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
@@ -517,7 +524,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	FILE *fp = fopen(job->csv_path, "r");
 	if (fp == NULL)
 	{
-		import_logger(NULL, "File does not exist %s\n", job->csv_path);
+		log_info("File does not exist %s\n", job->csv_path);
 		return false;
 	}
 
@@ -725,7 +732,6 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 					item_sector = ldb_open(oss_bulk, itemid, "r+");
 					sectors_modified[itemid[0]] = true;
 				}
-				
 
 				item_ptr = 0;
 				item_rg_start = 0;
@@ -799,7 +805,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (item_sector)
 		ldb_close_unlock(item_sector);
 
-	import_logger(NULL, "%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
+	log_info("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
 
 	if (fclose(fp))
 		fprintf(stderr,"error closing %d\n", fileno(fp));
@@ -822,7 +828,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		{
 			if (sectors_modified[i])
 			{
-				import_logger(NULL, "Overwriting sector %02x of %s\n", i, job->table);
+				log_info("Overwriting sector %02x of %s\n", i, job->table);
 				uint8_t k = i;
 				ldb_sector_update(oss_bulk, &k);
 			}
@@ -958,7 +964,7 @@ bool version_import(ldb_importation_config_t *job)
 		snprintf(path, LDB_MAX_PATH, "%s/version.json", dirname(job->path));
 		if(!ldb_file_exists(path))
 		{
-			import_logger(NULL, "Cannot find version file in path %s\n",job->path);
+			logger_basic("Cannot find version file in path %s\n",job->path);
 			return false;
 		}
 	}
@@ -977,7 +983,7 @@ bool version_import(ldb_importation_config_t *job)
 	//exit if cannot find daily or monthly or there are am excess of characteres in the json
 	if ((!daily_date_i && !monthly_date_i) || test_len > 10)
 	{
-		import_logger(NULL, "Failed to process version file: %s\n", vf_import);
+		logger_basic("Failed to process version file: %s\n", vf_import);
 		free(vf_import);
 		free(daily_date_i);
 		free(monthly_date_i);
@@ -1006,7 +1012,7 @@ bool version_import(ldb_importation_config_t *job)
 	
 	if (!f)
 	{
-		import_logger(NULL, "Cannot create destination file: %s\n", path);
+		logger_basic("Cannot create destination file: %s\n", path);
 		return false;
 	}
 
@@ -1233,8 +1239,8 @@ bool import_collate_sector(ldb_importation_config_t * config)
 			long sector = strtol(filename, &ptr, 16);
 			if (ptr - filename < 2 || (ptr && *ptr != '.'))
 				sector = -1;
-			
-			import_logger("Collating", "Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
+			logger_basic("Collating - %s", dbtable);
+			log_info("Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
 			if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
 			{
 				ldb_collate_mz_table(ldbtable, sector);
@@ -1257,8 +1263,7 @@ bool ldb_import(ldb_importation_config_t * job)
 	logger_set_level(config.opt.params.verbose);
 	if (config.opt.params.version_validation && !version_import(&config))
 	{
-		import_logger("Failed to validate version.json",
-		"Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
+		logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
 		exit(EXIT_FAILURE);
 	}
 	
@@ -1351,7 +1356,7 @@ struct ldb_importation_jobs_s
 	import_params_t common_opt;
 };
 
-static void  recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
+static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -1517,7 +1522,7 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 		}
 		else
 		{
-			import_logger(NULL, "Could not be able to find the file: %s\n", job->csv_path);
+			log_info("Could not be able to find the file: %s\n", job->csv_path);
 			return false;
 		}
 	}
@@ -1548,7 +1553,7 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
     } 
 	else 
 	{
-        import_logger(NULL, "Cannot open directory: %s\n", job->path);
+       	log_info("Cannot open directory: %s\n", job->path);
 		return false;
     }
 	return true;
@@ -1650,7 +1655,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 				else
 					lines_to_add = max_threads;
 				
-				import_logger(jobs.job[jobs.sorted[i]]->table, NULL);
+				logger_basic("%s",jobs.job[jobs.sorted[i]]->table);
 				process_sectors(jobs.job[jobs.sorted[i]], threads_list);
 				free(jobs.job[jobs.sorted[i]]);
 				//wait for each table to finish
@@ -1668,7 +1673,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = 1;
 				else
 					lines_to_add = max_threads;
-				import_logger(jobs.job[jobs.unsorted[i]]->table, NULL);
+				logger_basic("%s",jobs.job[jobs.unsorted[i]]->table);
 				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
 				free(jobs.job[jobs.unsorted[i]]);
 				//wait for each table to finish

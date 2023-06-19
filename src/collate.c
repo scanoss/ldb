@@ -570,9 +570,10 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	{
 		if (collate->key_rec_count == LDB_MAX_RECORDS + 1)
 		{
-			for (int i = 0; i < LDB_KEY_LN; i++) fprintf(stderr, "%02x", key[i]);
-			for (int i = 0; i < subkey_ln; i++)  fprintf(stderr, "%02x", subkey[i]);
-			fprintf(stderr, ": Max list size exceeded\n");
+			char hex_val[(LDB_KEY_LN + subkey_ln) * 2 + 1];
+			ldb_bin_to_hex(key, LDB_KEY_LN, hex_val);
+			ldb_bin_to_hex(subkey, subkey_ln, hex_val + LDB_KEY_LN * 2);
+			log_info("%s: Max list size exceeded\n",hex_val);
 			collate->key_rec_count++;
 		}
 		return false;
@@ -591,13 +592,13 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 		time_t seconds = time(NULL);
 		if ((seconds - collate->last_report) > COLLATE_REPORT_SEC)
 		{
-			log_debug("%02x%02x%02x%02x: %'ld records read\n", key[0], key[1], key[2], key[3], collate->rec_count);
+			log_debug("%s - %02x%02x%02x%02x: %'ld records read\n", collate->out_table.table, key[0], key[1], key[2], key[3], collate->rec_count);
 			collate->last_report = seconds;
 		}
 	}
 	else
 	{
-		log_debug("%02x%02x%02x%02x: Ignored record with %d bytes\n", key[0], key[1], key[2], key[3], LDB_KEY_LN + subkey_ln + size);
+		log_debug("%s - %02x%02x%02x%02x: Ignored record with %d bytes\n", collate->out_table.table, key[0], key[1], key[2], key[3], LDB_KEY_LN + subkey_ln + size);
 	}
 
 	/* Save last key */
@@ -718,7 +719,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 	logger_dbname_set(table.db);
 	/* Read each DB sector */
 	do {
-		log_info("Collate Table %s - Reading sector %02x\n", table.table, k0);
+		log_info("Collating Table %s - Reading sector %02x\n", table.table, k0);
 		uint8_t *sector = ldb_load_sector(table, &k0);
 		if (sector)
 		{

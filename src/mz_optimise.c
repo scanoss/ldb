@@ -77,7 +77,7 @@ void mz_collate(struct mz_job *job)
 	file_write(job->path, job->ptr, job->ptr_ln);
 
 	if (job->dup_c) 
-		log_info("%u duplicated files eliminated\n", job->dup_c);
+		log_info("%s: %u duplicated files eliminated\n", job->path, job->dup_c);
 
 	free(job->mz);
 	free(job->ptr);

@@ -6,7 +6,7 @@
 #include <sys/time.h>
 
 
-int logger_offset = 20;
+int logger_offset = 0;
 struct winsize logger_window;
 #define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
 
@@ -23,43 +23,55 @@ static double progress_timer = 0;
 char animation[] = {'|', '/', '-','\\'};
 int animation_index = 0;
 
-void logger_basic(char * log)
+void logger_basic(const char * fmt, ...)
 {
-    if (animation_index == sizeof(animation))
+    if (level != LOG_BASIC)
+        return;
+    pthread_mutex_lock(&logger_lock);
+    if (animation_index >= sizeof(animation))
         animation_index = 0;
-    
-    gotoxy(0, logger_offset);
 
-    if (log)
+    struct timeval t;
+	gettimeofday(&t, NULL);
+    double tmp = (double)(t.tv_usec) / 1000000 + (double)(t.tv_sec);
+	
+    if (!fmt && tmp - progress_timer < 2)
     {
+	    pthread_mutex_unlock(&logger_lock);
+        return;
+    }
+    
+    progress_timer = tmp;
+
+    gotoxy(0, logger_offset);
+   
+    if (fmt)
+    {
+        va_list args;
+        va_start(args, fmt);
+        char * string;
+        vasprintf(&string, fmt, args);
         fprintf(stderr, "\33[2K\r");
         gotoxy(0, logger_offset);
-        fprintf(stderr, "%c  Importing: %s ", animation[animation_index], log);
+        fprintf(stderr, "%c  Import in progress: %s ", animation[animation_index], string);
+        free(string);
+        va_end(args);
     }
     else
     {
-        struct timeval t;
-	    gettimeofday(&t, NULL);
-        double tmp = (double)(t.tv_usec) / 1000000 + (double)(t.tv_sec);
-	    if ((tmp - progress_timer) < 1)
-		    return;
-        
-        progress_timer = tmp;
         fprintf(stderr, "%c", animation[animation_index]);
     }
-    
     animation_index++;
+    pthread_mutex_unlock(&logger_lock);
 }
 
-void import_logger(char * basic, const char * fmt, ...)
+void log_info(const char * fmt, ...)
 {
 	va_list ap;
-    
+    logger_basic(NULL);
     pthread_mutex_lock(&logger_lock);
     
-    if (level == LOG_BASIC)
-        logger_basic(basic);
-    else if (fmt)
+    if (level > LOG_BASIC && fmt)
     {
         pthread_t t = pthread_self();
         int i = 0;
@@ -151,17 +163,6 @@ void logger_set_level(log_level_t l)
     level = l;
 }
 
-void log_info(const char * fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    char * string;
-    vasprintf(&string, fmt, args);
-    import_logger(NULL, "%s", string);
-    free(string);
-    va_end(args);
-}
-
 void log_debug(const char * fmt, ...)
 {
     if (level > LOG_INFO)
@@ -170,7 +171,7 @@ void log_debug(const char * fmt, ...)
         va_start(args, fmt);
         char * string;
         vasprintf(&string, fmt, args);
-        import_logger(NULL, "%s", string);
+        log_info("%s", string);
         free(string);
         va_end(args);
     }
