@@ -514,7 +514,6 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	bool bin_mode = false;
 	bool skip_csv_check = job->opt.params.skip_fields_check;
 	bool sectors_modified[256] = {false};
-
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
@@ -528,7 +527,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		return false;
 	}
 
-	int expected_fields = (skip_csv_check ? 0 : job->opt.params.csv_fields);
+	int expected_fields = (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
 
 	char *line = NULL;
 	size_t len = 0;
@@ -656,7 +655,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		}
 
 		/* Calculate record size */
-		uint16_t r_size = 0;
+		int r_size = 0;
 		unsigned char data_bin[MAX_CSV_LINE_LEN];
 		if (data)
 		{
@@ -666,6 +665,11 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				{
 					//pthread_mutex_lock(&lock);
 					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
+					if (r_size <= 0)
+					{
+						log_info("Error: failed to decode line %s. Skipping\n", line);
+						skip = true;
+					}
 					//pthread_mutex_unlock(&lock);
 				}
 				else
@@ -677,12 +681,11 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 				r_size = strlen(data);
 			}
 			/* Check if number of fields matches the expectation */
-			if (expected_fields)
-				if (csv_fields(line) != expected_fields)
-				{
-					log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
-					skip = true;
-				}
+			if (expected_fields && csv_fields(line) != expected_fields)
+			{
+				log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
+				skip = true;
+			}
 		/*	Disabled, we should have a ignored extension entry at this time 
 			if (job->opt.params.has_secondary_key && ignored_extension(data) && !bin_mode) //we dont know the file extension in bin_mode
 				skip = true; */
@@ -1055,8 +1058,8 @@ const char * config_parameters[] = {
 										.is_mz_table = 0,\
 										.binary_mode = 0,\
 										.is_wfp_table = 0,\
-										.csv_fields = 0,\
-										.skip_fields_check = 1,\
+										.csv_fields = 1,\
+										.skip_fields_check = 0,\
 										.collate = 0,\
 										.collate_max_rec = 1024}
 
