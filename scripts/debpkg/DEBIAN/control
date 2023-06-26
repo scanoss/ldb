@@ -1,0 +1,8 @@
+Package: ldb
+Version: LDB_VERSION
+Maintainer: SCANOSS <support@scanoss.com>
+Architecture: amd64
+Depends: libssl1.1 (>= 1.1.0), libc6 (>= 2.4), zlib1g (>= 1:1.1.4)
+Description: SCANOSS LDB
+  The LDB (Linked-list database) is a headless database management system focused in single-key, read-only application on vast amounts of data, while maintaining a minimal footprint and keeping system calls to a bare minimum. Information is structured using linked lists.
+License: GPL-2+
