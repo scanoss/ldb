@@ -138,6 +138,7 @@ void help()
 	printf("	ldb -u [path] -n[db_name]\n");
 	printf("		create \"db_name\" or update a existent one from \"path\". If \"db_name\" is not specified \"oss\" will be used by default\n");
 	printf("		This command is an alias of \"bulk insert\" using the default parameters of an standar ldb\n");
+	printf("	ldb -f [filename]	Process a list of commands from a file named filename\n");
 
 
 
@@ -268,6 +269,40 @@ bool execute(char *raw_command)
 	return true;
 }
 
+
+/**
+ * @brief Process a file containing a list of commands
+ * CLI closes when all commands have been processed 
+ * @param filename path of the commands file 
+ */
+
+void file_handle(char *filename)
+{
+
+	char *command = NULL;
+	size_t size = 0;
+
+	FILE *cmdFile;
+    char line[500];
+    
+    cmdFile = fopen(filename, "r");
+    if (cmdFile == NULL) {
+        printf("Can not open commands file.\n");
+        return EXIT_FAILURE;
+    }
+    
+    while (fgets(line, sizeof(line), cmdFile) != NULL) {
+    	ldb_trim(line);
+		execute(line);
+    }
+    
+    fclose(cmdFile);
+	free(command);
+	return false;
+}
+
+
+
 /**
  * @brief Handle the command line interface
  * To close the program, the variable stay should be set to false
@@ -328,6 +363,7 @@ int main(int argc, char **argv)
 {
 	char * dbname = NULL;//[LDB_MAX_NAME] = "\0";
 	char * path = NULL;
+	char * filename = NULL;
 
 	static struct option long_options[] =
         {
@@ -343,7 +379,7 @@ int main(int argc, char **argv)
     int option_index = 0;
 	int opt;
 
-    while ( (opt = getopt_long (argc, argv, ":u:n:chv", long_options, &option_index)) >= 0) 
+    while ( (opt = getopt_long (argc, argv, ":f:u:n:chv", long_options, &option_index)) >= 0) 
 	{
 		/* Check valid alpha is entered */
 		printf("opt: %c\n", opt);
@@ -364,6 +400,11 @@ int main(int argc, char **argv)
 			case 'n':
 			{
 				dbname = strdup(optarg);
+				break;
+			}
+			case 'f':
+			{
+				filename = strdup(optarg);
 				break;
 			}
 			default:
@@ -404,7 +445,12 @@ int main(int argc, char **argv)
 	bool stdin_off = is_stdin_off();
 
 	if (!ldb_check_root()) return EXIT_FAILURE;
-
+	
+	if (filename!=NULL){
+		file_handle(filename);
+		return EXIT_SUCCESS;
+	}
+	
 	if (stdin_off) welcome();
 
 	do if (stdin_off) ldb_prompt();
