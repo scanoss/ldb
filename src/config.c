@@ -82,7 +82,7 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
  */
 struct ldb_table ldb_read_cfg(char *db_table)
 {
-	struct ldb_table tablecfg = {.db = "\0", .table = "\0", .key_ln = 16, .rec_ln = 0, .sec_key = 0, .tmp = false, .ts_ln = 2}; // default config
+	struct ldb_table tablecfg = {.db = "\0", .table = "\0", .key_ln = 16, .rec_ln = 0, .keys = 1, .tmp = false, .ts_ln = 2}; // default config
 
 	char tmp[LDB_MAX_PATH] = "\0";
 	strcpy(tmp, db_table);
@@ -104,8 +104,8 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	}
 
 	// Read configuration file
-	int key_ln, rec_ln, sec_key;
-	int result = fscanf(cfg, "%d,%d,%d", &key_ln, &rec_ln, &sec_key);
+	int key_ln, rec_ln, keys;
+	int result = fscanf(cfg, "%d,%d,%d", &key_ln, &rec_ln, &keys);
 
 	if (result < 2)
 	{
@@ -120,11 +120,11 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	// backward compatibility with cfg files
 	if (result < 3)
 	{
-		printf("Warning: \"secondary key mode\" is undefined in config file %s, using default (false)\n", path);
-		sec_key = 0;
+		printf("Warning: table's keys are undefined in config file %s\n", path);
+		keys = -1;
 	}
 
-	tablecfg.sec_key = sec_key;
+	tablecfg.keys = keys;
 	fclose(cfg);
 	return tablecfg;
 }
@@ -137,13 +137,13 @@ struct ldb_table ldb_read_cfg(char *db_table)
  * @param keylen Key lenght
  * @param reclen register lenght
  */
-void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int sec_key)
+void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys)
 {
 	char *path = malloc(LDB_MAX_PATH);
 	sprintf(path, "%s/%s/%s.cfg", ldb_root, db, table);
 
 	FILE *cfg = fopen(path, "w+");
-	fprintf(cfg,"%d,%d,%d\n", keylen, reclen, sec_key);
+	fprintf(cfg,"%d,%d,%d\n", keylen, reclen, keys);
 	fclose(cfg);
 
 	free(path);

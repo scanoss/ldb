@@ -69,7 +69,7 @@ struct ldb_table
 	int  rec_ln; // data record length, otherwise 0 for variable-length data
     int  ts_ln;  // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 	bool tmp; // is this a .tmp sector instead of a .ldb?
-	bool sec_key;
+	int keys;
 	uint8_t *current_key;
 	uint8_t *last_key;
 };
@@ -128,13 +128,13 @@ void ldb_hex_to_bin(char *hex, int hex_ln, uint8_t *out);
 void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out);
 bool ldb_check_root();
 struct ldb_table ldb_read_cfg(char *db_table);
-void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int sec_key);
+void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys);
 bool ldb_valid_table(char *table);
 bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_version();
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
-bool ldb_create_table(char *db, char *table, int keylen, int reclen, int sec_key);
+bool ldb_create_table(char *db, char *table, int keylen, int reclen, int keys);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key);

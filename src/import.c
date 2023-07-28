@@ -297,7 +297,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 
 	/* Create table if it doesn't exist */
 	if (!ldb_table_exists(config->dbname, config->table))
-		ldb_create_table(config->dbname, config->table, 4, rec_ln, 0);
+		ldb_create_table(config->dbname, config->table, 4, rec_ln, 1);
 
 	/* Open ldb */
 	out = ldb_open(oss_wfp, last_wfp, "r+");
@@ -570,7 +570,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		ldb_create_database(job->dbname);
 
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number - 1);
+		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
 	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
@@ -578,13 +578,19 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	snprintf(db_table,LDB_MAX_NAME-1, "%s/%s", job->dbname, job->table);
 
 	struct ldb_table oss_bulk = ldb_read_cfg(db_table);
+	if (oss_bulk.keys < 1)
+	{
+		oss_bulk.keys = job->opt.params.keys_number;
+		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys);
+		log_info("Table %s config file was updated\n", oss_bulk.table);
+	}
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
 	oss_bulk.key_ln = 4; 
 
 	if (job->opt.params.overwrite)
 		oss_bulk.tmp = true;
 
-	int field2_ln = oss_bulk.sec_key ? 16 : 0;
+	int field2_ln = (oss_bulk.keys - 1) * MD5_LEN;
 	char last_url_id[MD5_LEN_HEX+1] = "\0";
 
 	/* Lock DB */
@@ -630,7 +636,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		/* File table will have the url id as the second field, which will be
 			 converted to binary. Data then starts on the third field. Also file extensions
 			 are checked and ruled out if ignored */
-		if (oss_bulk.sec_key)
+		if (oss_bulk.keys > 1)
 		{
 			/* Skip line if the URL is the same as last, importing unique files per url */
 			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
@@ -697,7 +703,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			}
 		}
 
-		if (data || (oss_bulk.sec_key && job->opt.params.csv_fields < 3))
+		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
 			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
@@ -1208,6 +1214,51 @@ static int load_import_config(ldb_importation_config_t * config)
 		return -1;
 }
 
+static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
+
+{
+    FILE* file = fopen("/proc/meminfo", "r");
+    if (file == NULL) {
+        perror("Error opening /proc/meminfo");
+        return false;
+    }
+
+    char line[256];
+    unsigned long availableMemory = 0;
+	unsigned long freeMemory = 0;
+    while (fgets(line, sizeof(line), file)) {
+
+		if (sscanf(line, "MemFree: %lu", &freeMemory) == 1) 
+            continue;
+        if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1) 
+            break;
+        
+    }
+
+    fclose(file);
+	
+	char * path = ldb_sector_path(kb, &sector, "r");
+
+	if (!path)
+	{
+		log_info("Failed to load sector %d\n", sector);
+	}
+	uint64_t sector_size = ldb_file_size(path) / 1024;
+	
+	free(path);
+
+
+    log_debug("Collate sector: %u - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024,freeMemory/1024, availableMemory / 1024);
+	if ( (availableMemory < sector_size * 1.5  && freeMemory < sector_size) || freeMemory < (1024*1024))
+	{
+		log_info("Not enough memory to alocate the sector %d. Resquest %ld - available %ld\n", sector, sector_size, availableMemory);
+		return false;
+	}
+
+	return true;
+}
+
+
 bool import_collate_sector(ldb_importation_config_t * config)
 {
 	
@@ -1249,7 +1300,31 @@ bool import_collate_sector(ldb_importation_config_t * config)
 				ldb_collate_mz_table(ldbtable, sector);
 			}
 			else
+			{
+				int start_delay = (rand() % 20 - rand() % 5 + rand() % 5) * max_threads/2;
+				if (start_delay < 0)
+					start_delay = 0;
+				log_info("Collate start delay %d for sector %d\n", start_delay, sector);
+				sleep(start_delay); //ramdon delay of one minute as max to avoid simultaneus ram requesting.
+				
+				int retrys = 20;
+				bool check_ram = false;
+				
+				while(!check_ram && retrys-- > 0)
+				{
+					pthread_mutex_lock(&lock);
+					check_ram = check_system_available_ram(ldbtable, sector);
+					pthread_mutex_unlock(&lock);	   
+					if (!check_ram)
+					{
+						int sleepInterval = 30 + (rand() % 600) * 0.1;
+						logger_basic("No RAM available to collate sector %d, waiting %d seconds - remaining retrys:  %d", sector, sleepInterval, retrys);
+						sleep(sleepInterval);
+					}
+				} 
+				
 				ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, 0); 			//rec_len MUST be 18 if table is wfp (fixed sector size).
+			}
 
 		}
 	}
@@ -1594,7 +1669,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	}
 
 	signal(SIGINT, signalHandler);
-
+	srand(time(NULL));
 
 	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT, .csv_path = "\0", .path = "\0"};
 	

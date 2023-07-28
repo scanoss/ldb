@@ -663,7 +663,7 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
     }
 	job->tuples = tuples;
 	job->tuples_number = tuples_index;
-	job->keys_number = table.sec_key + 1; //TODO improve
+	job->keys_number = table.keys;
 	job->key_ln = key_len;
 	qsort(job->tuples, tuples_index, sizeof(tuple_t *), ldb_collate_tuple_cmp);
 
@@ -810,7 +810,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 	/* Show processed totals */
 	if (p_sector >= 0)
-		log_info("Table %s - sector %2x: collate completed with %'ld records\n", table.table , total_records);
+		log_info("Table %s - sector %2x: collate completed with %'ld records\n", table.table , p_sector, total_records);
 	else
 		log_info("Table %s: collate completed with %'ld records\n", table.table, total_records);
 
