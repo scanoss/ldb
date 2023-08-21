@@ -36,7 +36,7 @@ typedef struct ldb_importation_config_t
 
 bool ldb_importation_config_parse(ldb_importation_config_t * conf, char * line);
 bool ldb_create_db_config_default(char * dbname);
-bool ldb_import(ldb_importation_config_t * job);
+int ldb_import(ldb_importation_config_t * job);
 uint64_t ldb_file_size(char *path);
 
 #endif

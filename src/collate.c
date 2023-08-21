@@ -146,7 +146,10 @@ bool ldb_import_list_fixed_records(struct ldb_collate_data *collate)
 		/* Write node */
 		int new_block_size = ldb_eliminate_duplicates(collate, data_ptr, block_size);
 		uint16_t block_records = new_block_size / collate->table_rec_ln;
-		ldb_node_write(out_table, new_sector, collate->last_key, collate->tmp_data, new_block_size, block_records);
+		int error = ldb_node_write(out_table, new_sector, collate->last_key, collate->tmp_data, new_block_size, block_records);
+		//abort in case of error
+		if (error < 0)
+			return false;
 		data_ptr += block_size;
 	}
 
@@ -200,7 +203,13 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		{
 			/* Write buffer to disk and initialize buffer */
 			if (rec_group_size > 0) uint16_write(buffer + rec_group_start + subkey_ln, rec_group_size);
-			if (buffer_ptr) ldb_node_write(out_table, new_sector, last_key, buffer, buffer_ptr, 0);
+			if (buffer_ptr) 
+			{
+				int error =ldb_node_write(out_table, new_sector, last_key, buffer, buffer_ptr, 0);
+				//abort in case of error
+				if (error < 0)
+					return false;
+			}
 			buffer_ptr = 0;
 			rec_group_start  = 0;
 			rec_group_size   = 0;
@@ -242,7 +251,13 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 
 	/* Write buffer to disk */
 	if (rec_group_size > 0) uint16_write(buffer + rec_group_start + subkey_ln, rec_group_size);
-	if (buffer_ptr) ldb_node_write(out_table, new_sector, last_key, buffer, buffer_ptr, 0);
+	if (buffer_ptr) 
+	{
+		int error= ldb_node_write(out_table, new_sector, last_key, buffer, buffer_ptr, 0);
+		//abort in case of error
+		if (error < 0)
+			return false;
+	}
 
 	free(buffer);
 	free(last_key);
@@ -686,6 +701,101 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 	return tuples_index;
 }
 
+bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t sector)
+{
+	collate->data_ptr = 0;
+	collate->table_key_ln = table.key_ln;
+	collate->table_rec_ln = table.rec_ln;
+	collate->max_rec_ln = max_rec_ln;
+	collate->rec_count = 0;
+	collate->key_rec_count = 0;
+	collate->del_count = 0;
+	collate->in_table = table;
+	collate->out_table = out_table;
+	memcpy(collate->last_key, "\0\0\0\0", 4);
+	collate->last_report = 0;
+	collate->merge = merge;
+	collate->handler = NULL;
+	collate->del_tuples = NULL;
+
+	if (collate->table_rec_ln)
+	{
+		collate->rec_width = collate->table_rec_ln;
+	}
+	else
+	{
+		collate->rec_width = table.key_ln + max_rec_ln + 4;
+	}
+
+	/* Reserve space for collate data */
+	collate->data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
+	
+	if (!collate->data)
+		return false;
+
+	collate->tmp_data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
+
+	if (!collate->tmp_data)
+		return false;
+
+	/* Set global cmp width (for qsort) */
+	ldb_cmp_width = max_rec_ln;
+
+	/* Open (out) sector */
+	collate->out_sector = ldb_open(out_table, &sector, "w+");
+	if (!collate->out_sector)
+		return false;
+	
+	return true;
+}
+
+void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_t *sector_mem)
+{
+	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector, sector_mem == NULL ? "On disk" : "On RAM");
+	/* Read each one of the (256 ^ 3) list pointers from the map */
+	uint8_t k[LDB_KEY_LN];
+	k[0] = sector;
+	for (int k1 = 0; k1 < 256; k1++)
+		for (int k2 = 0; k2 < 256; k2++)
+			for (int k3 = 0; k3 < 256; k3++)
+			{
+				k[1] = k1;
+				k[2] = k2;
+				k[3] = k3;
+				/* If there is a pointer, read the list */
+				if (ldb_map_pointer_pos(k))
+				{
+					/* Process records */
+					ldb_fetch_recordset(sector_mem, collate->in_table, k, true, ldb_collate_handler, collate);
+				}
+			}
+
+	/* Process last record/s */
+	if (collate->data_ptr)
+	{
+		ldb_collate_sort(collate);
+		ldb_import_list(collate);
+	}
+
+	/* Close .out sector */
+	fclose(collate->out_sector);
+
+	/* Move or erase sector */
+	if (collate->merge)
+		ldb_sector_erase(collate->in_table, k);
+	else
+		ldb_sector_update(collate->out_table, k);
+
+	if (collate->del_count)
+		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector, collate->del_count);
+	
+	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector, collate->rec_count);
+
+	free(collate->data);
+	free(collate->tmp_data);
+	free(sector_mem);
+}
+
 /**
  * @brief Execute the collate job
  * 
@@ -720,88 +830,19 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 	/* Read each DB sector */
 	do {
 		log_info("Collating Table %s - Reading sector %02x\n", table.table, k0);
-		uint8_t *sector = ldb_load_sector(table, &k0);
-		if (sector)
+		
+		struct ldb_collate_data collate;
+		
+		if (ldb_collate_init(&collate, table, out_table, max_rec_ln, merge, k0))
 		{
 
 			/* Load collate data structure */
-			struct ldb_collate_data collate;
-
-			collate.data_ptr = 0;
-			collate.table_key_ln = table.key_ln;
-			collate.table_rec_ln = table.rec_ln;
-			collate.max_rec_ln = max_rec_ln;
-			collate.rec_count = 0;
-			collate.key_rec_count = 0;
-			collate.del_count = 0;
-			collate.out_table = out_table;
-			memcpy(collate.last_key, "\0\0\0\0", 4);
-			collate.last_report = 0;
-			collate.merge = merge;
 			collate.handler = handler;
 			collate.del_tuples = delete;
-
-			if (collate.table_rec_ln)
-			{
-				collate.rec_width = collate.table_rec_ln;
-			}
-			else
-			{
-				collate.rec_width = table.key_ln + max_rec_ln + 4;
-			}
-
-			/* Reserve space for collate data */
-			collate.data = (char *) calloc(LDB_MAX_RECORDS * collate.rec_width, 1);
-			collate.tmp_data = (char *) calloc(LDB_MAX_RECORDS * collate.rec_width, 1);
-
-			/* Set global cmp width (for qsort) */
-			ldb_cmp_width = max_rec_ln;
-
-			/* Open (out) sector */
-			collate.out_sector = ldb_open(out_table, &k0, "r+");
-
-			/* Read each one of the (256 ^ 3) list pointers from the map */
-			uint8_t k[LDB_KEY_LN];
-			k[0] = k0;
-			for (int k1 = 0; k1 < 256; k1++)
-				for (int k2 = 0; k2 < 256; k2++)
-					for (int k3 = 0; k3 < 256; k3++)
-					{
-						k[1] = k1;
-						k[2] = k2;
-						k[3] = k3;
-						/* If there is a pointer, read the list */
-						if (ldb_map_pointer_pos(k))
-						{
-							/* Process records */
-							ldb_fetch_recordset(sector, table, k, true, ldb_collate_handler, &collate);
-						}
-					}
-
-			/* Process last record/s */
-			if (collate.data_ptr)
-			{
-				ldb_collate_sort(&collate);
-				ldb_import_list(&collate);
-			}
-
-			total_records += collate.rec_count;
-			log_info("%s - %02x: %'ld records read\n", table.table, k0, collate.rec_count);
-
-			/* Close .out sector */
-			fclose(collate.out_sector);
-
-			/* Move or erase sector */
-			if (collate.merge) ldb_sector_erase(table, k);
-			else ldb_sector_update(out_table, k);
-
-			if (collate.del_count) 
-				log_info("%s - sector %02X: %'ld records deleted\n", table.table, k0, collate.del_count);
-
-			free(collate.data);
-			free(collate.tmp_data);
-			free(sector);
+			uint8_t *sector  = ldb_load_sector(table, &k0);
+			ldb_collate_sector(&collate, k0, sector);
 		}
+		
 		if (p_sector >=0)
 			break;
 

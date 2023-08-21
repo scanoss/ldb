@@ -249,6 +249,9 @@ uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 	uint64_t size = ftello64(ldb_sector);
 
 	uint8_t *out = malloc(size);
+	if (!out)
+		 return NULL;
+		 
 	fseeko64(ldb_sector, 0, SEEK_SET);
 	if (!fread(out, 1, size, ldb_sector)) printf("Warning: ldb_load_sector failed\n");
 	fclose(ldb_sector);

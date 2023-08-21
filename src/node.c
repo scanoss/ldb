@@ -20,6 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ldb.h"
+#include "logger.h"
+#include "ldb_error.h"
 /**
   * @file node.c
   * @date 12 Jul 2020
@@ -90,15 +92,19 @@ void ldb_load_node(struct ldb_recordset *rs)
  * @param dataln Length of the data to be written
  * @param records The number of records
  */
-void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records)
+int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records)
 {
 	uint8_t subkey_ln = table.key_ln - LDB_KEY_LN;
 
 	/* Check that record length is within bounds */
 	if (dataln > LDB_MAX_NODE_LN) ldb_error ("E053 Data record size exceeded");
 
-	if (!records) if (dataln + LDB_PTR_LN + LDB_PTR_LN + table.ts_ln >= LDB_MAX_NODE_LN)
-		ldb_error ("E053 Data record size exceeded");
+	if ((!records) && (dataln + LDB_PTR_LN + LDB_PTR_LN + table.ts_ln >= LDB_MAX_NODE_LN))
+	{
+		log_info("E053 Data record size exceeded");
+		return LDB_ERROR_DATA_RECORD_SIZE_EXCEED;
+		//ldb_error ("E053 Data record size exceeded");
+	}
 
 	/* Obtain the pointer to the last node of the list */
 	uint64_t list = ldb_list_pointer(ldb_sector, key);
@@ -106,7 +112,8 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 	if (list > 0 && list < LDB_MAP_SIZE) {
 		printf("\nFatal data corruption on list %lu for key %02x%02x%02x%02x\n", list, key[0], key[1], key[2], key[3]);
 		fprintf(stdout, "E057 Map location %08lx\n", ldb_map_pointer_pos(key));
-		exit(EXIT_FAILURE);
+		return LDB_ERROR_MAP_CORRUPTED;
+		//exit(EXIT_FAILURE);
 	}
 
 	/* Seek end of file, and save the pointer to the new node */
@@ -114,8 +121,8 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 	uint64_t new_node = ftello64(ldb_sector);
 
 	if (new_node < LDB_MAP_SIZE) {
-		fprintf(stdout, "E056 Data sector corrupted, with %lu below map_size\n", new_node);
-		exit(EXIT_FAILURE);
+		log_info("E056 Data sector %02x corrupted, with %lu below map_size\n", *key, new_node);
+		return LDB_ERROR_DATA_SECTOR_CORRUPTED;//exit(EXIT_FAILURE);
 	}
 
 	/* Allocate memory for new node, plus LN(5), NN(5) and TS(4 max)*/
@@ -146,7 +153,11 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 		else uint32_write(node + node_ptr, dataln + subkey_ln);
 		node_ptr += 4;
 	}
-	else ldb_error("E060 Unsupported node_length size (must be 2 or 4 bytes)");
+	else 
+	{
+		log_info("E060 Unsupported node_length size (must be 2 or 4 bytes)\n");
+		return LDB_ERROR_NODE_SIZE_INVALID;
+	}
 
 	/* K: Write the key after the 4th byte (if needed) */
 	if (table.key_ln > LDB_KEY_LN)
@@ -160,12 +171,18 @@ void ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uin
 	node_ptr += dataln;
 
 	/* Write actual node */
-	if (node_ptr != fwrite(node, 1, node_ptr, ldb_sector)) ldb_error("E058 Error writing node");
+	if (node_ptr != fwrite(node, 1, node_ptr, ldb_sector))
+	{
+		//ldb_error("E058 Error writing node");
+		log_info("E058 Error writing node\n");
+		return LDB_ERROR_NODE_WRITE_FAILS;
+	} 
 
 	/* Update list pointers */
 	ldb_update_list_pointers(ldb_sector, key, list, new_node);
 
 	free(node);
+	return LDB_ERROR_NOERROR;
 }
 
 /**

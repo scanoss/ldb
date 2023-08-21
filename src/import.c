@@ -44,6 +44,7 @@
 #include "collate.h"
 #include "mz.h"
 #include "logger.h"
+#include "ldb_error.h"
 
 #define DECODE_BASE64 8
 #define MAX_CSV_LINE_LEN 1024
@@ -226,7 +227,7 @@ void progress(char * path, char * table, size_t count, size_t max, bool percent)
  * @param skip_delete true to avoid delete
  * @return true is succed
  */
-bool ldb_import_snippets(ldb_importation_config_t * config)
+int ldb_import_snippets(ldb_importation_config_t * config)
 {
 	/* Table definition */
 	struct ldb_table oss_wfp;
@@ -270,7 +271,7 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 
 	in = fopen(config->csv_path, "rb");
 	if (in == NULL)
-		return false;
+		return -1;
 
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
@@ -328,7 +329,12 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 
 				/* If there is a buffer, write it */
 				if (record_ln)
-					ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
+				{
+					int error = ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
+					//abort in case of error
+					if (error < 0)
+						return error;
+				}
 				wfp_counter++;
 
 				/* Initialize record */
@@ -365,7 +371,13 @@ bool ldb_import_snippets(ldb_importation_config_t * config)
 	log_info("%s: %'lu wfp imported, %'lu ignored\n", config->csv_path, wfp_counter, ignore_counter);
 
 	if (record_ln)
-		ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
+	{
+		int error = ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
+		//abort in case of error
+		if (error < 0)
+			return error;
+	}
+
 	if (out)
 		ldb_close_unlock(out);
 
@@ -509,7 +521,7 @@ bool valid_hex(char *str, int bytes)
  * @param nfields number of fileds
  * @return true if succed
  */
-bool ldb_import_csv(ldb_importation_config_t * job)
+int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
 	bool skip_csv_check = job->opt.params.skip_fields_check;
@@ -524,7 +536,7 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 	if (fp == NULL)
 	{
 		log_info("File does not exist %s\n", job->csv_path);
-		return false;
+		return -1;
 	}
 
 	int expected_fields = (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
@@ -669,14 +681,12 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			{	
 				if (decode)
 				{
-					//pthread_mutex_lock(&lock);
 					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
 					if (r_size <= 0)
 					{
 						log_info("Error: failed to decode line %s. Skipping\n", line);
 						skip = true;
 					}
-					//pthread_mutex_unlock(&lock);
 				}
 				else
 					ldb_error("libscanoss_encoder.so it is not available, \".enc\" files cannot be processed\n");
@@ -731,7 +741,12 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 						sectors_modified[item_lastid[0]] = true;
 					}
 					else
-						ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+					{
+						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+						//abort in case of error
+						if (error < 0)
+							return error;
+					}
 				}
 				/* Open new sector if needed */
 				if (*itemid != *item_lastid)
@@ -808,7 +823,10 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 			sectors_modified[itemid[0]] = true;
 		}
 		
-		ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+		int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+		//abort in case of error
+		if (error < 0)
+			return error;
 	}
 	
 	if (item_sector)
@@ -844,9 +862,9 @@ bool ldb_import_csv(ldb_importation_config_t * job)
 		}
 
 	}
-			/* Lock DB */
+	/* Lock DB */
 //	ldb_unlock(lock_file);
-	return true;
+	return LDB_ERROR_NOERROR;
 }
 
 /**
@@ -1101,7 +1119,9 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 		param = strchr(param,'=');
 		
 		if (sscanf(param,"=%d", &val))
-			config->opt.params_arr[i] = val;
+		{
+				config->opt.params_arr[i] = val;
+		}
 		
 		else if (!strcmp(config_parameters[i], "TMP_PATH"))
 		{
@@ -1162,6 +1182,7 @@ static int load_import_config(ldb_importation_config_t * config)
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
 	int result = -1;
 	bool found = false;
+	
 	if (ldb_file_exists(config_path))
 	{
 		FILE *cfg = fopen(config_path, "r");
@@ -1232,7 +1253,6 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
             continue;
         if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1) 
             break;
-        
     }
 
     fclose(file);
@@ -1242,14 +1262,15 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
 	if (!path)
 	{
 		log_info("Failed to load sector %d\n", sector);
+		return false;
 	}
 	uint64_t sector_size = ldb_file_size(path) / 1024;
 	
 	free(path);
 
 
-    log_debug("Collate sector: %u - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024,freeMemory/1024, availableMemory / 1024);
-	if ( (availableMemory < sector_size * 1.5  && freeMemory < sector_size) || freeMemory < (1024*1024))
+    log_debug("Collate sector: %02x - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024, freeMemory/1024, availableMemory / 1024);
+	if ( (availableMemory < (sector_size * 1.2)  && freeMemory < sector_size))// || freeMemory < (1024*1024))
 	{
 		log_info("Not enough memory to alocate the sector %d. Resquest %ld - available %ld\n", sector, sector_size, availableMemory);
 		return false;
@@ -1258,84 +1279,78 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
 	return true;
 }
 
-
-bool import_collate_sector(ldb_importation_config_t * config)
+int import_collate_sector(ldb_importation_config_t *config)
 {
-	
+
 	if (!config->opt.params.collate || config->opt.params.collate_max_rec < LDB_KEY_LN)
-		return false;
+		return LDB_ERROR_NOERROR;
 
 	char dbtable[LDB_MAX_NAME];
-	snprintf(dbtable,LDB_MAX_NAME,"%s/%s", config->dbname, config->table);
+	snprintf(dbtable, LDB_MAX_NAME, "%s/%s", config->dbname, config->table);
 
 	if (ldb_valid_table(dbtable))
 	{
-		/* Lock DB */
-		//ldb_lock(dbtable);
-
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
-		
+
 		int max_rec_len = config->opt.params.is_wfp_table == 1 ? 18 : config->opt.params.collate_max_rec;
 
-		
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max_rec_len)
-			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		else if (max_rec_len < ldbtable.key_ln)
-			printf("E076 Max record length cannot be smaller than table key\n");
-		else
 		{
-			char *ptr = NULL;
-			char * filename = basename(config->csv_path);
-			long sector = strtol(filename, &ptr, 16);
-			if (ptr - filename < 2 || (ptr && *ptr != '.'))
-				sector = -1;
-			logger_basic("Collating - %s", dbtable);
-			log_info("Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);		
-			if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
-			{
-				ldb_collate_mz_table(ldbtable, sector);
-			}
+			log_info("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+			return LDB_ERROR_RECORD_LENGHT_INVAID;
+		}
+		else if (max_rec_len < ldbtable.key_ln)
+		{
+			log_info("E076 Max record length cannot be smaller than table key\n");
+			return LDB_ERROR_RECORD_LENGHT_INVAID;
+		}
+
+		char *ptr = NULL;
+		char *filename = basename(config->csv_path);
+		long sector = strtol(filename, &ptr, 16);
+		if (ptr - filename < 2 || (ptr && *ptr != '.'))
+			sector = -1;
+		logger_basic("Collating - %s", dbtable);
+		log_info("Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);
+		if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
+		{
+			ldb_collate_mz_table(ldbtable, sector);
+		}
+		else if (sector >= 0)
+		{
+			pthread_mutex_lock(&lock);
+			struct ldb_collate_data collate;
+			uint8_t k0 = sector;
+			uint8_t *sector_mem = NULL;
+
+			bool init_ok = ldb_collate_init(&collate, ldbtable, tmptable, max_rec_len, false, k0);
+			if (!init_ok)
+				log_info("Collate init failed for sector %d\n", k0);
+
+			if (init_ok && check_system_available_ram(ldbtable, k0))
+				sector_mem = ldb_load_sector(ldbtable, &k0);
+
+			pthread_mutex_unlock(&lock);
+			if (init_ok)
+				ldb_collate_sector(&collate, sector, sector_mem);
 			else
 			{
-				int start_delay = (rand() % 20 - rand() % 5 + rand() % 5) * max_threads/2;
-				if (start_delay < 0)
-					start_delay = 0;
-				log_info("Collate start delay %d for sector %d\n", start_delay, sector);
-				sleep(start_delay); //ramdon delay of one minute as max to avoid simultaneus ram requesting.
-				
-				int retrys = 20;
-				bool check_ram = false;
-				
-				while(!check_ram && retrys-- > 0)
-				{
-					pthread_mutex_lock(&lock);
-					check_ram = check_system_available_ram(ldbtable, sector);
-					pthread_mutex_unlock(&lock);	   
-					if (!check_ram)
-					{
-						int sleepInterval = 30 + (rand() % 600) * 0.1;
-						logger_basic("No RAM available to collate sector %d, waiting %d seconds - remaining retrys:  %d", sector, sleepInterval, retrys);
-						sleep(sleepInterval);
-					}
-				} 
-				
-				ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, 0); 			//rec_len MUST be 18 if table is wfp (fixed sector size).
+				log_info("ERROR: failed to allocate memory to collate sector %u\n", k0);
+				return LDB_ERROR_MEM_NOMEM;
 			}
-
 		}
 	}
-	//ldb_unlock(dbtable);
-	return true;
+	return LDB_ERROR_NOERROR;
 }
 
 #define DEFAULT_TMP_PATH "/tmp/"
-bool ldb_import(ldb_importation_config_t * job)
+int ldb_import(ldb_importation_config_t * job)
 {
-	bool result = false;
+	int result = -1;
 	ldb_importation_config_t config = *job;
 
 	logger_set_level(config.opt.params.verbose);
@@ -1388,7 +1403,9 @@ bool ldb_import(ldb_importation_config_t * job)
 	{
 		result = ldb_import_csv(&config);
 	}
-	import_collate_sector(&config);
+	
+	if (result == LDB_ERROR_NOERROR)
+		result = import_collate_sector(&config);
 	
 	return result;
 }
@@ -1509,10 +1526,8 @@ volatile int num_threads = 0;
 void * thread_process_sector(void * arg)
 {
 	ldb_importation_config_t * job = arg;
-	//printf("<<NEW THREAD: %d - %s>>\n", num_threads, job->csv_path);
 	ldb_import(job);
 	free(job);
-	//printf("<<THREAD END: %d>>\n", num_threads);
 	pthread_exit(NULL);
 }
 void threads_end(pthread_t * tlist)
@@ -1531,6 +1546,30 @@ void threads_end(pthread_t * tlist)
 	
 		tlist[j] = 0;
 	}
+}
+
+int thread_request_or_wait(pthread_t * tlist)
+{
+	if (num_threads < max_threads)
+		return num_threads;
+
+	while(num_threads >= max_threads)
+	{
+		for (int j =0; j < max_threads; j++)
+		{
+			if (!tlist[j])
+				continue;
+			if (pthread_tryjoin_np(tlist[j], NULL) == 0)
+			{
+				pthread_mutex_lock(&lock);
+				num_threads--;
+				pthread_mutex_unlock(&lock);
+				tlist[j] = 0;
+				return j;
+			}
+		}
+	}
+	return -1;
 }
 
 volatile bool aborting = false;
@@ -1552,10 +1591,8 @@ void signalHandler(int signal) {
 pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 {
 	pthread_t tid;
-	
-	if (num_threads >= max_threads)
-		threads_end(tlist);
-	
+
+	int t = thread_request_or_wait(tlist);
 	pthread_mutex_lock(&lock);
 	ldb_importation_config_t * job_cpy = malloc(sizeof(ldb_importation_config_t));
 	memcpy(job_cpy,job,sizeof(ldb_importation_config_t));
@@ -1571,14 +1608,13 @@ pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 	}
 	else
 	{
-		tlist[num_threads] = tid;
+		tlist[t] = tid;
 		num_threads++;
 	}
 
 	return tid;
 }
 
-#define LDB_MULTITHREADING_IMPORT 1
 bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
     DIR *dir;
     struct dirent *ent;
@@ -1588,15 +1624,11 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 	{
 		if (ldb_file_exists(job->csv_path))
 		{
-#ifdef LDB_MULTITHREADING_IMPORT
 			pthread_t pid = thread_start(job, tlist);
 			if (pid == 0)
 				return ldb_import(job);
 			else
 				return true;
-#else
-			return ldb_import(job); //wait for a table to start a new one
-#endif
 		}
 		else
 		{
@@ -1615,15 +1647,10 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 
 			if (ent->d_type == DT_REG) 
 			{
-#ifdef LDB_MULTITHREADING_IMPORT
 				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
 				pthread_t tid = thread_start(job, tlist);
 				if (tid == 0)
 					ldb_import(job);
-#else
-                snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
-				ldb_import(job);
-#endif
             } 
         }
 
@@ -1708,11 +1735,10 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		jobs.unsorted[i] = -1;
 	}
 
-#ifdef LDB_MULTITHREADING_IMPORT
 	max_threads = get_nprocs() / 2;
 	fprintf(stderr, "Max threads set to: %d\n", max_threads);
 	pthread_mutex_init(&lock, NULL);
-#endif
+
 	threads_list = calloc(max_threads, sizeof(pthread_t));
 	
 	logger_init(job.dbname, max_threads, threads_list);
@@ -1782,11 +1808,9 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		ldb_error("Command error\n");
 	}
 
-#ifdef LDB_MULTITHREADING_IMPORT
 	threads_end(threads_list);
 	free(threads_list);
 	pthread_mutex_destroy(&lock);
-#endif
 
 	return true;
 }

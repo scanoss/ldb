@@ -343,10 +343,9 @@ int main(int argc, char **argv)
     int option_index = 0;
 	int opt;
 
-    while ( (opt = getopt_long (argc, argv, ":u:n:chv", long_options, &option_index)) >= 0) 
+    while ( (opt = getopt_long (argc, argv, "u:n:chv", long_options, &option_index)) >= 0) 
 	{
 		/* Check valid alpha is entered */
-		printf("opt: %c\n", opt);
 		switch (opt)
 		{
 			case 'v':
@@ -386,7 +385,8 @@ int main(int argc, char **argv)
 				}
 				else
 					strcat(cmd, ")");
-				if (!*dbname)
+
+				if (!dbname || !*dbname)
 					ldb_import_command("oss", path, cmd);
 				else
 					ldb_import_command(dbname, path, cmd);

@@ -15,6 +15,7 @@
 #include "ldb.h"
 #include "import.h"
 #include "logger.h"
+#include "ldb_error.h"
 
 /**
  * @brief Creates a directory with 0755 permissions.
@@ -113,13 +114,13 @@ bool file_append(char *file, char *destination, bool delete)
  * @param snippets true if it is a snippet file
  * @param skip_delete true to avoid deletion
  */
-bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets, bool delete)
+int ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets, bool delete)
 {
 	/* If source does not exist, no need to join */
 	if (!ldb_file_exists(source)) 
 	{
 		fprintf(stderr,"Error: File %s does not exist\n", source);
-		return false;
+		return -1;
 	}
 
 	if (ldb_file_exists(destination) && !overwrite)
@@ -128,7 +129,7 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 		if (snippets) if (ldb_file_size(destination) % 21)
 		{
 			printf("File %s does not contain 21-byte records\n", destination);
-			return false;
+			return -1;
 		}
 	}
 
@@ -139,16 +140,16 @@ bool ldb_bin_join(char *source, char *destination, bool overwrite, bool snippets
 		if (!move_file(source, destination, delete))
 		{
 			printf("Cannot move file\n");
-			return false;
+			return -1;
 		}
-		return true;
+		return LDB_ERROR_NOERROR;
 	}
 
 	log_info("Joining into %s\n", destination);
 	file_append(source, destination, delete);
 	if (delete) unlink(source);
 
-	return true;
+	return LDB_ERROR_NOERROR;
 }
 
 
