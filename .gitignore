@@ -2,3 +2,4 @@
 *.so
 ldb
 doc
+.vscode
