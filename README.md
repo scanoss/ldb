@@ -8,7 +8,7 @@ The LDB (Linked-list database) is a headless database management system focused 
 Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
 
 ## Build
-Run `make` to build the shell binary and the shared library.
+Run `make all` to build the shell binary and the shared library.
 
 ## Install
 Run `make install` to copy the binary to `/usr/bin`, the shared library to `/usr/lib` and the header to `/usr/include`.
