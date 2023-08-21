@@ -684,7 +684,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
 					if (r_size <= 0)
 					{
-						log_info("Error: failed to decode line %s. Skipping\n", line);
+						log_debug("Error: failed to decode line %s. Skipping\n", line);
 						skip = true;
 					}
 				}
@@ -1261,7 +1261,7 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
 
 	if (!path)
 	{
-		log_info("Failed to load sector %d\n", sector);
+		log_info("Failed to load sector %02x\n", sector);
 		return false;
 	}
 	uint64_t sector_size = ldb_file_size(path) / 1024;
@@ -1272,7 +1272,7 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
     log_debug("Collate sector: %02x - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024, freeMemory/1024, availableMemory / 1024);
 	if ( (availableMemory < (sector_size * 1.2)  && freeMemory < sector_size))// || freeMemory < (1024*1024))
 	{
-		log_info("Not enough memory to alocate the sector %d. Resquest %ld - available %ld\n", sector, sector_size, availableMemory);
+		log_info("Not enough memory to alocate the sector %02x. Resquest %ld - available %ld\n", sector, sector_size, availableMemory);
 		return false;
 	}
 
@@ -1315,7 +1315,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 		if (ptr - filename < 2 || (ptr && *ptr != '.'))
 			sector = -1;
 		logger_basic("Collating - %s", dbtable);
-		log_info("Collating table %s - sector %ld, Max record size: %d\n", dbtable, sector, max_rec_len);
+		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
 		if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
 		{
 			ldb_collate_mz_table(ldbtable, sector);
@@ -1339,7 +1339,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 				ldb_collate_sector(&collate, sector, sector_mem);
 			else
 			{
-				log_info("ERROR: failed to allocate memory to collate sector %u\n", k0);
+				log_info("ERROR: failed to allocate memory to collate sector %02x\n", k0);
 				return LDB_ERROR_MEM_NOMEM;
 			}
 		}
