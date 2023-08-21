@@ -39,7 +39,7 @@
 #include <openssl/md5.h>
 
 #define LDB_CFG_PATH "/usr/local/etc/scanoss/ldb/"
-#define LDB_VERSION "3.1.5"
+#define LDB_VERSION "4.0.0_beta"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
