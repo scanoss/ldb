@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include <zlib.h>
 #include "ldb.h"
-
+#include "mz.h"
 /**
  * @brief Returns the hexadecimal md5 sum for "path"
  * 
@@ -761,9 +761,9 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted(int error)
+void mz_corrupted( )
 {
-	printf("Corrupted mz file: %d\n", error);
+	printf("Corrupted mz file\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -779,7 +779,7 @@ void mz_deflate(struct mz_job *job)
 	int error = uncompress((uint8_t *)job->data, &job->data_ln, job->zdata, job->zdata_ln);
 	if (Z_OK != error)
 	{
-		mz_corrupted(error);
+		mz_corrupted();
 	}
 	job->data_ln--;
 }

@@ -28,7 +28,7 @@
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
   */
-
+#include "ldb.h"
 /**
  * @brief Handle the dump keys record: Write in stdout unique keys
  * 

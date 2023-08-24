@@ -19,7 +19,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
+#include "ldb.h"
 /**
   * @file recordset.c
   * @date 12 Jul 2020
@@ -28,6 +28,19 @@
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/recordset.c
   */
+#include "ldb.h"
+
+#ifndef LDB_EXTRACT_DEFINED_EXTERN
+int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset_ptr, int record_size, struct ldb_table table, const uint8_t *key, const uint8_t *subkey)
+{
+	*msg  = strdup((char *) data + dataset_ptr);
+	msg[record_size-1] = 0;
+	return strlen(*msg);
+}
+#else
+extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset_ptr, int record_size, struct ldb_table table, const uint8_t *key, const uint8_t *subkey);
+
+#endif
 
 /**
  * @brief Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
@@ -51,7 +64,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 	if (sector) node = sector;
 	else
 	{
-		ldb_sector = ldb_open(table, key, "r+");
+		ldb_sector = ldb_open(table, key, "r");
 		if (!ldb_sector) return 0;
 		node = calloc(LDB_MAX_REC_LN + 1, 1);
 	}
@@ -110,7 +123,6 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 						/* We drop records longer than the desired limit */
 						if (record_size + 32 < LDB_MAX_REC_LN)
 							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
-
 						/* Move pointer to end of record */
 						dataset_ptr += record_size;
 					}
