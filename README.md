@@ -45,6 +45,34 @@ show databases
 show tables from DBNAME
     Lists tables from given database
 
+bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
+    Imports data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.
+    TABLENAME is optional and will be derived from the directory name's file if not specified.
+
+    (CONFIG) is a configuration string with the following format:
+        (FILE_DEL=1/0,KEYS=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SKIP_SORT=1/0,FIELDS=N,SKIP_FIELDS_CHECK=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp)
+        
+        Where 1/0 represents "true" / "false", and N is an integer.
+        FILE_DEL: Delete file after importation is completed.
+        KEYS: Number of binary keys in the CSV file.
+        MZ: MZ file indicator.
+        BIN: Binary file indicator.
+        WFP: WFP file indicator.
+        OVERWRITE: Overwrite the destination table.
+        SKIP_SORT: Skip the sorting step.
+        FIELDS: Number of CSV fields.
+        SKIP_FIELDS_CHECK: Check field quantity during importation.
+        VALIDATE_VERSION: Validate version.json.
+        VERBOSE: Enable verbose mode.
+        COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.
+        MAX_RECORD: Maximum record size in bytes (default: 1024).
+        TMP_PATH: Path to the folder used for temporary files (default: /tmp).
+
+bulk insert DBNAME/TABLENAME from PATH
+    Imports data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.
+    The configuration will be retrieved from the "db.conf" file located at "/etc/local/scanoss/ldb/". A default configuration file will be created if it doesn't exist.
+
+
 insert into DBNAME/TABLENAME key KEY hex DATA
     Inserts data (hex) into given db/table for the given hex key
 
