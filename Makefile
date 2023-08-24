@@ -31,3 +31,10 @@ install:
 	@cp $(TARGET) /usr/bin
 	@cp $(LIB) /usr/lib
 
+prepare_deb_package: all ## Prepares the deb Package 
+	@./package.sh deb $(VERSION)
+	@echo deb package built
+
+prepare_rpm_package: all ## Prepares the rpm Package 
+	@./package.sh rpm $(VERSION)
+	@echo rpm package built
