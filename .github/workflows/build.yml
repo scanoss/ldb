@@ -23,7 +23,7 @@ jobs:
         run: make all
 
       - name: version
-        run: echo "::set-output name=version::$(./ldb -version)"
+        run: echo "::set-output name=version::$(./ldb -v)"
         id: version
       
       - name: Test output
