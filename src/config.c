@@ -28,7 +28,9 @@
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
   */
-
+#include "ldb.h"
+#include "ldb_string.h"
+#include "logger.h"
 /**
  * @brief Loads table configuration from .cfg file
  * 
@@ -80,38 +82,50 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
  */
 struct ldb_table ldb_read_cfg(char *db_table)
 {
-	struct ldb_table tablecfg;
-	char *path = malloc(LDB_MAX_PATH);
-	
+	struct ldb_table tablecfg = {.db = "\0", .table = "\0", .key_ln = 16, .rec_ln = 0, .keys = 1, .tmp = false, .ts_ln = 2}; // default config
+
+	char tmp[LDB_MAX_PATH] = "\0";
+	strcpy(tmp, db_table);
+	char *tablename = tmp + ldb_split_string(tmp, '/');
+
+	strcpy(tablecfg.db, tmp);
+	strcpy(tablecfg.table, tablename);
+
+	char path[LDB_MAX_PATH] = "\0";
+
 	// Open configuration file
 	sprintf(path, "%s/%s.cfg", ldb_root, db_table);
 	FILE *cfg = fopen(path, "r");
-	free(path);
 
-	memcpy(tablecfg.db,   "\0", 1);
-	memcpy(tablecfg.table, "\0", 1);
-	tablecfg.tmp = false;
-
-	if (cfg != NULL) {
-
-		// Read configuration file
-		char *buffer = calloc(LDB_MAX_NAME, 1);
-		if (!fread(buffer, 1, LDB_MAX_NAME, cfg)) printf("Warning: cannot read file %s\n", path);
-		char *reclen = buffer + ldb_split_string(buffer, ',');
-
-		// Assign values to cfg structure
-		char tmp[LDB_MAX_PATH] = "\0";
-		strcpy(tmp, db_table);
-		char *tablename = tmp + ldb_split_string(tmp, '/');
-		strcpy(tablecfg.db, tmp);
-		strcpy(tablecfg.table, tablename);
-		tablecfg.key_ln = atoi(buffer);
-		tablecfg.rec_ln = atoi(reclen);
-		tablecfg.ts_ln = 2;
-		fclose(cfg);
-		free(buffer);
+	if (!cfg)
+	{
+		log_info("Warning: config file \"%s\" does not exist. Using table's default config\n", path);
+		return tablecfg;
 	}
 
+	// Read configuration file
+	int key_ln, rec_ln, keys;
+	int result = fscanf(cfg, "%d,%d,%d", &key_ln, &rec_ln, &keys);
+
+	if (result < 2)
+	{
+		printf("Warning: cannot read file %s\n, using default config\n", path);
+		fclose(cfg);
+		return tablecfg;
+	}
+
+	tablecfg.key_ln = key_ln;
+	tablecfg.rec_ln = rec_ln;
+
+	// backward compatibility with cfg files
+	if (result < 3)
+	{
+		printf("Warning: table's keys are undefined in config file %s\n", path);
+		keys = -1;
+	}
+
+	tablecfg.keys = keys;
+	fclose(cfg);
 	return tablecfg;
 }
 
@@ -123,13 +137,13 @@ struct ldb_table ldb_read_cfg(char *db_table)
  * @param keylen Key lenght
  * @param reclen register lenght
  */
-void ldb_write_cfg(char *db, char *table, int keylen, int reclen)
+void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys)
 {
 	char *path = malloc(LDB_MAX_PATH);
 	sprintf(path, "%s/%s/%s.cfg", ldb_root, db, table);
 
-	FILE *cfg = fopen(path, "w");
-	fprintf(cfg,"%d,%d\n", keylen, reclen);
+	FILE *cfg = fopen(path, "w+");
+	fprintf(cfg,"%d,%d,%d\n", keylen, reclen, keys);
 	fclose(cfg);
 
 	free(path);

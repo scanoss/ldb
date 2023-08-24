@@ -19,7 +19,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
+#include "ldb.h"
+#include <sys/file.h> 
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <time.h>
+#include "ldb_string.h"
 /**
   * @file sector.c
   * @date 12 Jul 2020
@@ -29,6 +36,79 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/sector.c
   */
 
+FILE *lock_file(const char *filename, int wait_s, const char *mode)
+{
+
+	int fd = open(filename, O_RDWR);
+
+	if (fd == -1)
+	{
+		perror("open");
+		return NULL;
+	}
+
+	struct flock fl;
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+
+	int ret;
+	time_t start_time = time(NULL);
+	while ((ret = fcntl(fd, F_SETLK, &fl)) == -1)
+	{
+		if (errno != EACCES && errno != EAGAIN)
+		{
+			perror("fcntl");
+			close(fd);
+			return NULL;
+		}
+
+		if (difftime(time(NULL), start_time) >= wait_s)
+		{
+			fprintf(stderr, "Timeout waiting for lock\n");
+			close(fd);
+			return NULL;
+		}
+
+		usleep(250); // Wait 1 millisecond before trying again
+	}
+
+	FILE *fp = fdopen(fd, mode);
+
+	if (fp == NULL)
+	{
+		perror("fdopen");
+		close(fd);
+		//return NULL;
+		exit(1);
+	}
+	return fp;
+}
+
+int ldb_close_unlock(FILE *fp) 
+{
+    int fd = fileno(fp);
+    struct flock fl;
+    fl.l_type = F_UNLCK;
+    fl.l_whence = SEEK_SET;
+    fl.l_start = 0;
+    fl.l_len = 0;
+
+    int ret = fcntl(fd, F_SETLK, &fl);
+    if (ret == -1) 
+	{
+        perror("fcntl");
+        return -1;
+    }
+
+    if (fclose(fp) == EOF) 
+	{
+        perror("fclose");
+        return -1;
+    }
+    return 0;
+}
 /**
  * @brief Opens an LDB sector and returns the file descriptor. If read mode, returns NULL
  *  in case it does not exist. Otherwise an empty sector file is created in case it
@@ -42,15 +122,36 @@
 FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
 
 	/* Create sector (file) if it doesn't already exist */
-	char *sector_path = ldb_sector_path(table, key, mode, table.tmp);
-	if (!sector_path) return NULL;
+	char *sector_path = ldb_sector_path(table, key, mode);
+	if (!sector_path) 
+		return NULL;
 
+	FILE *out = NULL;
+	
 	/* Open data sector */
-	FILE *out = fopen(sector_path, mode);
-	if (!out) fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));
+	if (strcmp(mode, "r"))
+		out = lock_file(sector_path, 5, mode);
+	else
+		out = fopen(sector_path, mode);
+	
+	if (!out) 
+		fprintf(stderr, "Cannot open LDB with mode %s: %s\n", mode, strerror(errno));	
+
 	free(sector_path);
 	return out;
 }
+
+bool ldb_close(FILE * sector)
+{
+	if (fclose(sector) != 0)
+	{
+		printf("error closing sector\n");
+		return false;
+	}
+
+	return true;
+}
+
 
 /**
  * @brief Creates a table in the ldb directory
@@ -61,7 +162,7 @@ FILE *ldb_open(struct ldb_table table, uint8_t *key, char *mode) {
  * @param reclen length of the record
  * @return true success. false failure
  */
-bool ldb_create_table(char *db, char *table, int keylen, int reclen)
+bool ldb_create_table(char *db, char *table, int keylen, int reclen, int keys)
 {
 	bool out = false;
 
@@ -70,6 +171,9 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 
 	char *tablepath = malloc(LDB_MAX_PATH);
 	sprintf(tablepath, "%s/%s/%s", ldb_root, db, table);
+
+	if (keys < 1)
+		keys = 1;
 
 	if (!ldb_valid_name(db) || !ldb_valid_name(table))
 	{
@@ -87,7 +191,7 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 		mkdir(tablepath, 0755);
 		if (ldb_dir_exists(tablepath))
 		{
-			ldb_write_cfg(db, table, keylen, reclen);
+			ldb_write_cfg(db, table, keylen, reclen, keys);
 			out = true;
 		}
 		else printf("E065 Cannot create %s\n", tablepath);
@@ -145,6 +249,9 @@ uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 	uint64_t size = ftello64(ldb_sector);
 
 	uint8_t *out = malloc(size);
+	if (!out)
+		 return NULL;
+		 
 	fseeko64(ldb_sector, 0, SEEK_SET);
 	if (!fread(out, 1, size, ldb_sector)) printf("Warning: ldb_load_sector failed\n");
 	fclose(ldb_sector);
@@ -210,12 +317,17 @@ void ldb_sector_update(struct ldb_table table, uint8_t *key)
 	sprintf(sector_ldb, "%s/%s/%s/%02x.ldb", ldb_root, table.db, table.table, key[0]);
 	sprintf(sector_tmp, "%s/%s/%s/%02x.tmp", ldb_root, table.db, table.table, key[0]);
 
-	if (!ldb_file_exists(sector_ldb) || !ldb_file_exists(sector_tmp))
+	if (!ldb_file_exists(sector_tmp))
 	{
-		ldb_error("E074 Cannot update sector with .tmp");
+		printf("%s\n", sector_tmp);
+		ldb_error("E074 Cannot update sector with .tmp ");
 	}
 
-	if (!unlink(sector_ldb)) if (!rename(sector_tmp, sector_ldb)) return;
+	if (ldb_file_exists(sector_ldb) && unlink(sector_ldb))
+		ldb_error("E074 Cannot update sector with .tmp, cannot remove old .ldb file.");
+	
+	if (!rename(sector_tmp, sector_ldb)) 
+		return;
 
 	ldb_error("E074 Error replacing sector with .tmp");
 }
@@ -257,7 +369,7 @@ void ldb_sector_erase(struct ldb_table table, uint8_t *key)
  * @param tmp Boolean to indicate if the sector is temporary or not. (Will return the path with extention .tmp or .ldb)
  * @return char* Sector path according to the table and key provided.
  */
-char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp)
+char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode)
 {
 	/* Create table (directory) if it doesn't already exist */
 	char table_path[LDB_MAX_PATH] = "\0";
@@ -276,7 +388,7 @@ char *ldb_sector_path(struct ldb_table table, uint8_t *key, char *mode, bool tmp
 		sprintf(sector_path, "%s/%02x.ldb", table_path, key[0]);
 
 	/* If opening a tmp table, we remove the file if it exists */
-	if (ldb_file_exists(sector_path) && tmp) remove(sector_path);
+	//if (ldb_file_exists(sector_path) && tmp) remove(sector_path);
 
 	if (!ldb_file_exists(sector_path))
 	{

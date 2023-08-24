@@ -39,7 +39,49 @@
 #include <unistd.h>
 #include <zlib.h>
 #include "ldb.h"
+#include "mz.h"
+/**
+ * @brief Returns the hexadecimal md5 sum for "path"
+ * 
+ * @param path string path
+ * @return pointer to file md5 array
+ */
+uint8_t *file_md5 (char *path)
+{
+	uint8_t *c = calloc(16,1);
+	FILE *fp = fopen(path, "rb");
+	MD5_CTX mdContext;
+	uint32_t bytes;
 
+	if (fp != NULL)
+	{
+		uint8_t *buffer = malloc(BUFFER_SIZE);
+		MD5_Init (&mdContext);
+
+		while ((bytes = fread(buffer, 1, BUFFER_SIZE, fp)) != 0)
+			MD5_Update(&mdContext, buffer, bytes);
+
+		MD5_Final(c, &mdContext);
+		fclose(fp);
+		free(buffer);
+	}
+	return c;
+}
+
+/**
+ * @brief Calculates the MD5 hash for data
+ * 
+ * @param data input data
+ * @param size data size
+ * @param out[out] pointer to MD5 array
+ */
+void calc_md5(char *data, int size, uint8_t *out)
+{
+	MD5_CTX mdContext;
+	MD5_Init (&mdContext);
+	MD5_Update(&mdContext, data, size);
+	MD5_Final(out, &mdContext);
+}
 
 /**
  * @brief compare two MZ keys
@@ -717,7 +759,7 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted()
+void mz_corrupted(int error)
 {
 	printf("Corrupted mz file\n");
 	exit(EXIT_FAILURE);

@@ -29,7 +29,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/collate.c
   */
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -41,7 +40,42 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <openssl/md5.h>
+#include <libgen.h>
 #include "ldb.h"
+#include "mz.h"
+#include "command.h"
+#include "ldb_string.h"
+#include "import.h"
+#include "collate.h"
+
+char *ldb_commands[] = 
+{
+	"help",
+	"create database {ascii}",
+	"create table {ascii} keylen {ascii} reclen {ascii} seckey {ascii}",
+	"create config {ascii}",
+	"show databases",
+	"show tables from {ascii}",
+	"insert into {ascii} key {hex} ascii {ascii}",
+	"insert into {ascii} key {hex} hex {hex}",
+	"select from {ascii} key {hex} ascii",
+	"select from {ascii} key {hex} csv hex {ascii}",
+	"select from {ascii} key {hex} hex",
+	"delete from {ascii} max {ascii} keys {ascii}",
+	"delete from {ascii} record {ascii}",
+	"delete from {ascii} records from {ascii}",
+	"collate {ascii} max {ascii}",
+	"bulk insert {ascii} from {ascii} with {ascii}",
+	"bulk insert {ascii} from {ascii}",
+	"merge {ascii} into {ascii} max {ascii}",
+	"version",
+	"unlink list from {ascii} key {hex}",
+	"dump {ascii} hex {ascii} sector {hex}",
+	"dump {ascii} hex {ascii}",
+	"dump keys from {ascii}",
+	"cat {hex} from {ascii}"
+};
+int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 
 /**
  * @brief Normalize the command to LDB console-
@@ -82,7 +116,7 @@ char *ldb_command_normalize(char *text)
  * @param word_nr[out] nuber of recognized word
  * @return true if it is a valid command
  */
-commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
+bool ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 {
 	int closest = 0;
 	int hits;
@@ -102,7 +136,6 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 			char *cword = ldb_extract_word(j, command);
 			char *kword = ldb_extract_word(j, ldb_commands[i]);
 			bool fulfilled = false;
-
 			if (!strcmp(kword, "{hex}")) fulfilled = ldb_valid_hex(cword);
 			else if (!strcmp(kword, "{ascii}")) fulfilled = ldb_valid_ascii(cword);
 			else if (!strcmp(kword, cword)) fulfilled = true;
@@ -130,9 +163,8 @@ commandtype ldb_syntax_check(char *command, int *command_nr, int *word_nr)
  * @param command input string command
  * @return pointer to start key
  */
-char *keys_start(char *command)
+char *keys_start(char *command, char * keyword)
 {
-	char keyword[] = " keys ";
 	char *keys_word = strstr(command, keyword);
 	if (keys_word) return keys_word + strlen(keyword);
 	return NULL;
@@ -203,6 +235,15 @@ uint8_t *fetch_keys(char *keys, long *size, int key_ln)
 	return keyblob;
 }
 
+void job_delete_tuples_free(job_delete_tuples_t * job)
+{
+	for (int i = 0; i < job->tuples_number; i++)
+	{
+		free(job->tuples[i]->data);
+		free(job->tuples[i]);
+	}
+	free(job->tuples);
+}
 /**
  * @brief LDB console command to delete keys
  * 
@@ -218,42 +259,126 @@ void ldb_command_delete(char *command)
 
 	if (ldb_valid_table(dbtable))
 	{
+		/* Lock DB */
+		ldb_lock(dbtable);
 		
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
-		
-		/* Lock DB */
-		ldb_lock(ldbtable.table);
-		
+				
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		long keys_ln = 0;
-		uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
-
-		if (ldbtable.key_ln > keys_ln)
-			printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
-		else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+		int tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " keys "),",", ldbtable);
+		
+		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+		 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
 		else if (max < ldbtable.key_ln)
-			printf("E076 Max record length cannot be smaller than table key\n");
+		 	printf("E076 Max record length cannot be smaller than table key\n");
+		else if (tuples_number)
+		{
+			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+		}
 		else
 		{
-			qsort(keys, keys_ln / ldbtable.key_ln, ldbtable.key_ln, ldb_collate_cmp);
-			printf("Removing %ld keys\n", keys_ln / ldbtable.key_ln);
-			ldb_collate(ldbtable, tmptable, max, false, keys, keys_ln);
+			fprintf(stderr, "There are any key to be processed\n");
 		}
 
-		free(keys);
-
 		/* Unlock DB */
-		ldb_unlock(ldbtable.table);
+		ldb_unlock(dbtable);
+		job_delete_tuples_free(&del_job);
 	}
-
 	/* Free memory */
 	free(dbtable);
 }
+
+void ldb_command_delete_records(char *command)
+{
+	/* Extract values from command */
+	char * dbtable = ldb_extract_word(3, command);
+	char * mode  = ldb_extract_word(4, command);
+	bool single_mode = !strcmp(mode, "record");
+	char * path = NULL;
+	
+	if (!single_mode)
+		path = ldb_extract_word(6, command);
+
+	if (ldb_valid_table(dbtable))
+	{
+		/* Lock DB */
+		ldb_lock(dbtable);
+		
+		/* Assembly ldb table structure */
+		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
+		struct ldb_table tmptable = ldb_read_cfg(dbtable);
+				
+		tmptable.tmp = true;
+		tmptable.key_ln = LDB_KEY_LN;
+
+		//long keys_ln = 0;
+		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+
+		int tuples_number = 0;
+		if (single_mode)
+		{
+			tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " record "),"\n", ldbtable);
+		}
+		else if (path && ldb_file_exists(path))
+		{
+			char * buffer = NULL;
+			FILE * fp = fopen(path, "r");
+
+			if (fp)
+			{
+				fseek(fp, 0, SEEK_END);
+    			long file_size = ftell(fp);
+    			rewind(fp);
+				buffer = (char *)malloc(file_size * sizeof(char));
+				fread(buffer, file_size, 1, fp);
+			}
+			else
+			{
+				fprintf(stderr, "File %s could not be loaded\n", path);
+			}
+
+			if (buffer)
+				tuples_number = ldb_collate_load_tuples_to_delete(&del_job, buffer,"\n", ldbtable);
+		}
+		else
+		{
+			fprintf(stderr, "File %s does not exist\n", path);
+		}
+		// if (ldbtable.key_ln > keys_ln)
+		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
+		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+		// 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+		// else if (max < ldbtable.key_ln)
+		// 	printf("E076 Max record length cannot be smaller than table key\n");
+		// else
+		if (tuples_number)
+		{
+			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
+			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+		}
+		else
+		{
+			fprintf(stderr, "No csv record could be read from %s\n", path);
+		}
+
+		job_delete_tuples_free(&del_job);
+		/* Unlock DB */
+		ldb_unlock(dbtable);
+	}
+	
+	/* Free memory */
+	free(dbtable);
+	free(mode);
+	free(path);
+}
+
+
 
 /**
  * @brief Execute the LDB command collate
@@ -279,12 +404,20 @@ void ldb_command_collate(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-			printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		else if (max < ldbtable.key_ln)
-			printf("E076 Max record length cannot be smaller than table key\n");
+		if (!strcmp(ldbtable.table, "sources") || strcmp(ldbtable.table, "notices"))
+		{
+			ldb_collate_mz_table(ldbtable, -1);
+		}
 		else
-			ldb_collate(ldbtable, tmptable, max, false, NULL, 0);
+		{
+
+			if (ldbtable.rec_ln && ldbtable.rec_ln != max)
+				printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+			else if (max < ldbtable.key_ln)
+				printf("E076 Max record length cannot be smaller than table key\n");
+			else
+				ldb_collate(ldbtable, tmptable, max, false,-1, NULL, 0);
+		}
 	}
 
 	/* Unlock DB */
@@ -363,7 +496,7 @@ void ldb_command_merge(char *command)
 		{
 			outtable.tmp = false;
 			outtable.key_ln = LDB_KEY_LN;
-			ldb_collate(ldbtable, outtable, max, true, NULL, 0);
+			ldb_collate(ldbtable, outtable, max, true,-1, NULL, 0);
 		}
 	}
 
@@ -411,7 +544,7 @@ void ldb_command_unlink_list(char *command)
 			FILE *sector;
 			sector = ldb_open(ldbtable, keybin, "r+");
 			ldb_list_unlink(sector, keybin);
-			fclose(sector);
+			ldb_close_unlock(sector);
 		}
 	}
 
@@ -472,7 +605,7 @@ void ldb_command_insert(char *command, commandtype type)
 			else
 				ldb_node_write(ldbtable, sector, keybin, (uint8_t *) data, dataln, 0); // TODO Ditto
 
-			fclose(sector);
+			ldb_close_unlock(sector);
 		}
 	}
 
@@ -482,6 +615,27 @@ void ldb_command_insert(char *command, commandtype type)
 	free(data);
 	free(keybin);
 	free(databin);
+}
+
+/**
+ * @brief Execute command insert
+ * 
+ * @param command command string
+ * @param type command type
+ */
+void ldb_command_bulk(char *command, commandtype type)
+{
+	/* Extract values from command */
+	char *dbtable = ldb_extract_word(3, command);
+	char *path = ldb_extract_word(5, command);
+	char *config = ldb_extract_word(7, command);
+
+	ldb_import_command(dbtable, path, config);
+	
+	/* Free memory */
+	free(path);
+	free(config);
+	free(dbtable);
 }
 
 /**
@@ -502,6 +656,8 @@ void ldb_command_create_table(char *command)
 	int keylen = atoi(tmp);
 	tmp = ldb_extract_word(7, command);
 	int reclen = atoi(tmp);
+	tmp = ldb_extract_word(9, command);
+	int seckey = atoi(tmp);
 	free(tmp);
 
 	char *dbtable = ldb_extract_word(3, command);
@@ -509,7 +665,8 @@ void ldb_command_create_table(char *command)
 
 	// dbtable is the name of the database;
 	// table is the name of the table;
-	if (ldb_create_table(dbtable, table, keylen, reclen)) printf("OK\n");
+	if (ldb_create_table(dbtable, table, keylen, reclen, seckey)) 
+		printf("OK\n");
 
 	free(dbtable);
 }
@@ -609,6 +766,15 @@ void ldb_command_create_database(char *command)
 
 	free(database);
 }
+
+void ldb_command_create_config(char *command)
+{
+	/* Extract 3th values from command, which is the db name*/
+	char *database = ldb_extract_word(3, command);
+	ldb_create_db_config_default(database);
+	free(database);
+}
+
 
 /**
  * @brief Execute the command LDB shows databases: list the availables databases en the default path
