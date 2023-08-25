@@ -10,6 +10,8 @@ LIB=libldb.so
 $(TARGET): $(OBJECTS)
 	$(CC) -g -o $(TARGET) $^ $(LDFLAGS)
 
+VERSION=$(shell ./version.sh)
+
 all: clean $(TARGET) lib
 
 lib:  $(OBJECTS)
