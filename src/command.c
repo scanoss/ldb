@@ -404,7 +404,7 @@ void ldb_command_collate(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		if (!strcmp(ldbtable.table, "sources") || strcmp(ldbtable.table, "notices"))
+		if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
 		{
 			ldb_collate_mz_table(ldbtable, -1);
 		}
