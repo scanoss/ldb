@@ -90,15 +90,18 @@ void log_info(const char * fmt, ...)
         if (!found)
             i = 0;
         va_start(ap, fmt);
-        if (i+logger_offset+threads_number/2 > logger_window.ws_row)
+        if (threads_number > 1)
         {
-            logger_offset = 0;
-            system("clear");
+            if (i+logger_offset+threads_number/2 > logger_window.ws_row)
+            {
+                logger_offset = 0;
+                system("clear");
+            }
+            gotoxy(0, i + 1 + logger_offset);
+            fprintf(stderr, "\33[2K\r");
+            gotoxy(1, i + 1 + logger_offset);
+            fprintf(stderr, "Thread %d: ", i);
         }
-        gotoxy(0, i + 1 + logger_offset);
-        fprintf(stderr, "\33[2K\r");
-        gotoxy(1, i + 1 + logger_offset);
-        fprintf(stderr, "Thread %d: ", i);
         vfprintf(stderr, fmt, ap);
         va_end(ap);
     }
@@ -119,9 +122,13 @@ void log_info(const char * fmt, ...)
 
 void logger_dbname_set(char * db)
 {
+    if (*import_logger_path)    
+        return;
+    
+    system("clear");
+
     ldb_prepare_dir(LOGGER_DIR);
     sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
-    
     time_t currentTime = time(NULL);
 	struct tm *localTime = localtime(&currentTime);
 	char timeString[64];
@@ -132,6 +139,7 @@ void logger_dbname_set(char * db)
         fprintf(f, "%s\n", timeString);
         fclose(f);
     }
+
 }
 
 void logger_init(char * db, int tnumber,  pthread_t * tlist)

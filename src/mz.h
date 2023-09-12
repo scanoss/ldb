@@ -2,6 +2,7 @@
 #define __MZ_H
 
 #include "ldb.h"
+#include "collate.h"
 
 /* MZ  */
 #define MZ_CACHE_SIZE 16384
@@ -65,7 +66,6 @@ void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
 void mz_list(struct mz_job *job);
 void mz_extract(struct mz_job *job);
 void mz_cat(struct mz_job *job, char *key);
-void ldb_collate_mz_table(struct ldb_table table, int p_sector);
-
+void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuples_t * delete);
 
 #endif

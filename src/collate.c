@@ -668,10 +668,12 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 			free(tuples);
 			return 0;
 		}
-		char * data = strdup(line + key_len * 2 + 1);
-		if (data && *data)
-			tuples[tuples_index]->data = data;
-
+		if (line[key_len * 2 + 1] == ',')
+		{
+			char * data = strdup(line + key_len * 2 + 1);
+			if (data && *data)
+				tuples[tuples_index]->data = data;
+		}
 		
         line = strtok(NULL, delimiter);
 		tuples_index++;
@@ -681,23 +683,27 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 	job->keys_number = table.keys;
 	job->key_ln = key_len;
 	qsort(job->tuples, tuples_index, sizeof(tuple_t *), ldb_collate_tuple_cmp);
-
+	
+	log_info("Keys to delete %d:\n", tuples_index);
+	
 	for (int i = 0; i < job->tuples_number; i++)
 	{
 		char key_hex[MD5_LEN*2+1];
 		ldb_bin_to_hex(job->tuples[i]->key, key_len, key_hex);
-		printf("<key: %s>\n", key_hex);
+		log_info("<key: %s", key_hex);
 		if (job->tuples[i]->data)
-			printf("<<data: %s>>\n", job->tuples[i]->data);
+			log_info("%s>\n", job->tuples[i]->data);
+		else
+			log_info(">\n");
 	}
 
 	map_from_tuples(job);
 	
-	for (int i =0; i < 256; i++)
+	/*for (int i =0; i < 256; i++)
 	{
 		if (job->map[i] >= 0)
 			printf("map %x = %d", i, job->map[i]);
-	}
+	}*/
 	return tuples_index;
 }
 

@@ -47,7 +47,7 @@
 #include "ldb_string.h"
 #include "import.h"
 #include "collate.h"
-
+#include "logger.h"
 char *ldb_commands[] = 
 {
 	"help",
@@ -261,14 +261,14 @@ void ldb_command_delete(char *command)
 	{
 		/* Lock DB */
 		ldb_lock(dbtable);
-		
 		/* Assembly ldb table structure */
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		struct ldb_table tmptable = ldb_read_cfg(dbtable);
 				
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
-
+		logger_dbname_set(ldbtable.db);
+		logger_set_level(LOG_INFO);
 		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
 		int tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " keys "),",", ldbtable);
 		
@@ -278,7 +278,10 @@ void ldb_command_delete(char *command)
 		 	printf("E076 Max record length cannot be smaller than table key\n");
 		else if (tuples_number)
 		{
-			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
+				ldb_collate_mz_table(ldbtable, -1, &del_job);
+			else
+				ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 		}
 		else
 		{
@@ -315,6 +318,8 @@ void ldb_command_delete_records(char *command)
 				
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
+		logger_dbname_set(ldbtable.db);
+		logger_set_level(LOG_INFO);
 
 		//long keys_ln = 0;
 		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
@@ -360,7 +365,10 @@ void ldb_command_delete_records(char *command)
 		if (tuples_number)
 		{
 			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
-			ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
+				ldb_collate_mz_table(ldbtable, -1, &del_job);
+			else
+				ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 		}
 		else
 		{
@@ -406,7 +414,7 @@ void ldb_command_collate(char *command)
 
 		if (!strcmp(ldbtable.table, "sources") || strcmp(ldbtable.table, "notices"))
 		{
-			ldb_collate_mz_table(ldbtable, -1);
+			ldb_collate_mz_table(ldbtable, -1, NULL);
 		}
 		else
 		{

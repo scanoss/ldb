@@ -32,13 +32,40 @@
 #include <string.h>
 #include "mz.h"
 #include "logger.h"
+#include "collate.h"
 #define MAX_FILE_SIZE (4 * 1048576)
 
+/**
+ * @brief Check if job->id is found in job->xkeys (see -X)
+ * 
+ * @param job pointer to mz job
+ * @return true if it was found
+ */
+bool mz_id_excluded(struct mz_job *job)
+{
+	if (!job->xkeys_ln) return false;
+
+	for (uint64_t i = 0; i < job->xkeys_ln; i += MD5_LEN)
+	{
+		/* Compare job id (bytes 3-16) */
+		if (!memcmp(job->xkeys + i + 2, job->id, MD5_LEN - 2))
+		{
+			/* Compare mz id (bytes 1-2) */
+			if (!memcmp(job->xkeys + i, job->mz_id, 2)) return true;
+		}
+	}
+
+	return false;
+}
 
 bool mz_optimise_dup_handler(struct mz_job *job)
 {
 	/* Check if file is not duplicated */
-	if (mz_id_exists(job->ptr, job->ptr_ln, job->id))
+	if (mz_id_excluded(job))
+	{
+		job->exc_c++;
+	}
+	else if (mz_id_exists(job->ptr, job->ptr_ln, job->id))
 	{
 		job->dup_c++;
 	}
@@ -78,13 +105,16 @@ void mz_collate(struct mz_job *job)
 
 	if (job->dup_c) 
 		log_info("%s: %u duplicated files eliminated\n", job->path, job->dup_c);
+	
+	if (job->exc_c) 
+		log_info("%s: %u keys excluded\n", job->path, job->exc_c);
 
 	free(job->mz);
 	free(job->ptr);
 }
 
 
-void ldb_collate_mz_table(struct ldb_table table, int p_sector)
+void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuples_t * delete)
 {
 	/* Start with sector 0*/
 	uint16_t k0 = 0;
@@ -94,6 +124,10 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector)
 	{
 		k0 = p_sector;
 	}
+
+	if (delete)
+		k0 = *delete->tuples[0]->key;
+
 	do {
 		char sector_path[LDB_MAX_PATH] = "\0";
 		sprintf(sector_path, "%s/%s/%s/%.4x.mz", ldb_root, table.db, table.table, k0);
@@ -135,12 +169,25 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector)
 			job.xkeys_ln = 0;
 			job.licenses = NULL;
 			job.license_count = 0;
+			job.exc_c = 0;
+			job.dup_c = 0;
 			strcpy(job.path, sector_path);
+
+			if (delete)
+			{
+				job.xkeys = calloc(delete->tuples_number, MD5_LEN);
+				job.xkeys_ln = delete->tuples_number * MD5_LEN;
+				for (int i = 0; i < delete->tuples_number; i++)
+				{
+					memcpy(job.xkeys + i * MD5_LEN, delete->tuples[i]->key, MD5_LEN);
+				}
+			}
 			
 			mz_collate(&job);
 			
 			free(src);
 			free(zsrc);
+			free(job.xkeys);
 		}
 
 		if (p_sector >=0)
