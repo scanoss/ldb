@@ -1318,7 +1318,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
 		if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
 		{
-			ldb_collate_mz_table(ldbtable, sector);
+			ldb_collate_mz_table(ldbtable, sector, NULL);
 		}
 		else if (sector >= 0)
 		{
