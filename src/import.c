@@ -749,7 +749,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 				}
 				/* Open new sector if needed */
-				if (*itemid != *item_lastid)
+				if (*itemid != *item_lastid || || (*itemid == 0 && !item_ptr))
 				{
 					if (item_sector)
 						ldb_close_unlock(item_sector);
