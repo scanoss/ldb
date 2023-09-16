@@ -23,9 +23,9 @@
 #ifndef _LDB_GLOBAL_
 #define _LDB_GLOBAL_
 
-#include "ldb/definitions.h"
-#include "ldb/types.h"
-#include "ldb/mz.h"
+#include "./ldb/definitions.h"
+#include "./ldb/types.h"
+#include "./ldb/mz.h"
 
 #define LDB_VERSION "4.0.1_beta"
 
