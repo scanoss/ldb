@@ -334,17 +334,18 @@ int main(int argc, char **argv)
         {
           {"version",     no_argument,       0, 'v'},
           {"help",  no_argument,       0, 'h'},
-          {"collate",  no_argument, &collate, 1},
+          {"collate",  no_argument, 0 , 'c'},
           {"update",  required_argument, 0, 'u'},
           {"name",    required_argument, 0, 'n'},
+		  {"verbose",    no_argument, 0, 'V'},
           {0, 0, 0, 0}
         };
     
 	/* getopt_long stores the option index here. */
     int option_index = 0;
 	int opt;
-
-    while ( (opt = getopt_long (argc, argv, "u:n:chv", long_options, &option_index)) >= 0) 
+	bool verbose = false;
+    while ( (opt = getopt_long (argc, argv, "u:n:chvV", long_options, &option_index)) >= 0) 
 	{
 		/* Check valid alpha is entered */
 		switch (opt)
@@ -366,8 +367,15 @@ int main(int argc, char **argv)
 				dbname = strdup(optarg);
 				break;
 			}
+			case 'c':
+				collate = true;
+				break;
+			case 'V':
+			{
+				verbose = true;
+				break;
+			}
 			default:
-            	exit(1);
 			break;
 		}
 	}
@@ -381,12 +389,12 @@ int main(int argc, char **argv)
 			if (*path)
 			{
 				if (collate)
-				{
-					strcat(cmd, ",COLLATE=1)");
-				}
-				else
-					strcat(cmd, ")");
+					strcat(cmd, ",COLLATE=1");
 
+				if (verbose)
+					strcat(cmd, ",VERBOSE=1");
+
+				strcat(cmd, ")");
 				if (!dbname || !*dbname)
 					ldb_import_command("oss", path, cmd);
 				else

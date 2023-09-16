@@ -2,9 +2,6 @@
 *.so
 ldb
 doc
-<<<<<<< HEAD
 .vscode
-=======
 dist/
 *.deb
->>>>>>> ldb_beta_release

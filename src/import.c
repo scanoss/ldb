@@ -27,14 +27,14 @@
  */
 #include <stdio.h>
 #include <sys/time.h>
- #include <sys/file.h> 
+#include <sys/file.h> 
 #include <libgen.h>
 #include <dirent.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <time.h>
 #include "import.h"
-#include "ldb.h"
+#include "./ldb.h"
 #include "bsort.h"
 #include "join.h"
 #include <pthread.h>
@@ -42,7 +42,6 @@
 #include "ignored.h"
 #include <signal.h>
 #include "collate.h"
-#include "mz.h"
 #include "logger.h"
 #include "ldb_error.h"
 
@@ -298,7 +297,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	/* Create table if it doesn't exist */
 	if (!ldb_table_exists(config->dbname, config->table))
-		ldb_create_table(config->dbname, config->table, 4, rec_ln, 1);
+		ldb_create_table_new(config->dbname, config->table, 4, rec_ln, 1);
 
 	/* Open ldb */
 	out = ldb_open(oss_wfp, last_wfp, "r+");
@@ -582,7 +581,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		ldb_create_database(job->dbname);
 
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
+		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
 	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
@@ -1314,7 +1313,16 @@ int import_collate_sector(ldb_importation_config_t *config)
 		long sector = strtol(filename, &ptr, 16);
 		if (ptr - filename < 2 || (ptr && *ptr != '.'))
 			sector = -1;
+
 		logger_basic("Collating - %s", dbtable);
+
+		if (sector < 0)
+		{
+			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, sector, max_rec_len);
+			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, NULL);
+			return 0;
+		}
+		
 		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
 		if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
 		{
