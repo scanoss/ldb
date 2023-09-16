@@ -23,75 +23,11 @@
 #ifndef _LDB_GLOBAL_
 #define _LDB_GLOBAL_
 
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <locale.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
-#include <unistd.h>
-#include <openssl/md5.h>
+#include "ldb/definitions.h"
+#include "ldb/types.h"
+#include "ldb/mz.h"
 
-#define LDB_CFG_PATH "/usr/local/etc/scanoss/ldb/"
-#define LDB_VERSION "4.0.0_beta"
-#define LDB_MAX_PATH 1024
-#define LDB_MAX_NAME 64
-#define LDB_MAX_RECORDS 500000 // Max number of records per list
-#define LDB_MAX_REC_LN 65535
-#define LDB_KEY_LN 4 // Main LDB key:  32-bit
-#define LDB_PTR_LN 5 // Node pointers: 40-bit
-#define LDB_MAP_SIZE (256 * 256 * 256 * 5) // Size of sector map
-#define LDB_MAX_NODE_DATA_LN (4 * 1048576) // Maximum length for a data record in a node (4Mb)
-#define LDB_MAX_NODE_LN ((256 * 256 * 18) - 1)
-#define LDB_MAX_COMMAND_SIZE (64 * 1024)   // Maximum length for an LDB command statement
-#define COLLATE_REPORT_SEC 5 // Report interval for collate status
-#define MD5_LEN 16
-#define MD5_LEN_HEX 32
-#define BUFFER_SIZE 1048576
-
-extern char ldb_root[];
-extern char ldb_lock_path[];
-extern char *ldb_commands[];
-extern int ldb_commands_count;
-extern int ldb_cmp_width;
-
-struct ldb_table
-{
-	char db[LDB_MAX_NAME];
-	char table[LDB_MAX_NAME];
-	int  key_ln;
-	int  rec_ln; // data record length, otherwise 0 for variable-length data
-    int  ts_ln;  // 2 or 4 (16-bit or 32-bit reserved for total sector size)
-	bool tmp; // is this a .tmp sector instead of a .ldb?
-	int keys;
-	uint8_t *current_key;
-	uint8_t *last_key;
-};
-
-struct ldb_recordset
-{
-	char db[LDB_MAX_NAME];
-	char table[LDB_MAX_NAME];
-	FILE *sector;       // Data sector file pointer
-	uint8_t key[255];   // Data key
-	uint8_t key_ln;     // Key length: 4-255
-	uint8_t subkey_ln;  // remaining part of the key that goes into the data: key_ln - 4
-	uint8_t rec_ln;     // Fixed length of data records: 0-255, where 0 means variable-length data
-	uint8_t *node;      // Pointer to current node. This will point to mallocated memory.
-	uint32_t node_ln;   // Length of the current node
-	uint8_t *record;    // Pointer to current record within node
-	uint64_t next_node; // Location of next node inside the 
-	uint64_t last_node; // Location of last node of the list
-    uint8_t ts_ln;      // 2 or 4 (16-bit or 32-bit reserved for total sector size)
-};
-
-typedef bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *);
+#define LDB_VERSION "4.0.1_beta"
 
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
@@ -134,7 +70,8 @@ bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_version();
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
-bool ldb_create_table(char *db, char *table, int keylen, int reclen, int keys);
+bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys);
+bool ldb_create_table(char *db, char *table, int keylen, int reclen);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key);

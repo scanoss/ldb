@@ -19,7 +19,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "ldb.h"
+#include "./ldb.h"
 #include <sys/file.h> 
 #include <stdio.h>
 #include <fcntl.h>
@@ -162,7 +162,7 @@ bool ldb_close(FILE * sector)
  * @param reclen length of the record
  * @return true success. false failure
  */
-bool ldb_create_table(char *db, char *table, int keylen, int reclen, int keys)
+bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys)
 {
 	bool out = false;
 
@@ -200,6 +200,11 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen, int keys)
 	free(dbpath);
 	free(tablepath);
 	return out;
+}
+
+bool ldb_create_table(char *db, char *table, int keylen, int reclen)
+{
+	return ldb_create_table_new(db, table, keylen, reclen, 1);
 }
 
 /**

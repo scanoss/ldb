@@ -1,7 +1,7 @@
 ifeq ($(origin CC),default)
 CC = gcc
 endif
-CCFLAGS ?= -O -lz -Wall -Wno-unused-result -Wno-deprecated-declarations -g  -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -fPIC -Wno-format-truncation
+CCFLAGS ?= -O -lz -Wall -Wno-unused-result -Wno-deprecated-declarations -g  -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -fPIC -Wno-format-truncation -Isrc/ldb
 LDFLAGS+= -lm -lpthread -lz -ldl -lcrypto
 SOURCES=$(wildcard src/*.c)
 OBJECTS=$(SOURCES:.c=.o) 
@@ -32,7 +32,12 @@ distclean: clean
 install:
 	@cp $(TARGET) /usr/bin
 	@cp $(LIB) /usr/lib
-
+	@cp -r src/ldb /usr/include
+	@cp src/ldb.h /usr/include
+uninstall:
+	@rm -r /usr/include/ldb
+	@rm /usr/include/ldb.h
+	@rm /usr/lib/libldb.so
 prepare_deb_package: all ## Prepares the deb Package 
 	@./package.sh deb $(VERSION)
 	@echo deb package built

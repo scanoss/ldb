@@ -673,7 +673,7 @@ void ldb_command_create_table(char *command)
 
 	// dbtable is the name of the database;
 	// table is the name of the table;
-	if (ldb_create_table(dbtable, table, keylen, reclen, seckey)) 
+	if (ldb_create_table_new(dbtable, table, keylen, reclen, seckey)) 
 		printf("OK\n");
 
 	free(dbtable);
