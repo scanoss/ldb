@@ -51,7 +51,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 	if (sector) node = sector;
 	else
 	{
-		ldb_sector = ldb_open(table, key, "r+");
+		ldb_sector = ldb_open(table, key, "r");
 		if (!ldb_sector) return 0;
 		node = calloc(LDB_MAX_REC_LN + 1, 1);
 	}
