@@ -15,7 +15,6 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <openssl/md5.h>
 
 #include "definitions.h"
 struct ldb_table

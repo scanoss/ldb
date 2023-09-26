@@ -2,7 +2,7 @@ ifeq ($(origin CC),default)
 CC = gcc
 endif
 CCFLAGS ?= -O -lz -Wall -Wno-unused-result -Wno-deprecated-declarations -g  -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -fPIC -Wno-format-truncation -I./src/ldb
-LDFLAGS+= -lm -lpthread -lz -ldl -lcrypto
+LDFLAGS+= -lm -lpthread -lz -ldl -lgcrypt
 SOURCES=$(wildcard src/*.c)
 OBJECTS=$(SOURCES:.c=.o) 
 TARGET=ldb

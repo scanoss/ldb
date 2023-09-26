@@ -40,7 +40,6 @@
 #include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
-#include <openssl/md5.h>
 #include <getopt.h>
 #include "ldb.h"
 #include "command.h"
