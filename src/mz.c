@@ -30,7 +30,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/lock.c
   */
 
-#include <openssl/md5.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdbool.h>
@@ -41,48 +40,6 @@
 #include <zlib.h>
 #include "ldb.h"
 
-/**
- * @brief Returns the hexadecimal md5 sum for "path"
- * 
- * @param path string path
- * @return pointer to file md5 array
- */
-uint8_t *file_md5 (char *path)
-{
-	uint8_t *c = calloc(16,1);
-	FILE *fp = fopen(path, "rb");
-	MD5_CTX mdContext;
-	uint32_t bytes;
-
-	if (fp != NULL)
-	{
-		uint8_t *buffer = malloc(BUFFER_SIZE);
-		MD5_Init (&mdContext);
-
-		while ((bytes = fread(buffer, 1, BUFFER_SIZE, fp)) != 0)
-			MD5_Update(&mdContext, buffer, bytes);
-
-		MD5_Final(c, &mdContext);
-		fclose(fp);
-		free(buffer);
-	}
-	return c;
-}
-
-/**
- * @brief Calculates the MD5 hash for data
- * 
- * @param data input data
- * @param size data size
- * @param out[out] pointer to MD5 array
- */
-void calc_md5(char *data, int size, uint8_t *out)
-{
-	MD5_CTX mdContext;
-	MD5_Init (&mdContext);
-	MD5_Update(&mdContext, data, size);
-	MD5_Final(out, &mdContext);
-}
 
 /**
  * @brief compare two MZ keys
@@ -169,7 +126,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	calc_md5(job->data, job->data_ln, actual_md5);
+	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -322,7 +279,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	calc_md5(job->data, job->data_ln, actual_md5);
+	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";

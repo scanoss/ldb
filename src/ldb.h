@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <openssl/md5.h>
 
-#define LDB_VERSION "3.1.5"
+#define LDB_VERSION "3.2.0"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -287,5 +287,10 @@ void mz_extract(struct mz_job *job);
 void mz_cat(struct mz_job *job, char *key);
 uint8_t *file_md5 (char *path);
 void calc_md5(char *data, int size, uint8_t *out);
+
+void md5_string(const unsigned char *input, int len, unsigned char output[16]);
+uint8_t * md5_file(char *path);
+
+#define MD5(a, b, c)  md5_string(a, b, c)
 
 //normalized_license *load_licenses();
