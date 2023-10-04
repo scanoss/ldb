@@ -134,7 +134,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted(0);
+		mz_corrupted();
 	}
 	else if (!job->check_only)
 	{
@@ -287,7 +287,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted(0);
+		mz_corrupted();
 	}
 	else
 	{
@@ -601,7 +601,7 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 	/* We save the first bytes of zsrc to accomodate the MZ header */
 	compress(zsrc + MZ_HEAD, &zsrc_ln, (uint8_t *) src, src_ln + 1);
 	uint32_t zln = zsrc_ln;
-
+	
 	/* Only the last 14 bytes of the MD5 go to the mz record (first two bytes are the file name) */
 	memcpy(zsrc, md5 + 2, MZ_MD5); 
 
@@ -610,10 +610,11 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 
 	int mzid = uint16(md5);
 	int mzlen = zsrc_ln + MZ_HEAD;
-
+	fprintf(stderr,"<<aca: %d - %d - %d>>\n", mzid, mzlen, src_ln);
 	/* If it won't fit in the cache, write it directly */
 	if (mzlen > MZ_CACHE_SIZE)
 	{
+		fprintf(stderr,"<<aca1: %d - %d>>\n", mzid, mzlen);
 		mz_write(mined_path, mzid, zsrc, mzlen);
 	}
 	else
@@ -718,9 +719,9 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted(int error)
+void mz_corrupted()
 {
-	printf("Corrupted mz file: %d\n", error);
+	printf("Corrupted mz file\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -736,7 +737,7 @@ void mz_deflate(struct mz_job *job)
 	int error = uncompress((uint8_t *)job->data, &job->data_ln, job->zdata, job->zdata_ln);
 	if (Z_OK != error)
 	{
-		mz_corrupted(error);
+		mz_corrupted();
 	}
 	job->data_ln--;
 }

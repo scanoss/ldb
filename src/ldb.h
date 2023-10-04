@@ -278,7 +278,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ());
 void file_write(char *filename, uint8_t *src, uint64_t src_ln);
 void mz_id_fill(char *md5, uint8_t *mz_id);
 void mz_deflate(struct mz_job *job);
-void mz_corrupted(int error);
+void mz_corrupted();
 void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
 bool mz_check(char *path);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
