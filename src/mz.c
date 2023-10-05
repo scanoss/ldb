@@ -610,11 +610,9 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 
 	int mzid = uint16(md5);
 	int mzlen = zsrc_ln + MZ_HEAD;
-	fprintf(stderr,"<<aca: %d - %d - %d>>\n", mzid, mzlen, src_ln);
 	/* If it won't fit in the cache, write it directly */
 	if (mzlen > MZ_CACHE_SIZE)
 	{
-		fprintf(stderr,"<<aca1: %d - %d>>\n", mzid, mzlen);
 		mz_write(mined_path, mzid, zsrc, mzlen);
 	}
 	else
