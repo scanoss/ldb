@@ -725,11 +725,7 @@ void mz_corrupted( )
 	exit(EXIT_FAILURE);
 }
 
-/**
- * @brief Decompress a MZ job
- * 
- * @param job MZ job
- */
+
 /**
  * @brief Decompress a MZ job
  * 
