@@ -16,7 +16,7 @@ jobs:
     steps:
 
       - name: Install third party dependencies
-        run: sudo apt install build-essential libssl-dev zlib1g-dev
+        run: sudo apt install build-essential libgcrypt-dev zlib1g-dev
 
       - uses: actions/checkout@v3
         with:
