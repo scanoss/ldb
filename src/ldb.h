@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <openssl/md5.h>
 
-#define LDB_VERSION "3.1.5"
+#define LDB_VERSION "3.2.0"
 #define LDB_MAX_PATH 1024
 #define LDB_MAX_NAME 64
 #define LDB_MAX_RECORDS 500000 // Max number of records per list
@@ -277,8 +277,7 @@ void mz_id_fill(char *md5, uint8_t *mz_id);
 void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ());
 void file_write(char *filename, uint8_t *src, uint64_t src_ln);
 void mz_id_fill(char *md5, uint8_t *mz_id);
-void mz_deflate(struct mz_job *job);
-void mz_corrupted(void);
+void mz_corrupted();
 void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
 bool mz_check(char *path);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
@@ -288,4 +287,9 @@ void mz_cat(struct mz_job *job, char *key);
 uint8_t *file_md5 (char *path);
 void calc_md5(char *data, int size, uint8_t *out);
 
-//normalized_license *load_licenses();
+void md5_string(const unsigned char *input, int len, unsigned char output[16]);
+uint8_t * md5_file(char *path);
+
+#define MD5(a, b, c)  md5_string(a, b, c)
+#define MZ_DEFLATE(job) mz_deflate(job)
+

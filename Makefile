@@ -3,7 +3,7 @@ CC=gcc
 endif
 CCFLAGS?=-O -g -Wall -std=gnu99
 LIBFLAGS=$(CCFLAGS) -fPIC -c
-LIBS=-lm -lpthread -lz 
+LIBS=-lm -lpthread -lz -lgcrypt
 
 VERSION=$(shell ./version.sh)
 
@@ -18,13 +18,13 @@ help: ## This help
 all: clean lib shell ## Clean dev data and build the ldb's library and shell binaries
 
 lib: src/ldb.c src/mz.c src/ldb.h ## Build only the ldb library
-	@$(CC) $(LIBFLAGS) -D_LARGEFILE64_SOURCE src/ldb.c src/mz.c $(LIBS)
-	@$(CC) -shared -Wl,-soname,libldb.so -o libldb.so ldb.o mz.o $(LIBS)
+	@$(CC) $(LIBFLAGS) -D_LARGEFILE64_SOURCE src/ldb.c src/mz.c src/md5.c $(LIBS)
+	@$(CC) -shared -Wl,-soname,libldb.so -o libldb.so ldb.o mz.o md5.o $(LIBS)
 	@echo Library is built
 
 shell: src/shell.c src/command.c ## Build only the shell binary
-	@$(CC) $(CCFLAGS) -D_LARGEFILE64_SOURCE -c src/shell.c src/mz.c $(LIBS)
-	@$(CC) $(CCFLAGS) -o ldb ldb.o shell.o -lcrypto $(LIBS)
+	@$(CC) $(CCFLAGS) -D_LARGEFILE64_SOURCE -c src/shell.c src/mz.c src/md5.c $(LIBS)
+	@$(CC) $(CCFLAGS) -o ldb ldb.o shell.o md5.o $(LIBS)
 	@echo Shell is built
 
 static: src/ldb.c src/ldb.h src/shell.c ## Static build of the shell binary

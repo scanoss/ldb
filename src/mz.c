@@ -30,7 +30,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/lock.c
   */
 
-#include <openssl/md5.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdbool.h>
@@ -41,48 +40,6 @@
 #include <zlib.h>
 #include "ldb.h"
 
-/**
- * @brief Returns the hexadecimal md5 sum for "path"
- * 
- * @param path string path
- * @return pointer to file md5 array
- */
-uint8_t *file_md5 (char *path)
-{
-	uint8_t *c = calloc(16,1);
-	FILE *fp = fopen(path, "rb");
-	MD5_CTX mdContext;
-	uint32_t bytes;
-
-	if (fp != NULL)
-	{
-		uint8_t *buffer = malloc(BUFFER_SIZE);
-		MD5_Init (&mdContext);
-
-		while ((bytes = fread(buffer, 1, BUFFER_SIZE, fp)) != 0)
-			MD5_Update(&mdContext, buffer, bytes);
-
-		MD5_Final(c, &mdContext);
-		fclose(fp);
-		free(buffer);
-	}
-	return c;
-}
-
-/**
- * @brief Calculates the MD5 hash for data
- * 
- * @param data input data
- * @param size data size
- * @param out[out] pointer to MD5 array
- */
-void calc_md5(char *data, int size, uint8_t *out)
-{
-	MD5_CTX mdContext;
-	MD5_Init (&mdContext);
-	MD5_Update(&mdContext, data, size);
-	MD5_Final(out, &mdContext);
-}
 
 /**
  * @brief compare two MZ keys
@@ -169,7 +126,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	calc_md5(job->data, job->data_ln, actual_md5);
+	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -322,7 +279,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	calc_md5(job->data, job->data_ln, actual_md5);
+	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -644,7 +601,7 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 	/* We save the first bytes of zsrc to accomodate the MZ header */
 	compress(zsrc + MZ_HEAD, &zsrc_ln, (uint8_t *) src, src_ln + 1);
 	uint32_t zln = zsrc_ln;
-
+	
 	/* Only the last 14 bytes of the MD5 go to the mz record (first two bytes are the file name) */
 	memcpy(zsrc, md5 + 2, MZ_MD5); 
 
@@ -653,7 +610,6 @@ void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, u
 
 	int mzid = uint16(md5);
 	int mzlen = zsrc_ln + MZ_HEAD;
-
 	/* If it won't fit in the cache, write it directly */
 	if (mzlen > MZ_CACHE_SIZE)
 	{
@@ -767,18 +723,68 @@ void mz_corrupted()
 	exit(EXIT_FAILURE);
 }
 
+
 /**
  * @brief Decompress a MZ job
  * 
  * @param job MZ job
  */
+#define CHUNK_SIZE 1024
+
+int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
+    int ret;
+    z_stream strm;
+    unsigned char out[CHUNK_SIZE];
+    size_t data_size = 0;  // Current size of decompressed data
+
+    // Initialize the z_stream structure
+    memset(&strm, 0, sizeof(strm));
+    ret = inflateInit(&strm);
+    if (ret != Z_OK) {
+        fprintf(stderr, "inflateInit failed with error %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+	*data = malloc(CHUNK_SIZE);
+    // Process the compressed data
+    strm.avail_in = zdata_len;  // Size of the compressed data
+    strm.next_in = zdata;
+
+    do {
+        strm.avail_out = CHUNK_SIZE;
+        strm.next_out = out;
+
+        ret = inflate(&strm, Z_NO_FLUSH);
+        if (ret == Z_STREAM_ERROR) {
+            fprintf(stderr, "inflate failed with error Z_STREAM_ERROR\n");
+            inflateEnd(&strm);
+			mz_corrupted();
+        }
+
+        unsigned have = CHUNK_SIZE - strm.avail_out;
+
+        // Realloc to increase the size of data
+        *data = realloc(*data, data_size + have);
+        if (*data == NULL) 
+		{
+            fprintf(stderr, "Error reallocating memory to store decompressed data");
+            inflateEnd(&strm);
+            exit(EXIT_FAILURE);
+        }
+
+        // Copy the decompressed data to the end of data
+        memcpy(*data + data_size, out, have);
+        data_size += have;
+    } while (ret != Z_STREAM_END);
+
+    // Free resources
+    inflateEnd(&strm);
+	return data_size;
+}
+
 void mz_deflate(struct mz_job *job)
 {
 	/* Decompress data */
-	job->data_ln = MZ_MAX_FILE;
-	if (Z_OK != uncompress((uint8_t *)job->data, &job->data_ln, job->zdata, job->zdata_ln))
-	{
-		mz_corrupted();
-	}
+	job->data_ln = uncompress_by_chunks((uint8_t **) &job->data, job->zdata, job->zdata_ln);
 	job->data_ln--;
 }
+
