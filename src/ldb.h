@@ -291,5 +291,5 @@ void md5_string(const unsigned char *input, int len, unsigned char output[16]);
 uint8_t * md5_file(char *path);
 
 #define MD5(a, b, c)  md5_string(a, b, c)
+#define MZ_DEFLATE(job) mz_deflate(job)
 
-//normalized_license *load_licenses();
