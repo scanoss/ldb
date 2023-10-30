@@ -5,7 +5,6 @@
 #include <time.h>
 #include <sys/time.h>
 
-
 int logger_offset = 0;
 struct winsize logger_window;
 #define gotoxy(x,y) fprintf(stderr,"\033[%d;%dH", (y), (x))
@@ -22,6 +21,8 @@ static double progress_timer = 0;
 
 char animation[] = {'|', '/', '-','\\'};
 int animation_index = 0;
+
+int yi = 0;
 
 void logger_basic(const char * fmt, ...)
 {
@@ -43,7 +44,7 @@ void logger_basic(const char * fmt, ...)
     
     progress_timer = tmp;
 
-    gotoxy(0, logger_offset);
+    gotoxy(yi, logger_offset);
    
     if (fmt)
     {
@@ -52,8 +53,8 @@ void logger_basic(const char * fmt, ...)
         char * string;
         vasprintf(&string, fmt, args);
         fprintf(stderr, "\33[2K\r");
-        gotoxy(0, logger_offset);
-        fprintf(stderr, "%c  Import in progress: %s ", animation[animation_index], string);
+        gotoxy(yi, logger_offset);
+        fprintf(stderr, "%c  Import in progress: %s \n", animation[animation_index], string);
         free(string);
         va_end(args);
     }
@@ -125,7 +126,7 @@ void logger_dbname_set(char * db)
     if (*import_logger_path)    
         return;
     
-    system("clear");
+   // system("clear");
 
     ldb_prepare_dir(LOGGER_DIR);
     sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
@@ -144,7 +145,17 @@ void logger_dbname_set(char * db)
 
 void logger_init(char * db, int tnumber,  pthread_t * tlist)
 {
-    system("clear");
+    //get cursos position
+    int x, y;
+    scanf("\e[%d;%dR", &y, &x);
+    yi = y+1;
+
+    if (yi > logger_window.ws_row)
+    {
+        system("clear");
+        yi = 1;
+    }
+    
     pthread_mutex_init(&logger_lock, NULL);
     
     if (tlist)
