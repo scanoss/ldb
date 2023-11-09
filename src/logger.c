@@ -17,16 +17,16 @@ static int threads_number = 0;
 static log_level_t level = LOG_BASIC;
 static double progress_timer = 0;
 
-
-
 char animation[] = {'|', '/', '-','\\'};
 int animation_index = 0;
 
 int yi = 0;
+static bool first_cls = false;
+static bool quiet = false;
 
 void logger_basic(const char * fmt, ...)
 {
-    if (level != LOG_BASIC)
+    if (level != LOG_BASIC || quiet)
         return;
     pthread_mutex_lock(&logger_lock);
     if (animation_index >= sizeof(animation))
@@ -44,23 +44,20 @@ void logger_basic(const char * fmt, ...)
     
     progress_timer = tmp;
 
-    gotoxy(yi, logger_offset);
-   
     if (fmt)
     {
         va_list args;
         va_start(args, fmt);
         char * string;
         vasprintf(&string, fmt, args);
-        fprintf(stderr, "\33[2K\r");
-        gotoxy(yi, logger_offset);
-        fprintf(stderr, "%c  Import in progress: %s \n", animation[animation_index], string);
+        fprintf(stderr, "\33[2K\r%c  Import in progress: %s", animation[animation_index], string);
+        fflush(stderr);
         free(string);
         va_end(args);
     }
     else
     {
-        fprintf(stderr, "%c", animation[animation_index]);
+        fprintf(stderr, "\r%c", animation[animation_index]);
     }
     animation_index++;
     pthread_mutex_unlock(&logger_lock);
@@ -70,9 +67,15 @@ void log_info(const char * fmt, ...)
 {
 	va_list ap;
     logger_basic(NULL);
-    pthread_mutex_lock(&logger_lock);
     
-    if (level > LOG_BASIC && fmt)
+    pthread_mutex_lock(&logger_lock);
+    if (!first_cls && !quiet)
+    {
+        system("clear");
+        first_cls = true;
+    }
+    
+    if (level > LOG_BASIC && fmt && !quiet)
     {
         pthread_t t = pthread_self();
         int i = 0;
@@ -126,8 +129,6 @@ void logger_dbname_set(char * db)
     if (*import_logger_path)    
         return;
     
-   // system("clear");
-
     ldb_prepare_dir(LOGGER_DIR);
     sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
     time_t currentTime = time(NULL);
@@ -140,22 +141,10 @@ void logger_dbname_set(char * db)
         fprintf(f, "%s\n", timeString);
         fclose(f);
     }
-
 }
 
 void logger_init(char * db, int tnumber,  pthread_t * tlist)
 {
-    //get cursos position
-    int x, y;
-    scanf("\e[%d;%dR", &y, &x);
-    yi = y+1;
-
-    if (yi > logger_window.ws_row)
-    {
-        system("clear");
-        yi = 1;
-    }
-    
     pthread_mutex_init(&logger_lock, NULL);
     
     if (tlist)
@@ -194,6 +183,11 @@ void log_debug(const char * fmt, ...)
         free(string);
         va_end(args);
     }
+}
+
+void log_set_quiet(bool mode)
+{
+    quiet = mode;
 }
 
 

@@ -611,16 +611,30 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	
 	/*sort the csv*/
 	csv_sort(job);
-	uint line_number = 0;
+	int line_number = 0;
+	bool first_record = true;
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		bytecounter += lineln;
 		line_number++;
+		//skip lines starting with non alphanumeric char
+		if (!isalnum(line[0]))
+		{
+			skipped++;
+			continue;			
+		}
+		//skip keys with the incorrect lenght.
+		int key_len = strchr(line, ',') - line;
+		if (key_len != MD5_LEN_HEX && key_len != MD5_LEN_HEX - 2)
+		{
+			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght.\n", job->csv_path, line_number, key_len);
+			skipped++;
+			continue;
+		}
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
 			log_debug("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
-
 			skipped++;
 			continue;
 		}
@@ -642,7 +656,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		bool skip = false;
 
 		if (!data)
+		{
+			skipped++;
 			continue;
+		}
 
 		/* File table will have the url id as the second field, which will be
 			 converted to binary. Data then starts on the third field. Also file extensions
@@ -701,9 +718,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
 				skip = true;
 			}
-		/*	Disabled, we should have a ignored extension entry at this time 
-			if (job->opt.params.has_secondary_key && ignored_extension(data) && !bin_mode) //we dont know the file extension in bin_mode
-				skip = true; */
 
 			if (skip)
 			{
@@ -718,13 +732,14 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
 				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
+				skipped++;
 				continue;
 			}
 
 			/* Check if we have a whole new key (first 4 bytes), or just a new subkey (last 12 bytes) */
-			bool new_key = (memcmp(itemid, item_lastid, 4) != 0);
+			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, 4) != 0);
+			first_record = false;
 			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, MD5_LEN) != 0);
-
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
 			if (new_key || (item_ptr + 5 * LDB_PTR_LN + MD5_LEN + 2 * REC_SIZE_LEN + r_size) >= node_limit)
 			{
@@ -785,7 +800,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				/* Update variables */
 				item_rg_size = 0;
 			}
-
 
 			/* Add record length to record */
 			uint16_write(item_buf + item_ptr, r_size + field2_ln);
@@ -1310,6 +1324,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 
 		char *ptr = NULL;
 		char *filename = basename(config->csv_path);
+		//extract the sector from the file name. If there is no sector (example license.csv) process the compleate table.
 		long sector = strtol(filename, &ptr, 16);
 		if (ptr - filename < 2 || (ptr && *ptr != '.'))
 			sector = -1;
@@ -1464,8 +1479,12 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 	DIR *dir;
 	struct dirent *entry;
 	bool read = false;
-
-	if (!(dir = opendir(name))) return;
+//Skip "extra" folder if it is present.
+	if (father && strstr(father, "extra"))
+		return;
+		
+	if (!(dir = opendir(name))) 
+		return;
 
 	while ((entry = readdir(dir)))
 	{

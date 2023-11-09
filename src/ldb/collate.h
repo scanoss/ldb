@@ -47,6 +47,6 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_t *sector_mem);
 int ldb_collate_load_tuples_to_delete(job_delete_tuples_t* job, char * buffer, char * d, struct ldb_table table);
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, job_delete_tuples_t * delete, collate_handler handler);
-
+void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_delete_tuples_t * delete, collate_handler handler);
 
 #endif

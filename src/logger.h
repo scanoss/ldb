@@ -10,6 +10,7 @@ typedef enum {
 } log_level_t;
 
 void logger_init(char * db, int tnumber,  pthread_t * tlist);
+void log_set_quiet(bool mode);
 void logger_offset_increase(int off);
 void import_logger(const char * fmt, ...);
 void log_info(const char * fmt, ...);

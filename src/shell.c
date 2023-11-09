@@ -44,6 +44,7 @@
 #include "ldb.h"
 #include "command.h"
 #include "ldb_string.h"
+#include "logger.h"
 /**
  * @brief Contains the shell help text
  * 
@@ -138,6 +139,7 @@ void help()
 	printf("	ldb -u [path] -n[db_name]\n");
 	printf("		create \"db_name\" or update a existent one from \"path\". If \"db_name\" is not specified \"oss\" will be used by default\n");
 	printf("		This command is an alias of \"bulk insert\" using the default parameters of an standar ldb\n");
+	printf("	ldb -f [filename]	Process a list of commands from a file named filename\n");
 
 
 
@@ -289,6 +291,26 @@ bool stdin_handle()
 	return stay;
 }
 
+void file_handle(char *filename)
+{
+    char line[LDB_MAX_PATH];
+    
+    FILE * cmd_file = fopen(filename, "r");
+    if (cmd_file == NULL) 
+	{
+        printf("Can not open commands file.\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    while (fgets(line, sizeof(line), cmd_file) != NULL) 
+	{
+    	ldb_trim(line);
+		execute(line);
+    }
+    
+    fclose(cmd_file);
+}
+
 /**
  * @brief Prints the welcome banner
  * 
@@ -320,8 +342,6 @@ typedef enum
 	LDB_UPDATE
 } ldb_mode_t;
 
-
-
 ldb_mode_t mode = LDB_CONSOLE;
 static int collate = 0;
 int main(int argc, char **argv)
@@ -336,7 +356,9 @@ int main(int argc, char **argv)
           {"collate",  no_argument, 0 , 'c'},
           {"update",  required_argument, 0, 'u'},
           {"name",    required_argument, 0, 'n'},
+		  {"file",    required_argument, 0, 'f'},
 		  {"verbose",    no_argument, 0, 'V'},
+		  {"quiet",    no_argument, 0, 'q'},
           {0, 0, 0, 0}
         };
     
@@ -344,7 +366,7 @@ int main(int argc, char **argv)
     int option_index = 0;
 	int opt;
 	bool verbose = false;
-    while ( (opt = getopt_long (argc, argv, "u:n:chvV", long_options, &option_index)) >= 0) 
+    while ( (opt = getopt_long (argc, argv, "u:n:f:qchvV", long_options, &option_index)) >= 0) 
 	{
 		/* Check valid alpha is entered */
 		switch (opt)
@@ -366,6 +388,13 @@ int main(int argc, char **argv)
 				dbname = strdup(optarg);
 				break;
 			}
+			case 'f':
+			{
+				char * filename = strdup(optarg);
+				file_handle(filename);
+				free(filename);
+				exit(EXIT_SUCCESS);
+			}
 			case 'c':
 				collate = true;
 				break;
@@ -374,12 +403,16 @@ int main(int argc, char **argv)
 				verbose = true;
 				break;
 			}
+			case 'q':
+			{
+				log_set_quiet(true);
+				break;
+			}
 			default:
 			break;
 		}
 	}
-
-
+	
 	switch (mode)
 	{
 		case LDB_UPDATE:
@@ -398,7 +431,7 @@ int main(int argc, char **argv)
 					ldb_import_command("oss", path, cmd);
 				else
 					ldb_import_command(dbname, path, cmd);
-				
+				fprintf(stderr, "\r\nImport process end\n\n");			
 				return EXIT_SUCCESS;
 			}
 			break;
@@ -417,7 +450,8 @@ int main(int argc, char **argv)
 
 	do if (stdin_off) ldb_prompt();
 	while (stdin_handle() && stdin_off);
-
 	return EXIT_SUCCESS;
 
 }
+
+

@@ -280,7 +280,8 @@ void ldb_command_delete(char *command)
 			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
 				ldb_collate_mz_table(ldbtable, -1, &del_job);
 			else
-				ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+				//ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+				ldb_collate_delete(ldbtable, tmptable, &del_job, NULL);
 		}
 		else
 		{
@@ -367,7 +368,8 @@ void ldb_command_delete_records(char *command)
 			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
 				ldb_collate_mz_table(ldbtable, -1, &del_job);
 			else
-				ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+				//ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
+				ldb_collate_delete(ldbtable, tmptable, &del_job, NULL); 
 		}
 		else
 		{
