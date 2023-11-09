@@ -170,10 +170,10 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
 	/* Print remaining CSV data */
 	printf(",");
 	for (int i = remaining_hex; i < size; i++)
-		if (data[i] >= 32 && data[i] <= 126)
+		//if (data[i] >= 32 && data[i] <= 126)
 			fwrite(data + i, 1, 1, stdout);
-		else
-			fwrite(".", 1, 1, stdout);
+		/*else
+			fwrite(".", 1, 1, stdout);*/
 
 	fwrite("\n", 1, 1, stdout);
 	return false;

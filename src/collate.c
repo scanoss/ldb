@@ -649,7 +649,6 @@ void map_from_tuples(job_delete_tuples_t * job)
 	}
 }
 
-
 int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, char * d, struct ldb_table table)
 {
 	char *delimiter = d;
@@ -657,18 +656,19 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 	int tuples_index = 0;
     char * line = strtok(buffer, delimiter);
 	int key_len = table.key_ln;
+
     while (line != NULL) 
 	{
 		tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
 		tuples[tuples_index] = calloc(1, sizeof(tuple_t));
 		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
-		if (tuples[tuples_index]->key[0] != tuples[0]->key[0])
+		/*if (tuples[tuples_index]->key[0] != tuples[0]->key[0])
 		{
 			fprintf(stderr,"Error, different sector: %s", line);
 			free(tuples);
 			return 0;
-		}
-		if (line[key_len * 2 + 1] == ',')
+		}*/
+		if (strchr(line, ','))
 		{
 			char * data = strdup(line + key_len * 2 + 1);
 			if (data && *data)
@@ -692,7 +692,7 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 		ldb_bin_to_hex(job->tuples[i]->key, key_len, key_hex);
 		log_info("<key: %s", key_hex);
 		if (job->tuples[i]->data)
-			log_info("%s>\n", job->tuples[i]->data);
+			log_info(" %s>\n", job->tuples[i]->data);
 		else
 			log_info(">\n");
 	}
@@ -769,11 +769,8 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
 				k[2] = k2;
 				k[3] = k3;
 				/* If there is a pointer, read the list */
-				if (ldb_map_pointer_pos(k))
-				{
-					/* Process records */
-					ldb_fetch_recordset(sector_mem, collate->in_table, k, true, ldb_collate_handler, collate);
-				}
+				/* Process records */
+				ldb_fetch_recordset(sector_mem, collate->in_table, k, true, ldb_collate_handler, collate);
 			}
 
 	/* Process last record/s */
@@ -836,7 +833,6 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 	/* Read each DB sector */
 	do {
 		log_info("Collating Table %s - Reading sector %02x\n", table.table, k0);
-		
 		struct ldb_collate_data collate;
 		
 		if (ldb_collate_init(&collate, table, out_table, max_rec_ln, merge, k0))
@@ -846,6 +842,10 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			collate.handler = handler;
 			collate.del_tuples = delete;
 			uint8_t *sector  = ldb_load_sector(table, &k0);
+			//skip unexistent sector.
+			if (!sector)
+				continue;
+
 			ldb_collate_sector(&collate, k0, sector);
 		}
 		
@@ -865,4 +865,55 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 	fflush(stdout);
 
 	if (del_map) free(del_map);
+}
+
+
+/**
+ * @brief Execute the collate job
+ * 
+ * @param table LDB table to be processed
+ * @param out_table Output LDB table
+ * @param max_rec_ln Maximum record lenght
+ * @param merge True for update a record, false to add a new one.
+ * @param del_keys pointer to list of keys to be deleted.
+ * @param del_ln number of keys to be deleted
+ */
+void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_delete_tuples_t * delete, collate_handler handler)
+{
+
+	/* Start with sector 0, unless it is a delete command */
+	uint8_t k0 = 0;
+	
+	/* Otherwise use the first byte of the first key */
+	if (!delete)
+		return;
+
+	long total_records = 0;
+	setlocale(LC_NUMERIC, "");
+	
+	logger_dbname_set(table.db);
+	/* Read each DB sector */
+	for (int i = 0; i < delete->tuples_number; i++) 
+	{
+		log_info("Removing keys from Table %s - Reading sector %02x\n", table.table, k0);
+		k0 = *delete->tuples[i]->key;
+		struct ldb_collate_data collate;
+		
+		if (ldb_collate_init(&collate, table, out_table, 2048, false, k0))
+		{
+			/* Load collate data structure */
+			collate.handler = handler;
+			collate.del_tuples = delete;
+			collate.del_count = 0;
+			uint8_t * sector  = ldb_load_sector(table, &k0);
+			ldb_collate_sector(&collate, k0, sector);
+			total_records += collate.del_count;
+		}
+		/* Exit here if it is a delete command, otherwise move to the next sector */
+	} 
+
+	/* Show processed totals */
+	log_info("Table %s: cleanup completed with %'ld records\n", table.table, total_records);
+	fflush(stdout);
+
 }
