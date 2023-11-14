@@ -32,7 +32,6 @@ UNLINK_LIST,
 DUMP_SECTOR,
 DUMP,
 DUMP_KEYS,
-CAT_MZ,
 } commandtype;
 
 void ldb_command_create_database(char *command);
@@ -47,7 +46,6 @@ void ldb_command_create_table(char *command);
 void ldb_command_bulk(char *command, commandtype type);
 bool ldb_import_command(char * dbtable, char * path, char * config);
 void ldb_command_dump(char *command);
-void ldb_mz_cat(char *command);
 void ldb_command_dump_keys(char *command);
 void ldb_command_merge(char *command);
 void ldb_command_delete(char *command);

@@ -68,6 +68,7 @@ void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
 void mz_list(struct mz_job *job);
 void mz_extract(struct mz_job *job);
 void mz_cat(struct mz_job *job, char *key);
-void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuples_t * delete);
+void ldb_mz_collate(struct ldb_table table, int p_sector);
+void ldb_mz_collate_delete(struct ldb_table table, job_delete_tuples_t * delete);
 
 #endif

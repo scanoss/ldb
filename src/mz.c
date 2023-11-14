@@ -260,6 +260,7 @@ void mz_cat(struct mz_job *job, char *key)
 	/* Search and display "key" file contents */
 	mz_parse(job, mz_cat_handler);
 
+	free(job->data);
 	free(job->key);
 	free(job->mz);
 }

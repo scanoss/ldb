@@ -27,7 +27,12 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "4.0.1_beta"
+#define LDB_VERSION "4.0.2_beta"
+
+#define LDB_TABLE_DEFINITION_UNDEFINED -1
+#define LDB_TABLE_DEFINITION_STANDARD 0
+#define LDB_TABLE_DEFINITION_ENCRYPTED 1
+#define LDB_TABLE_DEFINITION_MZ 2
 
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
@@ -64,13 +69,13 @@ void ldb_hex_to_bin(char *hex, int hex_ln, uint8_t *out);
 void ldb_bin_to_hex(uint8_t *bin, uint32_t len, char *out);
 bool ldb_check_root();
 struct ldb_table ldb_read_cfg(char *db_table);
-void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys);
+void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys, int definitions);
 bool ldb_valid_table(char *table);
 bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
 void ldb_version();
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
-bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys);
+bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys, int definitions);
 bool ldb_create_table(char *db, char *table, int keylen, int reclen);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);

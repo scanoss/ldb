@@ -277,10 +277,10 @@ void ldb_command_delete(char *command)
 		 	printf("E076 Max record length cannot be smaller than table key\n");
 		else if (tuples_number)
 		{
-			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
-				ldb_collate_mz_table(ldbtable, -1, &del_job);
+			if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+				(!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices")))
+				ldb_mz_collate_delete(ldbtable, &del_job);
 			else
-				//ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 				ldb_collate_delete(ldbtable, tmptable, &del_job, NULL);
 		}
 		else
@@ -321,8 +321,6 @@ void ldb_command_delete_records(char *command)
 		logger_dbname_set(ldbtable.db);
 		logger_set_level(LOG_INFO);
 
-		//long keys_ln = 0;
-		//uint8_t *keys = fetch_keys(keys_start(command), &keys_ln, ldbtable.key_ln);
 		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
 
 		int tuples_number = 0;
@@ -355,20 +353,13 @@ void ldb_command_delete_records(char *command)
 		{
 			fprintf(stderr, "File %s does not exist\n", path);
 		}
-		// if (ldbtable.key_ln > keys_ln)
-		// 	printf("E076 Keys should contain (%d) bytes and have the first byte in common\n", ldbtable.key_ln);
-		// else if (ldbtable.rec_ln && ldbtable.rec_ln != max)
-		// 	printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
-		// else if (max < ldbtable.key_ln)
-		// 	printf("E076 Max record length cannot be smaller than table key\n");
-		// else
+
 		if (tuples_number)
 		{
-			int max = ldbtable.rec_ln == 0 ? 2048 : 18;
-			if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
-				ldb_collate_mz_table(ldbtable, -1, &del_job);
+			if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+				(!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices")))
+				ldb_mz_collate_delete(ldbtable, &del_job);
 			else
-				//ldb_collate(ldbtable, tmptable, max, false, -1, &del_job, NULL);
 				ldb_collate_delete(ldbtable, tmptable, &del_job, NULL); 
 		}
 		else
@@ -386,8 +377,6 @@ void ldb_command_delete_records(char *command)
 	free(mode);
 	free(path);
 }
-
-
 
 /**
  * @brief Execute the LDB command collate
@@ -413,19 +402,19 @@ void ldb_command_collate(char *command)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		if (!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices"))
+		if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+				(!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices")))
 		{
-			ldb_collate_mz_table(ldbtable, -1, NULL);
+			ldb_mz_collate(ldbtable, -1);
 		}
 		else
 		{
-
 			if (ldbtable.rec_ln && ldbtable.rec_ln != max)
 				printf("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
 			else if (max < ldbtable.key_ln)
 				printf("E076 Max record length cannot be smaller than table key\n");
 			else
-				ldb_collate(ldbtable, tmptable, max, false,-1, NULL, 0);
+				ldb_collate(ldbtable, tmptable, max, false,-1, NULL);
 		}
 	}
 
@@ -465,7 +454,6 @@ void ldb_command_dump(char *command)
 		struct ldb_table ldbtable = ldb_read_cfg(dbtable);
 		ldb_dump(ldbtable, hex, sectorn);
 	}
-
 	/* Free memory */
 	free(dbtable);
 }
@@ -505,7 +493,7 @@ void ldb_command_merge(char *command)
 		{
 			outtable.tmp = false;
 			outtable.key_ln = LDB_KEY_LN;
-			ldb_collate(ldbtable, outtable, max, true,-1, NULL, 0);
+			ldb_collate(ldbtable, outtable, max, true,-1, NULL);
 		}
 	}
 
@@ -674,7 +662,7 @@ void ldb_command_create_table(char *command)
 
 	// dbtable is the name of the database;
 	// table is the name of the table;
-	if (ldb_create_table_new(dbtable, table, keylen, reclen, seckey)) 
+	if (ldb_create_table_new(dbtable, table, keylen, reclen, seckey, 0)) 
 		printf("OK\n");
 
 	free(dbtable);
@@ -724,7 +712,27 @@ void ldb_command_select(char *command, select_format format)
 			/* Verify that provided key matches table key_ln (or main LDB_KEY_LEN) */
 			if ((key_ln != ldbtable.key_ln) && (key_ln != LDB_KEY_LN))
 				printf("E073 Provided key length is invalid\n");
+			else if (ldbtable.definitions & LDB_TABLE_DEFINITION_MZ)
+			{
+				/* Reserve memory for compressed and uncompressed data */
 
+				/* Define mz_job values */
+				struct mz_job job;
+				sprintf(job.path, "%s/%s", ldb_root, dbtable);
+				memset(job.mz_id, 0, 2);
+				job.mz = NULL;
+				job.mz_ln = 0;
+				job.id = NULL;
+				job.ln = 0;
+				job.data = NULL;        // Uncompressed data
+				job.data_ln = 0;
+				job.zdata = NULL;      // Compressed data
+				job.zdata_ln = 0;
+				job.md5[MD5_LEN] = 0;
+				job.key = NULL;
+
+				mz_cat(&job, key);
+			}
 			else
 			{
 				switch (format)
@@ -783,7 +791,6 @@ void ldb_command_create_config(char *command)
 	ldb_create_db_config_default(database);
 	free(database);
 }
-
 
 /**
  * @brief Execute the command LDB shows databases: list the availables databases en the default path
@@ -910,43 +917,5 @@ void ldb_command_dump_keys(char *command)
 	}
 
 	/* Free memory */
-	free(dbtable);
-}
-
-/**
- * @brief Execute mz cat over a LDB key 
- * 
- * @param command command string 
- */
-void ldb_mz_cat(char *command)
-{
-	/* Extract values from command */
-	char *key = ldb_extract_word(2, command);
-	char *dbtable = ldb_extract_word(4, command);
-
-	/* Reserve memory for compressed and uncompressed data */
-	char *src = calloc(MZ_MAX_FILE + 1, 1);
-	uint8_t *zsrc = calloc((MZ_MAX_FILE + 1) * 2, 1);
-
-	/* Define mz_job values */
-	struct mz_job job;
-	sprintf(job.path, "%s/%s", ldb_root, dbtable);
-	memset(job.mz_id, 0, 2);
-	job.mz = NULL;
-	job.mz_ln = 0;
-	job.id = NULL;
-	job.ln = 0;
-	job.data = src;        // Uncompressed data
-	job.data_ln = 0;
-	job.zdata = zsrc;      // Compressed data
-	job.zdata_ln = 0;
-	job.md5[MD5_LEN] = 0;
-	job.key = NULL;
-
-	if (ldb_valid_table(dbtable)) mz_cat(&job, key);
-
-	free(src);
-	free(zsrc);
-	free(key);
 	free(dbtable);
 }
