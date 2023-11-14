@@ -28,6 +28,7 @@ struct ldb_table
 	int keys;
 	uint8_t *current_key;
 	uint8_t *last_key;
+	int definitions;	// Table definitions: is MZ? is encrypted? 
 };
 
 struct ldb_recordset

@@ -114,7 +114,7 @@ void mz_collate(struct mz_job *job)
 }
 
 
-void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuples_t * delete)
+void ldb_mz_collate(struct ldb_table table, int p_sector)
 {
 	/* Start with sector 0*/
 	uint16_t k0 = 0;
@@ -124,9 +124,6 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuple
 	{
 		k0 = p_sector;
 	}
-
-	if (delete)
-		k0 = *delete->tuples[0]->key;
 
 	do {
 		char sector_path[LDB_MAX_PATH] = "\0";
@@ -140,8 +137,6 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuple
 		if (file_exist)
 		{
 			log_info("Processing %s (remove duplicates)\n", sector_path);
-			char *src = calloc(MAX_FILE_SIZE + 1, 1);
-			uint8_t *zsrc = calloc((MAX_FILE_SIZE + 1) * 2, 1);
 
 			struct mz_job job;
 			*job.path = 0;
@@ -150,9 +145,81 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuple
 			job.mz_ln = 0;
 			job.id = NULL;
 			job.ln = 0;
-			job.data = src;        // Uncompressed data
+			job.data = NULL;        // Uncompressed data
 			job.data_ln = 0;
-			job.zdata = zsrc;      // Compressed data
+			job.zdata = NULL;      // Compressed data
+			job.zdata_ln = 0;
+			job.ptr = NULL;        // Temporary data
+			job.ptr_ln = 0;
+			job.dup_c = 0;
+			job.igl_c = 0;
+			job.orp_c = 0;
+			job.min_c = 0;
+			job.md5[32] = 0;
+			job.check_only = false;
+			job.dump_keys = false;
+			job.orphan_rm = false;
+			job.key = NULL;
+			job.xkeys = NULL;
+			job.xkeys_ln = 0;
+			job.licenses = NULL;
+			job.license_count = 0;
+			job.exc_c = 0;
+			job.dup_c = 0;
+			strcpy(job.path, sector_path);
+			mz_collate(&job);
+			free(job.xkeys);
+		}
+
+		if (p_sector >=0)
+			break;
+
+	
+	} while (k0++ < 0xffff);
+
+}
+
+void ldb_mz_collate_delete(struct ldb_table table, job_delete_tuples_t * delete)
+{
+	
+	/* Otherwise use the first byte of the first key */
+	if (!delete)
+		return;
+
+	long total_records = 0;
+	setlocale(LC_NUMERIC, "");
+	
+	logger_dbname_set(table.db);
+	/* Read each DB sector */
+	for (int i = 0; i < delete->tuples_number; i++) 
+	{
+			/* Start with sector 0, unless it is a delete command */
+		uint16_t k = 0;
+		uint8_t * k0 = (uint8_t*) &k;
+		k0[1] = delete->tuples[i]->key[0];
+		k0[0] = delete->tuples[i]->key[1];
+		log_info("Removing keys from Table %s - Reading sector %04x\n", table.table, k);
+		char sector_path[LDB_MAX_PATH] = "\0";
+		sprintf(sector_path, "%s/%s/%s/%.4x.mz", ldb_root, table.db, table.table, k);
+		bool file_exist = ldb_file_exists(sector_path);
+		if (!file_exist) //check for encoded files
+		{
+			strcat(sector_path, ".enc");
+			file_exist = ldb_file_exists(sector_path);
+			log_info("Sector does not exist %s", sector_path);
+		}
+		if (file_exist)
+		{
+			struct mz_job job;
+			*job.path = 0;
+			memset(job.mz_id, 0, 2);
+			job.mz = NULL;
+			job.mz_ln = 0;
+			job.id = NULL;
+			job.ln = 0;
+			job.data = NULL;        // Uncompressed data
+			job.data_ln = 0;
+			job.zdata = NULL;      // Compressed data
 			job.zdata_ln = 0;
 			job.ptr = NULL;        // Temporary data
 			job.ptr_ln = 0;
@@ -173,29 +240,23 @@ void ldb_collate_mz_table(struct ldb_table table, int p_sector, job_delete_tuple
 			job.dup_c = 0;
 			strcpy(job.path, sector_path);
 
-			if (delete)
+			job.xkeys = calloc(delete->tuples_number, MD5_LEN);
+			job.xkeys_ln = delete->tuples_number * MD5_LEN;
+			for (; i < delete->tuples_number; i++)
 			{
-				job.xkeys = calloc(delete->tuples_number, MD5_LEN);
-				job.xkeys_ln = delete->tuples_number * MD5_LEN;
-				for (int i = 0; i < delete->tuples_number; i++)
-				{
-					memcpy(job.xkeys + i * MD5_LEN, delete->tuples[i]->key, MD5_LEN);
-				}
+				memcpy(job.xkeys + i * MD5_LEN, delete->tuples[i]->key, MD5_LEN);
+				if (i + 1 < delete->tuples_number)
+					if (memcmp(delete->tuples[i + 1]->key, delete->tuples[i]->key, 2))
+						break;
 			}
 			
 			mz_collate(&job);
-			
-			free(src);
-			free(zsrc);
 			free(job.xkeys);
 		}
+		/* Exit here if it is a delete command, otherwise move to the next sector */
+	} 
 
-		if (p_sector >=0)
-			break;
-
-	
-	} while (k0++ < 0xffff);
-
+	/* Show processed totals */
+	log_info("Table %s: cleanup completed with %'ld records\n", table.table, total_records);
+	fflush(stdout);
 }
-
-

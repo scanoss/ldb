@@ -1,0 +1,4 @@
+Max threads set to: 12
+|[2K/  Import in progress: sources[2K-  Import in progress: Collating - test_kb/sources[2K\  Import in progress: Collating - test_kb/sources[2K|  Import in progress: license[2K/  Import in progress: license[2K-  Import in progress: Collating - test_kb/license\|/-\[2K|  Import in progress: quality[2K/  Import in progress: quality[2K-  Import in progress: Collating - test_kb/quality\|/-[2K\  Import in progress: url[2K|  Import in progress: url[2K/  Import in progress: Collating - test_kb/url-\|/-[2K\  Import in progress: file[2K|  Import in progress: file[2K/  Import in progress: Collating - test_kb/file[2K-  Import in progress: Collating - test_kb/file[2K\  Import in progress: Collating - test_kb/file[2K|  Import in progress: Collating - test_kb/file[2K/  Import in progress: pivot[2K-  Import in progress: Collating - test_kb/pivot
+Import process end
+

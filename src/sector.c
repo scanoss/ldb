@@ -162,7 +162,7 @@ bool ldb_close(FILE * sector)
  * @param reclen length of the record
  * @return true success. false failure
  */
-bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys)
+bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys, int definitions)
 {
 	bool out = false;
 
@@ -191,7 +191,7 @@ bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int key
 		mkdir(tablepath, 0755);
 		if (ldb_dir_exists(tablepath))
 		{
-			ldb_write_cfg(db, table, keylen, reclen, keys);
+			ldb_write_cfg(db, table, keylen, reclen, keys, definitions);
 			out = true;
 		}
 		else printf("E065 Cannot create %s\n", tablepath);
@@ -202,9 +202,10 @@ bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int key
 	return out;
 }
 
+//For backward compatibility
 bool ldb_create_table(char *db, char *table, int keylen, int reclen)
 {
-	return ldb_create_table_new(db, table, keylen, reclen, 1);
+	return ldb_create_table_new(db, table, keylen, reclen, 1, 0);
 }
 
 /**

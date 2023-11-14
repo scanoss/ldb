@@ -245,10 +245,6 @@ bool execute(char *raw_command)
 			ldb_command_dump_keys(command);
 			break;
 
-		case CAT_MZ:
-			ldb_mz_cat(command);
-			break;
-
 		case VERSION:
 			ldb_version();
 			break;

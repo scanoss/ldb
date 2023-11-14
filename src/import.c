@@ -297,7 +297,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	/* Create table if it doesn't exist */
 	if (!ldb_table_exists(config->dbname, config->table))
-		ldb_create_table_new(config->dbname, config->table, 4, rec_ln, 1);
+		ldb_create_table_new(config->dbname, config->table, 4, rec_ln, 1, LDB_TABLE_DEFINITION_STANDARD);
 
 	/* Open ldb */
 	out = ldb_open(oss_wfp, last_wfp, "r+");
@@ -511,6 +511,18 @@ bool valid_hex(char *str, int bytes)
 	return true;
 }
 
+
+int ldb_import_mz(ldb_importation_config_t * job)
+{
+	char dest_path[LDB_MAX_PATH];
+	sprintf(dest_path, "%s/%s/%s/%s", ldb_root, job->dbname, job->table, basename(job->csv_path));
+	
+	if (!ldb_table_exists(job->dbname, job->table))
+		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ);	
+	
+	return (ldb_bin_join(job->csv_path, dest_path, job->opt.params.overwrite, false, job->opt.params.delete_after_import));
+}
+
 /**
  * @brief Import a CSV file into the LDB database
  *
@@ -581,7 +593,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		ldb_create_database(job->dbname);
 
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number);
+		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, 
+							bin_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD);
 	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
@@ -592,7 +605,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (oss_bulk.keys < 1)
 	{
 		oss_bulk.keys = job->opt.params.keys_number;
-		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys);
+		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, 
+					bin_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD);
 		log_info("Table %s config file was updated\n", oss_bulk.table);
 	}
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
@@ -1334,14 +1348,15 @@ int import_collate_sector(ldb_importation_config_t *config)
 		if (sector < 0)
 		{
 			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, sector, max_rec_len);
-			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL, NULL);
+			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL);
 			return 0;
 		}
 		
 		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
-		if (!strcmp(config->table, "sources") || !strcmp(config->table, "notices"))
+		if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+			 (ldbtable.definitions == LDB_TABLE_DEFINITION_UNDEFINED && config->opt.params.is_mz_table))
 		{
-			ldb_collate_mz_table(ldbtable, sector, NULL);
+			ldb_mz_collate(ldbtable, sector);
 		}
 		else if (sector >= 0)
 		{
@@ -1413,9 +1428,7 @@ int ldb_import(ldb_importation_config_t * job)
 	
 	if (config.opt.params.is_mz_table)
 	{
-		char dest_path[LDB_MAX_PATH];
-		sprintf(dest_path, "%s/%s/%s/%s", ldb_root, config.dbname, config.table, basename(config.csv_path));
-		result = ldb_bin_join(config.csv_path, dest_path, config.opt.params.overwrite, false, config.opt.params.delete_after_import);
+		result = ldb_import_mz(&config);
 	}
 	else if (config.opt.params.is_wfp_table)
 	{

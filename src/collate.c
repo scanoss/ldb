@@ -662,12 +662,7 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 		tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
 		tuples[tuples_index] = calloc(1, sizeof(tuple_t));
 		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
-		/*if (tuples[tuples_index]->key[0] != tuples[0]->key[0])
-		{
-			fprintf(stderr,"Error, different sector: %s", line);
-			free(tuples);
-			return 0;
-		}*/
+
 		if (strchr(line, ','))
 		{
 			char * data = strdup(line + key_len * 2 + 1);
@@ -809,22 +804,13 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
  * @param del_keys pointer to list of keys to be deleted.
  * @param del_ln number of keys to be deleted
  */
-void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, job_delete_tuples_t * delete, collate_handler handler)
+void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, collate_handler handler)
 {
-
 	long *del_map = NULL;
-
 	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
 	if (p_sector >= 0)
-	{
 		k0 = p_sector;
-	}
-
-	/* Otherwise use the first byte of the first key */
-	//if (del_ln) k0 = *del_keys;
-	if (delete)
-		k0 = *delete->tuples[0]->key;
 
 	long total_records = 0;
 	setlocale(LC_NUMERIC, "");
@@ -840,7 +826,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 			/* Load collate data structure */
 			collate.handler = handler;
-			collate.del_tuples = delete;
+			collate.del_tuples = NULL;
 			uint8_t *sector  = ldb_load_sector(table, &k0);
 			//skip unexistent sector.
 			if (!sector)
@@ -853,7 +839,7 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			break;
 
 		/* Exit here if it is a delete command, otherwise move to the next sector */
-	} while (k0++ < 255 && !delete);
+	} while (k0++ < 255);
 
 	/* Show processed totals */
 	if (p_sector >= 0)
