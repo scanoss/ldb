@@ -714,8 +714,6 @@ void ldb_command_select(char *command, select_format format)
 				printf("E073 Provided key length is invalid\n");
 			else if (ldbtable.definitions & LDB_TABLE_DEFINITION_MZ)
 			{
-				/* Reserve memory for compressed and uncompressed data */
-
 				/* Define mz_job values */
 				struct mz_job job;
 				sprintf(job.path, "%s/%s", ldb_root, dbtable);

@@ -518,7 +518,8 @@ int ldb_import_mz(ldb_importation_config_t * job)
 	sprintf(dest_path, "%s/%s/%s/%s", ldb_root, job->dbname, job->table, basename(job->csv_path));
 	
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ);	
+		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
+						(job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD));
 	
 	return (ldb_bin_join(job->csv_path, dest_path, job->opt.params.overwrite, false, job->opt.params.delete_after_import));
 }
