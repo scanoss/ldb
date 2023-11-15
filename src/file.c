@@ -38,11 +38,11 @@ void ldb_prepare_dir(char *path)
 {
 	if (ldb_dir_exists (path)) 
 		return;
-		
-	if (mkdir (path, 0755))
+	int err = mkdir(path, 0755);
+	if (err)
 	{
 		char error[1024];
-		sprintf(error, "E050 Cannot create directory %s\n", path);
+		sprintf(error, "E050 There was a problem creating the directory %s. Error: %d\n", path, err);
 		ldb_error (error);
 	}
 }
