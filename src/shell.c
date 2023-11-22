@@ -84,8 +84,11 @@ void help()
 	printf("    SKIP_FIELDS_CHECK: Check field quantity during importation.\n");
 	printf("    VALIDATE_VERSION: Validate version.json.\n");
 	printf("    VERBOSE: Enable verbose mode.\n");
-	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n\n");
-	printf("It is not mandatory to specify all parameters; default values will be assumed for missing parameters.\n\n");
+	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n");
+	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
+	printf("    MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.\n");
+	printf("    TMP_PATH: Define the temporary directory. Default value \"/tmp\".\n");
+	printf("	It is not mandatory to specify all parameters; default values will be assumed for missing parameters.\n\n");
 
 	printf("	bulk insert  DBNAME/TABLENAME from PATH\n");
 	printf("    	Import data from PATH into given db/table. If PATH is a directory, the files inside will be recursively imported.\n");
@@ -115,7 +118,7 @@ void help()
 	printf("    	All the records matching the all the csv's field with exception of the second thirdone will be removed\n\n");
 
 	printf("	delete from DBNAME/TABLENAME records from PATH\n");
-	printf("    	Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH\n");
+	printf("    	Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH\n\n");
 	
 	printf("	collate DBNAME/TABLENAME max LENGTH\n");
 	printf("    	Collates all lists in a table, removing duplicates and records greater than LENGTH bytes\n\n");
@@ -136,8 +139,9 @@ void help()
 	printf("		Shows the contents for KEY in MZ archive\n");
 
 	printf("Other uses\n");
-	printf("	ldb -u [path] -n[db_name]\n");
-	printf("		create \"db_name\" or update a existent one from \"path\". If \"db_name\" is not specified \"oss\" will be used by default\n");
+	printf("	ldb -u [--update] path -n[--name] db_name -c[--collate]\n");
+	printf("		create \"db_name\" or update a existent one from \"path\". If \"db_name\" is not specified \"oss\" will be used by default.\n");
+	printf("		If \"--collate\" option is present, each table will be collated during the importation process.\n");
 	printf("		This command is an alias of \"bulk insert\" using the default parameters of an standar ldb\n");
 	printf("	ldb -f [filename]	Process a list of commands from a file named filename\n");
 

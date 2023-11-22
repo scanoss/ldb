@@ -65,7 +65,6 @@ void logger_basic(const char * fmt, ...)
 
 void log_info(const char * fmt, ...)
 {
-	va_list ap;
     logger_basic(NULL);
     
     pthread_mutex_lock(&logger_lock);
@@ -75,7 +74,25 @@ void log_info(const char * fmt, ...)
         first_cls = true;
     }
     
-    if (level > LOG_BASIC && fmt && !quiet)
+    char * string = NULL;
+    //save to log file
+    if (fmt)
+    {
+        va_list args;
+        va_start(args, fmt);
+        vasprintf(&string, fmt, args);
+        va_end(args);
+        FILE * f = fopen(import_logger_path, "a");
+        if (f)
+        {
+            fprintf(f, "%s", string);
+            if (!strrchr(string, '\n'))
+                fprintf(f, "\n");
+            fclose(f);
+        }
+    }
+    //print on stderr
+    if (level > LOG_BASIC && string && !quiet)
     {
         pthread_t t = pthread_self();
         int i = 0;
@@ -93,7 +110,7 @@ void log_info(const char * fmt, ...)
         }
         if (!found)
             i = 0;
-        va_start(ap, fmt);
+       
         if (threads_number > 1)
         {
             if (i+logger_offset+threads_number/2 > logger_window.ws_row)
@@ -106,20 +123,7 @@ void log_info(const char * fmt, ...)
             gotoxy(1, i + 1 + logger_offset);
             fprintf(stderr, "Thread %d: ", i);
         }
-        vfprintf(stderr, fmt, ap);
-        va_end(ap);
-    }
-    
-    if (fmt)
-    {
-        FILE * f = fopen(import_logger_path, "a");
-        if (f)
-        {
-            va_start(ap, fmt);
-            vfprintf(f, fmt, ap);
-            va_end(ap);
-            fclose(f);
-        }
+        fprintf(stderr, "%s\r", string);
     }
 	pthread_mutex_unlock(&logger_lock);
 }

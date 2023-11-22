@@ -7,6 +7,7 @@ SOURCES=$(wildcard src/*.c)
 OBJECTS=$(SOURCES:.c=.o) 
 TARGET=ldb
 LIB=libldb.so
+LOGDIR:=/var/log/scanoss/ldb/
 $(TARGET): $(OBJECTS)
 	$(CC) -g -o $(TARGET) $^ $(LDFLAGS)
 
@@ -34,6 +35,7 @@ install:
 	@cp $(LIB) /usr/lib
 	@cp -r src/ldb /usr/include
 	@cp src/ldb.h /usr/include
+	@mkdir -p $(LOGDIR) && chown -R $(SUDO_USER) $(LOGDIR) && chmod -R u+rw $(LOGDIR)
 uninstall:
 	@rm -r /usr/include/ldb
 	@rm /usr/include/ldb.h

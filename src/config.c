@@ -125,7 +125,7 @@ struct ldb_table ldb_read_cfg(char *db_table)
 	// backward compatibility with cfg files
 	if (result < 4)
 	{
-		log_info("Warning: some fields are undefined in config file %s, should be updated\n", path);
+		log_info("Warning: some fields are undefined in config file %s, must be updated\n", path);
 		keys = -1;
 		definitions = -1;
 	}
