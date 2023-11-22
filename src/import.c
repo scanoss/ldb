@@ -99,8 +99,9 @@ bool csv_sort(ldb_importation_config_t * config)
 		return false;
 
 	/* Assemble command */
-	char *command = malloc(MAX_CSV_LINE_LEN + 3 * LDB_MAX_PATH);
-	sprintf(command, "sort -T %s -u -o %s %s", config->tmp_path, config->csv_path, config->csv_path);
+	char *command = malloc(5 * LDB_MAX_PATH);
+	snprintf(command, 5 * LDB_MAX_PATH,"sort -T %s -u -o %s.tmp %s && mv %s.tmp %s", config->tmp_path, config->csv_path, config->csv_path,
+																					config->csv_path, config->csv_path);
 	
 	log_info("Sorting %s\n", config->csv_path);
 	
@@ -207,12 +208,12 @@ void progress(char * path, char * table, size_t count, size_t max, bool percent)
 	if (percent)
 	{
 		logger_basic("%s", table);
-		log_info("Importing %s to table %s: %.2f%%\r", path, table, ((double)count / (double)max) * 100);
+		log_info("Importing %s to table %s: %.2f%%", path, table, ((double)count / (double)max) * 100);
 	}
 	else
 	{
 		logger_basic("%s\n", table);
-		log_info("Importing %s to table %s: %lu\r", path, table, count);
+		log_info("Importing %s to table %s: %lu", path, table, count);
 	}
 	//fflush(stdout);
 }
@@ -898,7 +899,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 /**
  * @brief Wipes table before importing (-O)
  *
- * @param table path to table
+ * @param table path <to table>
  * @param job pointer to mner job
  */
 void wipe_table(ldb_importation_config_t *config)
@@ -1097,6 +1098,7 @@ const char * config_parameters[] = {
 									"SKIP_FIELDS_CHECK",
 									"COLLATE",
 									"MAX_RECORD",
+									"MAX_RAM_PERCENT",
 									"TMP_PATH",
 									};
 
@@ -1113,7 +1115,8 @@ const char * config_parameters[] = {
 										.csv_fields = 1,\
 										.skip_fields_check = 0,\
 										.collate = 0,\
-										.collate_max_rec = 1024}
+										.collate_max_rec = 1024,\
+										.collate_max_ram_percent = 50}
 
 bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line)
 {
@@ -1186,7 +1189,7 @@ bool ldb_create_db_config_default(char * dbname)
 					"cryptography: (FIELDS=3)\n"
 					"url: (FIELDS=8)\n"
 					"file: (KEYS=2, FIELDS=3)\n"
-					"pivot: (KEYS=2, FIELDS=1, SKIP_FIELDS_CHECK=1)\n"
+					"pivot: (KEYS=2, FIELDS=2, SKIP_FIELDS_CHECK=1)\n"
 					"wfp: (WFP=1)\n";
 	
 	char config_path[LDB_MAX_PATH] = "";
@@ -1263,8 +1266,7 @@ static int load_import_config(ldb_importation_config_t * config)
 		return -1;
 }
 
-static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
-
+static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int collate_max_ram_percent)
 {
     FILE* file = fopen("/proc/meminfo", "r");
     if (file == NULL) {
@@ -1273,15 +1275,24 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
     }
 
     char line[256];
+	unsigned long totalMemory = 0;
     unsigned long availableMemory = 0;
 	unsigned long freeMemory = 0;
-    while (fgets(line, sizeof(line), file)) {
+    
+	while (fgets(line, sizeof(line), file)) {
 
+		if (sscanf(line, "MemTotal: %lu", &totalMemory) == 1)
+            continue;
 		if (sscanf(line, "MemFree: %lu", &freeMemory) == 1) 
             continue;
         if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1) 
             break;
     }
+
+	if (collate_max_ram_percent <= 0)
+		collate_max_ram_percent = 50;
+
+	int max_collate_ram = (totalMemory * (100 - collate_max_ram_percent)) / 100;
 
     fclose(file);
 	
@@ -1295,12 +1306,12 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector)
 	uint64_t sector_size = ldb_file_size(path) / 1024;
 	
 	free(path);
-
+	log_info("max collate ram : %d", max_collate_ram);
 
     log_debug("Collate sector: %02x - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024, freeMemory/1024, availableMemory / 1024);
-	if ( (availableMemory < (sector_size * 1.2)  && freeMemory < sector_size))// || freeMemory < (1024*1024))
+	if ( (availableMemory < (sector_size * 2)  && freeMemory < sector_size * 1.5) || availableMemory < max_collate_ram)// || freeMemory < (1024*1024))
 	{
-		log_info("Not enough memory to alocate the sector %02x. Resquest %ld - available %ld\n", sector, sector_size, availableMemory);
+		log_info("Not enough memory to alocate the sector %02x. Resquested: %ld - available: %ld - min free %%: %d\n", sector, sector_size * 2, availableMemory, collate_max_ram_percent);
 		return false;
 	}
 
@@ -1370,7 +1381,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 			if (!init_ok)
 				log_info("Collate init failed for sector %d\n", k0);
 
-			if (init_ok && check_system_available_ram(ldbtable, k0))
+			if (init_ok && check_system_available_ram(ldbtable, k0, config->opt.params.collate_max_ram_percent))
 				sector_mem = ldb_load_sector(ldbtable, &k0);
 
 			pthread_mutex_unlock(&lock);

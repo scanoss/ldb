@@ -712,7 +712,7 @@ void ldb_command_select(char *command, select_format format)
 			/* Verify that provided key matches table key_ln (or main LDB_KEY_LEN) */
 			if ((key_ln != ldbtable.key_ln) && (key_ln != LDB_KEY_LN))
 				printf("E073 Provided key length is invalid\n");
-			else if (ldbtable.definitions & LDB_TABLE_DEFINITION_MZ)
+			else if (ldbtable.definitions > 0 && (ldbtable.definitions & LDB_TABLE_DEFINITION_MZ))
 			{
 				/* Define mz_job values */
 				struct mz_job job;

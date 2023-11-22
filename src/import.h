@@ -19,8 +19,9 @@ typedef union import_params {
     	int skip_fields_check;
 		int collate;
 		int collate_max_rec;
+		int collate_max_ram_percent;
 	} params;
-	int params_arr[sizeof(struct params)];
+	int params_arr[sizeof(struct params)/sizeof(int)];
 } import_params_t;
 
 typedef struct ldb_importation_config_t
