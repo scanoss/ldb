@@ -728,6 +728,7 @@ void ldb_command_select(char *command, select_format format)
 				job.zdata_ln = 0;
 				job.md5[MD5_LEN] = 0;
 				job.key = NULL;
+				job.decrypt = NULL;
 
 				mz_cat(&job, key);
 			}

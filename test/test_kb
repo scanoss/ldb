@@ -17,7 +17,7 @@ test_3_kb_query() {
     assert_equals "ca80efeae39f6de1dc102fb0fd9df8e2,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download3.zip" $result "url table quert fails"
     result=$(echo "select from test_kb/sources key b377b77401a8bfbef9ea316787ebda99 csv hex 16" | ../ldb | tr -cd '[:print:]')
     comp="Manifest-Version: 1.0Implementation-Title: jsonapi-scala-akka-clientImplementation-Version: 6.0.1Specification-Vendor: com.qvantelSpecification-Title: jsonapi-scala-akka-clientImplementation-Vendor-Id: com.qvantelSpecification-Version: 6.0.1Implementation-URL: https://github.com/qvantel/jsonapi-scalaImplementation-Vendor: com.qvantel"
-    assert_equals "$result" "$comp"
+    assert_equals "$comp" "$result"
 }
 
 test_4_kb_delete_record() {

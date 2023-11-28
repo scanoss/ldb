@@ -194,6 +194,9 @@ bool mz_cat_handler(struct mz_job *job)
 {
 	if (!memcmp(job->id, job->key + 2, MZ_MD5))
 	{
+		/* Decrypt (if encrypted) */
+		if (job->decrypt)
+			job->decrypt(job->id, job->zdata_ln);
 		/* Decompress */
 		mz_deflate(job);
 
