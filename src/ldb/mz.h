@@ -47,6 +47,7 @@ struct mz_job
 	void *licenses; // Array of known license identifiers
 	int license_count;            // Number of known license identifiers
 	bool key_found;			// Used with mz_key_exists
+	void  (*decrypt) (uint8_t *data, uint32_t len);
 };
 
 

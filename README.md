@@ -13,6 +13,9 @@ Run `make all` to build the shell binary and the shared library.
 ## Install
 Run `make install` to copy the binary to `/usr/bin`, the shared library to `/usr/lib` and the header to `/usr/include`.
 
+## Run test
+Run `./run_test.sh` to test the ldb binary.
+
 # Features
 
 Some of the features of the LDB are:
@@ -66,12 +69,12 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         VERBOSE: Enable verbose mode.
         COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.
         MAX_RECORD: Maximum record size in bytes (default: 1024).
+        MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
         TMP_PATH: Path to the folder used for temporary files (default: /tmp).
 
 bulk insert DBNAME/TABLENAME from PATH
     Imports data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.
     The configuration will be retrieved from the "db.conf" file located at "/etc/local/scanoss/ldb/". A default configuration file will be created if it doesn't exist.
-
 
 insert into DBNAME/TABLENAME key KEY hex DATA
     Inserts data (hex) into given db/table for the given hex key
@@ -103,6 +106,19 @@ unlink list from DBNAME/TABLENAME key KEY
 dump DBNAME/TABLENAME hex N
     Dumps table contents with first N bytes in hex
 ```
+## Other Uses
+
+### Update Database
+```bash
+ldb -u [--update] path -n[--name] db_name -c[--collate]
+```
+Create or update an existing database from "path." If "db_name" is not specified, "oss" will be used by default. If the "--collate" option is present, each table will be collated during the importation process.
+
+### Process Commands from File
+```bash
+ldb -f [filename]
+```
+Process a list of commands from a file named "filename."q
 
 # Using the shell
 
@@ -126,6 +142,8 @@ The LDB is released under the GPL 2.0 license. See the LICENSE file for more inf
  
 Copyright (C) 2018-2020 SCANOSS.COM
 http://scanoss.com
+
+
 
 
 
