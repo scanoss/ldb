@@ -41,6 +41,8 @@
 #include "ldb.h"
 #include "mz.h"
 #include <gcrypt.h>
+#include "mz.h"
+#include <gcrypt.h>
 
 /**
  * @brief compare two MZ keys
@@ -128,6 +130,7 @@ bool mz_list_handler(struct mz_job *job)
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
 	MD5( (unsigned char*) job->data, job->data_ln, actual_md5);
+	MD5( (unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -135,7 +138,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else if (!job->check_only)
 	{
@@ -194,6 +197,9 @@ bool mz_cat_handler(struct mz_job *job)
 {
 	if (!memcmp(job->id, job->key + 2, MZ_MD5))
 	{
+		/* Decrypt (if encrypted) */
+		if (job->decrypt)
+			job->decrypt(job->id, job->zdata_ln);
 		/* Decrypt (if encrypted) */
 		if (job->decrypt)
 			job->decrypt(job->id, job->zdata_ln);
@@ -264,6 +270,7 @@ void mz_cat(struct mz_job *job, char *key)
 	mz_parse(job, mz_cat_handler);
 
 	free(job->data);
+	free(job->data);
 	free(job->key);
 	free(job->mz);
 }
@@ -285,6 +292,7 @@ bool mz_extract_handler(struct mz_job *job)
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
 	MD5((unsigned char*) job->data, job->data_ln, actual_md5);
+	MD5((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -292,7 +300,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else
 	{
@@ -722,7 +730,7 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted(int error)
+void mz_corrupted( )
 {
 	printf("Corrupted mz file\n");
 	exit(EXIT_FAILURE);
@@ -734,6 +742,58 @@ void mz_corrupted(int error)
  * 
  * @param job MZ job
  */
+#define CHUNK_SIZE 1024
+
+int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
+    int ret;
+    z_stream strm;
+    unsigned char out[CHUNK_SIZE];
+    size_t data_size = 0;  // Current size of decompressed data
+
+    // Initialize the z_stream structure
+    memset(&strm, 0, sizeof(strm));
+    ret = inflateInit(&strm);
+    if (ret != Z_OK) {
+        fprintf(stderr, "inflateInit failed with error %d\n", ret);
+        exit(EXIT_FAILURE);
+    }
+	*data = malloc(CHUNK_SIZE);
+    // Process the compressed data
+    strm.avail_in = zdata_len;  // Size of the compressed data
+    strm.next_in = zdata;
+
+    do {
+        strm.avail_out = CHUNK_SIZE;
+        strm.next_out = out;
+
+        ret = inflate(&strm, Z_NO_FLUSH);
+        if (ret == Z_STREAM_ERROR) {
+            fprintf(stderr, "inflate failed with error Z_STREAM_ERROR\n");
+            inflateEnd(&strm);
+			mz_corrupted();
+        }
+
+        unsigned have = CHUNK_SIZE - strm.avail_out;
+
+        // Realloc to increase the size of data
+        *data = realloc(*data, data_size + have);
+        if (*data == NULL) 
+		{
+            fprintf(stderr, "Error reallocating memory to store decompressed data");
+            inflateEnd(&strm);
+            exit(EXIT_FAILURE);
+        }
+
+        // Copy the decompressed data to the end of data
+        memcpy(*data + data_size, out, have);
+        data_size += have;
+    } while (ret != Z_STREAM_END);
+
+    // Free resources
+    inflateEnd(&strm);
+	return data_size;
+}
+
 #define CHUNK_SIZE 1024
 
 int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
