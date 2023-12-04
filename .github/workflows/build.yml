@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Install third party dependencies
-        run: sudo apt install build-essential libgcrypt-dev zlib1g-dev libsqlite3-dev libz-dev
+        run: sudo apt update && sudo apt install build-essential libgcrypt-dev zlib1g-dev libsqlite3-dev libz-dev curl gem ruby unzip p7zip-full unrar-free
 
       - uses: actions/checkout@v3
 
@@ -23,7 +23,7 @@ jobs:
         run: make all
 
       - name: version
-        run: echo "::set-output name=version::$(./ldb -version)"
+        run: echo "::set-output name=version::$(./ldb -v)"
         id: version
       
       - name: Test output

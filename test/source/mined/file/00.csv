@@ -1,0 +1,5 @@
+000000000000000000000000000001,ca80efeae39f6de1dc102fb0fd9df8e1,test1/file/to/see/if/the/fisrt/record/is/imported0.test
+00100000000000000000000000001,ba80efeae39f6de1dc102fb0fd9df8e2,test2/file/to/see/if/the/fisrt/record/is/imported2.test
+100000000000000000000000000001,ba80efeae39f6de1dc102fb0fd9df8e1,key/to/be/removed/with/delete/keys
+befd3ab1fb69962aa00f9a23aef8f7,ba80efeae39f6de1dc102fb0fd9df8e3,test3/file/to/see/if/the/fisrt/record/is/imported3.test
+#This line and the second one must be skipped. (non askii char and incorrect key size) 

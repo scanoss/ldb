@@ -1,0 +1,3 @@
+dump test_kb/file hex 32
+dump test_kb/url hex 16
+dump test_kb/pivot hex 32

@@ -19,7 +19,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
+#include "ldb.h"
+#include <stdio.h>
+#include "ldb_string.h"
  /**
   * @file dump.c
   * @date 12 Jul 2020 
@@ -58,12 +60,8 @@ void ldb_dump(struct ldb_table table, int hex_bytes, int sectorn)
 						k[1] = k1;
 						k[2] = k2;
 						k[3] = k3;
-						/* If there is a pointer, read the list */
-						if (ldb_map_pointer_pos(k))
-						{
-							/* Process records */
-							ldb_fetch_recordset(sector, table, k, true, ldb_csvprint, &hex_bytes);
-						}
+						/* Process records */
+						ldb_fetch_recordset(sector, table, k, true, ldb_csvprint, &hex_bytes);
 					}
 			free(sector);
 		}

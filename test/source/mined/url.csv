@@ -1,0 +1,7 @@
+00000000000000000000000000000001,test_vendor_00,test_component_00,1.1.1_test,2023-12-1,Apache-2.0,pkg:maven/com.thoughtworks.dsl/keywords-each_sjs0.6_2.12,https://repo1.maven.org/maven2/com/qvantel/jsonapi-scala-akka-client_2.12/6.0.1/jsonapi-scala-akka-client_2.12-6.0.1.jar
+00000000000000000000000000000101,test_vendor_00,test_component_00,1.1.1_test,2023-12-1,Apache-2.0,pkg:maven/com.thoughtworks.dsl/keywords-each_sjs0.6_2.12,https://repo1.maven.org/maven2/com/qvantel/jsonapi-scala-akka-client_2.12/6.0.1/jsonapi-scala-akka-client_2.12-6.0.2.jar
+ba80efeae39f6de1dc102fb0fd9df8e0,com.thoughtworks.dsl,keywords-each_sjs0.6_2.12,1.5.5+1-7a249e3c,2021-12-10,Apache-2.0,pkg:maven/com.thoughtworks.dsl/keywords-each_sjs0.6_2.12,https://repo1.maven.org/maven2/com/qvantel/jsonapi-scala-akka-client_2.12/6.0.1/jsonapi-scala-akka-client_2.12-6.0.1.jar
+ba80efeae39f6de1dc102fb0fd9df8e1,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download1.zip
+ba80efeae39f6de1dc102fb0fd9df8e1,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download2.zip
+ba80efeae39f6de1dc102fb0fd9df8e1,test_vendor,test_component2,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download1.zip
+ca80efeae39f6de1dc102fb0fd9df8e2,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download3.zip

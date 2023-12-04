@@ -28,7 +28,7 @@
   * //TODO Long description
   * @see https://github.com/scanoss/ldb/blob/master/src/file.c
   */
-
+#include "ldb.h"
 /**
  * @brief create LDB directory
  * 
@@ -36,9 +36,15 @@
  */
 void ldb_prepare_dir(char *path)
 {
-	if (ldb_dir_exists (path)) return;
-	if (mkdir (path, 0755)) 
-		ldb_error ("E050 Cannot create root LDB directory");
+	if (ldb_dir_exists (path)) 
+		return;
+	int err = mkdir(path, 0755);
+	if (err)
+	{
+		char error[1024];
+		sprintf(error, "E050 There was a problem creating the directory %s. Error: %d\n", path, err);
+		ldb_error (error);
+	}
 }
 
 /**
@@ -133,4 +139,49 @@ bool ldb_database_exists(char *db)
 	bool out = ldb_dir_exists(path);
 	free(path);
 	return out;
+}
+
+char * ldb_file_extension(char * path)
+{
+	if (!path)
+		return NULL;
+
+	char * dot = strrchr(path, '.');
+
+	if (!dot)
+		return NULL;
+
+	printf("%s\n", dot);
+
+	return (dot + 1);
+}
+
+/**
+ * @brief Creates a directory with 0755 permissions.
+ * If the folder already exists the folder is not replaced.
+ * 
+ * @param path Path to the folder to create.
+ * @return true Folder created or already exists. False in error case.
+ */
+bool ldb_create_dir(char *path)
+{
+	bool result = false;
+	char *sep = strrchr(path, '/');
+	if(sep != NULL) {
+    	*sep = 0;
+    	result = ldb_create_dir(path);
+    	*sep = '/';
+    }
+  
+	if (ldb_dir_exists(path)) 
+	{
+  		result = true;
+	}
+	else if (!mkdir(path, 0755)) 
+	{
+  		result = true;
+		//fprintf(stderr, "Created dir: %s\n", path);
+	}
+
+	return result;
 }

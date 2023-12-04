@@ -29,7 +29,6 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/keys.c
   */
 
-#define _GNU_SOURCE
 #include <ctype.h>
 #include <dirent.h>
 #include <stdint.h>
@@ -42,48 +41,12 @@
 #include <unistd.h>
 
 #include "ldb.h"
-#include "collate.c"
-#include "dump.c"
-#include "config.c"
-#include "pointer.c"
-#include "file.c"
-#include "hex.c"  
-#include "lock.c"
-#include "node.c"
-#include "recordset.c"
-#include "sector.c"
-#include "string.c"
-#include "keys.c"
 
 
 /* Global */
 char ldb_root[] = "/var/lib/ldb";
 char ldb_lock_path[] = "/dev/shm/ldb.lock";
 int ldb_cmp_width = 0;
-
-char *ldb_commands[] = 
-{
-	"help",
-	"create database {ascii}",
-	"create table {ascii} keylen {ascii} reclen {ascii}",
-	"show databases",
-	"show tables from {ascii}",
-	"insert into {ascii} key {hex} ascii {ascii}",
-	"insert into {ascii} key {hex} hex {hex}",
-	"select from {ascii} key {hex} ascii",
-	"select from {ascii} key {hex} csv hex {ascii}",
-	"select from {ascii} key {hex} hex",
-	"delete from {ascii} max {ascii} keys {ascii}",
-	"collate {ascii} max {ascii}",
-	"merge {ascii} into {ascii} max {ascii}",
-	"version",
-	"unlink list from {ascii} key {hex}",
-	"dump {ascii} hex {ascii} sector {hex}",
-	"dump {ascii} hex {ascii}",
-	"dump keys from {ascii}",
-	"cat {hex} from {ascii}"
-};
-int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
 
 /**
  * @brief Display LDB error and exit program

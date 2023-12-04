@@ -1,51 +1,45 @@
 ifeq ($(origin CC),default)
-CC=gcc
+CC = gcc
 endif
-CCFLAGS?=-O -g -Wall -std=gnu99
-LIBFLAGS=$(CCFLAGS) -fPIC -c
-LIBS=-lm -lpthread -lz -lgcrypt
+CCFLAGS ?= -O -lz -Wall -Wno-unused-result -Wno-deprecated-declarations -g  -D_LARGEFILE64_SOURCE -D_GNU_SOURCE -fPIC -Wno-format-truncation -I./src/ldb
+LDFLAGS+= -lm -lpthread -lz -ldl -lgcrypt
+SOURCES=$(wildcard src/*.c)
+OBJECTS=$(SOURCES:.c=.o) 
+TARGET=ldb
+LIB=libldb.so
+LOGDIR:=/var/log/scanoss/ldb/
+$(TARGET): $(OBJECTS)
+	$(CC) -g -o $(TARGET) $^ $(LDFLAGS)
 
 VERSION=$(shell ./version.sh)
 
-# HELP
-# This will output the help for each task
-# thanks to https://marmelab.com/blog/2016/02/29/auto-documented-makefile.html
-.PHONY: help
+all: clean $(TARGET) lib
 
-help: ## This help
-	@awk 'BEGIN {FS = ":.*?## "} /^[0-9a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+lib:  $(OBJECTS)
+	$(CC) -g -o $(LIB) $^ $(LDFLAGS)  -shared -Wl,-soname,$(LIB)
+.PHONY: ldb
 
-all: clean lib shell ## Clean dev data and build the ldb's library and shell binaries
+%.o: %.c
+	$(CC) $(CCFLAGS) -o $@ -c $<
 
-lib: src/ldb.c src/mz.c src/ldb.h ## Build only the ldb library
-	@$(CC) $(LIBFLAGS) -D_LARGEFILE64_SOURCE src/ldb.c src/mz.c src/md5.c $(LIBS)
-	@$(CC) -shared -Wl,-soname,libldb.so -o libldb.so ldb.o mz.o md5.o $(LIBS)
-	@echo Library is built
+clean_build:
+	rm -rf src/*.o src/**/*.o external/src/*.o external/src/**/*.o
 
-shell: src/shell.c src/command.c ## Build only the shell binary
-	@$(CC) $(CCFLAGS) -D_LARGEFILE64_SOURCE -c src/shell.c src/mz.c src/md5.c $(LIBS)
-	@$(CC) $(CCFLAGS) -o ldb ldb.o shell.o md5.o $(LIBS)
-	@echo Shell is built
+clean: clean_build
+	rm -rf $(TARGET)
+	rm -rf $(LIB)
+distclean: clean
 
-static: src/ldb.c src/ldb.h src/shell.c ## Static build of the shell binary
-	@$(CC) $(CCFLAGS) -o ldb src/ldb.c src/ldb.h src/shell.c src/mz.c $(LIBS)
-	@echo Shell is built
-
-distclean: clean 
-
-clean:  ## Cleans dev data
-	@echo Cleaning...
-	@rm -f *.o *.a ldb *.so
-	@rm -rf dist
-
-install:  ## Install the library and shell
-	@cp ldb /usr/bin
-	@cp libldb.so /usr/lib
+install:
+	@cp $(TARGET) /usr/bin
+	@cp $(LIB) /usr/lib
+	@cp -r src/ldb /usr/include
 	@cp src/ldb.h /usr/include
-
-test: ldb ## Run tests
-	@test/test.sh
-
+	@mkdir -p $(LOGDIR) && chown -R $(SUDO_USER) $(LOGDIR) && chmod -R u+rw $(LOGDIR)
+uninstall:
+	@rm -r /usr/include/ldb
+	@rm /usr/include/ldb.h
+	@rm /usr/lib/libldb.so
 prepare_deb_package: all ## Prepares the deb Package 
 	@./package.sh deb $(VERSION)
 	@echo deb package built

@@ -39,7 +39,8 @@
 #include <unistd.h>
 #include <zlib.h>
 #include "ldb.h"
-
+#include "mz.h"
+#include <gcrypt.h>
 
 /**
  * @brief compare two MZ keys
@@ -126,7 +127,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
+	MD5( (unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -134,7 +135,7 @@ bool mz_list_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else if (!job->check_only)
 	{
@@ -193,6 +194,9 @@ bool mz_cat_handler(struct mz_job *job)
 {
 	if (!memcmp(job->id, job->key + 2, MZ_MD5))
 	{
+		/* Decrypt (if encrypted) */
+		if (job->decrypt)
+			job->decrypt(job->id, job->zdata_ln);
 		/* Decompress */
 		mz_deflate(job);
 
@@ -259,6 +263,7 @@ void mz_cat(struct mz_job *job, char *key)
 	/* Search and display "key" file contents */
 	mz_parse(job, mz_cat_handler);
 
+	free(job->data);
 	free(job->key);
 	free(job->mz);
 }
@@ -279,7 +284,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	/* Calculate resulting data MD5 */
 	uint8_t actual_md5[MD5_LEN];
-	md5_string((unsigned char*) job->data, job->data_ln, actual_md5);
+	MD5((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
 	char actual[MD5_LEN * 2 + 1] = "\0";
@@ -287,7 +292,7 @@ bool mz_extract_handler(struct mz_job *job)
 
 	if (strcmp(job->md5, actual))
 	{
-		mz_corrupted();
+		mz_corrupted(0);
 	}
 	else
 	{
@@ -717,18 +722,12 @@ void mz_id_fill(char *md5, uint8_t *mz_id)
  * @brief Print corrupted error message
  * 
  */
-void mz_corrupted()
+void mz_corrupted( )
 {
 	printf("Corrupted mz file\n");
 	exit(EXIT_FAILURE);
 }
 
-
-/**
- * @brief Decompress a MZ job
- * 
- * @param job MZ job
- */
 #define CHUNK_SIZE 1024
 
 int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
