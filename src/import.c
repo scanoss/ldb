@@ -90,12 +90,12 @@ bool ldb_import_decoder_lib_load(void)
  * @brief Sort a csv file invokinkg a new process and executing a sort command
  *
  * @param file_path file path to be processed
- * @param skip_sort true to skip sort
+ * @param sort true to skip sort
  * @return true if succed
  */
 bool csv_sort(ldb_importation_config_t * config)
 {
-	if (config->opt.params.skip_sort || !ldb_file_size(config->csv_path)  )
+	if (!config->opt.params.sort || !ldb_file_size(config->csv_path)  )
 		return false;
 
 	/* Assemble command */
@@ -122,14 +122,14 @@ bool csv_sort(ldb_importation_config_t * config)
  * @brief Execute bsort over a file
  *
  * @param file_path pointer to file path
- * @param skip_sort
+ * @param sort
  * @return true
  */
-bool bin_sort(char *file_path, bool skip_sort)
+bool bin_sort(char *file_path, bool sort)
 {
 	if (!ldb_file_size(file_path))
 		return false;
-	if (skip_sort)
+	if (!sort)
 		return true;
 	log_info("Sorting %s\n", file_path);
 	return bsort(file_path);
@@ -537,7 +537,7 @@ int ldb_import_mz(ldb_importation_config_t * job)
 int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
-	bool skip_csv_check = job->opt.params.skip_fields_check;
+	bool skip_csv_check = !job->opt.params.validate_fields;
 	bool sectors_modified[256] = {false};
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
@@ -1085,17 +1085,17 @@ bool version_import(ldb_importation_config_t *job)
 }
 
 const char * config_parameters[] = {
-									"CSV_DEL",
+									"FILE_DEL",
 									"KEYS",
 									"OVERWRITE",
-									"SKIP_SORT",
+									"SORT",
 									"VALIDATE_VERSION",
 									"VERBOSE",
 									"MZ",
 									"BIN",
 									"WFP",
 									"FIELDS",
-									"SKIP_FIELDS_CHECK",
+									"VALIDATE_FIELDS",
 									"COLLATE",
 									"MAX_RECORD",
 									"MAX_RAM_PERCENT",
@@ -1106,14 +1106,14 @@ const char * config_parameters[] = {
 #define LDB_IMPORTATION_CONFIG_DEFAULT {.delete_after_import = 0,\
 										.keys_number = 1,\
 										.overwrite = 0,\
-										.skip_sort = 0,\
+										.sort = 1,\
 										.version_validation = 0,\
 										.verbose = 0,\
 										.is_mz_table = 0,\
 										.binary_mode = 0,\
 										.is_wfp_table = 0,\
 										.csv_fields = 1,\
-										.skip_fields_check = 0,\
+										.validate_fields = 1,\
 										.collate = 0,\
 										.collate_max_rec = 1024,\
 										.collate_max_ram_percent = 50}
@@ -1151,7 +1151,7 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 		
 		if (sscanf(param,"=%d", &val))
 		{
-				config->opt.params_arr[i] = val;
+			config->opt.params_arr[i] = val;
 		}
 		
 		else if (!strcmp(config_parameters[i], "TMP_PATH"))
@@ -1176,22 +1176,22 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/tmp)\n"
-					"sources: (MZ=1)\n"
-					"notices: (MZ=1)\n"
-					"attribution: (FIELDS=2)\n"
-					"purl: (SKIP_FIELDS_CHECK=1, OVERWRITE=1)\n"
-					"dependency: (FIELDS=5, OVERWRITE=1)\n"
-					"license: (FIELDS=3)\n"
-					"copyright: (FIELDS=3)\n"
-					"vulnerability: (FIELDS=10, OVERWRITE=1)\n"
-					"quality: (FIELDS=3)\n"
-					"cryptography: (FIELDS=3)\n"
-					"url: (FIELDS=8)\n"
+	char config[] = "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=0, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"
+					"sources: (MZ=1, KEYS=1)\n"
+					"notices: (MZ=1, KEYS=1)\n"
+					"attribution: (KEYS=1, FIELDS=2)\n"
+					"purl: (KEYS=1, OVERWRITE=1, VALIDATE_FIELDS=0)\n"
+					"dependency: (KEYS=1, FIELDS=5, OVERWRITE=1)\n"
+					"license: (KEYS=1, FIELDS=3)\n"
+					"copyright: (KEYS=1, FIELDS=3)\n"
+					"vulnerability: (KEYS=1, FIELDS=10, OVERWRITE=1)\n"
+					"quality: (KEYS=1, FIELDS=3)\n"
+					"cryptography: (KEYS=1, FIELDS=3)\n"
+					"url: (KEYS=1, FIELDS=8)\n"
 					"file: (KEYS=2, FIELDS=3)\n"
-					"pivot: (KEYS=2, FIELDS=2, SKIP_FIELDS_CHECK=1)\n"
-					"semgrep: (FIELDS=5)\n"
-					"wfp: (WFP=1)\n";
+					"pivot: (KEYS=2, FIELDS=2, VALIDATE_FIELDS=0)\n"
+					"semgrep: (KEYS=1, FIELDS=5)\n"
+					"wfp: (WFP=1, KEYS=1)\n";
 	
 	char config_path[LDB_MAX_PATH] = "";
 	
@@ -1250,9 +1250,18 @@ static int load_import_config(ldb_importation_config_t * config)
 				{
 				//	if (config->opt.params.verbose)
 				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
-					ldb_importation_config_parse(config, line + strlen(config->table));
+					//check if the KEYS parameter is defined
+					if (strstr(line, "KEYS"))
+					{
+						ldb_importation_config_parse(config, line + strlen(config->table));
+					}
+					else
+					{
+						fprintf(stderr, "Error in table %s definitions from %s\n", table_test, config_path);
+						ldb_error("\"KEYS\" field must be defined. Please solve the error and retry the importation\n");
+					}
 					found = true;
-					free(line);
+					free(line);	
 					break;
 				}
 
@@ -1445,7 +1454,7 @@ int ldb_import(ldb_importation_config_t * job)
 	}
 	else if (config.opt.params.is_wfp_table)
 	{
-		if (bin_sort(config.csv_path, config.opt.params.skip_sort))
+		if (bin_sort(config.csv_path, config.opt.params.sort))
 			result = ldb_import_snippets(&config);
 	}
 	else
@@ -1500,6 +1509,19 @@ struct ldb_importation_jobs_s
 	import_params_t common_opt;
 };
 
+//cmd_in take precedency of the global cfg
+static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
+{
+	cfg->params.collate = cmd_in->params.collate;
+	cfg->params.collate_max_ram_percent = cmd_in->params.collate_max_ram_percent;
+	cfg->params.collate_max_rec = cmd_in->params.collate_max_rec;
+
+	cfg->params.delete_after_import = cmd_in->params.delete_after_import;
+	cfg->params.version_validation = cmd_in->params.version_validation;
+	cfg->params.verbose = cmd_in->params.verbose;
+	cfg->params.sort = cmd_in->params.sort;
+}
+
 static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
 {
 	DIR *dir;
@@ -1552,8 +1574,11 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				
 				/*dir of the job*/
 				snprintf(jobs->job[jobs->number]->path, LDB_MAX_PATH, "%s", dirname(path));
-				
+				//load of the configuration of the table (if it is defined).
 				int sort = load_import_config(jobs->job[jobs->number]);
+				//force stdin command priority
+				opt_add(&opt, &jobs->job[jobs->number]->opt);
+				
 				if (sort >= 0)
 					jobs->sorted[sort] = jobs->number;
 				else
@@ -1561,6 +1586,7 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 					jobs->unsorted[jobs->unsorted_index] = jobs->number;
 					jobs->unsorted_index++;
 				}
+				
 				jobs->number++;
 			}
 			free(table_name);
@@ -1759,11 +1785,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		strncpy(job.dbname, dbtable, table - dbtable);
 	else
 		strcpy(job.dbname, dbtable);
-	
-	ldb_importation_config_parse(&job, config);
-	if (job.opt.params.verbose)
-		logger_set_level(LOG_INFO);
-
+	//look for the configuration on the KB config file
 	if (!table || !*config) 
 	{
 		char config_path[LDB_MAX_PATH] = "";
@@ -1774,6 +1796,13 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 			if (!ldb_create_db_config_default(job.dbname))
 				ldb_error("Error creating ldb default config\n");
 		}
+	}
+	//Parse the stdin configuration
+	if (*config)
+	{
+		ldb_importation_config_parse(&job, config);
+		if (job.opt.params.verbose)
+			logger_set_level(LOG_INFO);
 	}
 
 	if (!ldb_database_exists(job.dbname))

@@ -126,6 +126,7 @@ bool ldb_syntax_check(char *command, int *command_nr, int *word_nr)
 	{
 		int known_words = ldb_word_count(ldb_commands[i]);
 		int limit = known_words;
+		
 		if (command_words < limit) limit = command_words;
 		hits = 0;
 
@@ -625,7 +626,13 @@ void ldb_command_bulk(char *command, commandtype type)
 	/* Extract values from command */
 	char *dbtable = ldb_extract_word(3, command);
 	char *path = ldb_extract_word(5, command);
-	char *config = ldb_extract_word(7, command);
+	char *config = NULL;//ldb_extract_word(7, command);
+	char * opening = strchr(command, '(');
+	char * closing = strchr(command, ')');
+	if (opening && closing)
+	{
+		config = strndup(opening, closing - opening);
+	}
 
 	ldb_import_command(dbtable, path, config);
 	

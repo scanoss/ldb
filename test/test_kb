@@ -61,4 +61,5 @@ setup_suite () {
 }
 teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
+    rm -rf /usr/local/etc/scanoss/ldb/test_kb.conf
 }

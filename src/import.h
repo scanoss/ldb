@@ -9,14 +9,14 @@ typedef union import_params {
 		int delete_after_import;
     	int keys_number;
 		int overwrite;
-		int skip_sort;
+		int sort;
 		int version_validation;
 		int verbose;
 		int is_mz_table;
     	int binary_mode;
 		int is_wfp_table;
     	int csv_fields;
-    	int skip_fields_check;
+    	int validate_fields;
 		int collate;
 		int collate_max_rec;
 		int collate_max_ram_percent;

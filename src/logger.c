@@ -68,11 +68,6 @@ void log_info(const char * fmt, ...)
     logger_basic(NULL);
     
     pthread_mutex_lock(&logger_lock);
-    if (!first_cls && !quiet)
-    {
-        system("clear");
-        first_cls = true;
-    }
     
     char * string = NULL;
     //save to log file
@@ -94,6 +89,11 @@ void log_info(const char * fmt, ...)
     //print on stderr
     if (level > LOG_BASIC && string && !quiet)
     {
+        if (!first_cls && !quiet)
+        {
+            system("clear");
+            first_cls = true;
+        }
         pthread_t t = pthread_self();
         int i = 0;
         bool found = false;
