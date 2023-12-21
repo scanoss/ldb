@@ -1036,7 +1036,7 @@ bool version_import(ldb_importation_config_t *job)
 		test_len -= (strlen(daily_date_i) + strlen("\"daily\":"));
 	if (monthly_date_i)
 		test_len -= (strlen(monthly_date_i) + strlen("\"monthly\":"));
-	//exit if cannot find daily or monthly or there are am excess of characteres in the json
+	//exit if cannot find daily or monthly or there are an excess of characteres in the json
 	if ((!daily_date_i && !monthly_date_i) || test_len > 10)
 	{
 		logger_basic("Failed to process version file: %s\n", vf_import);
@@ -1072,7 +1072,7 @@ bool version_import(ldb_importation_config_t *job)
 		return false;
 	}
 
-	fprintf(f, JSON_CONTENT, monthly_date_i == NULL ? "N/A" : monthly_date_i ,daily_date_i == NULL ? "N/A" :  daily_date_i);
+	fprintf(f, JSON_CONTENT, monthly_date_i == NULL ? "N/A" : monthly_date_i, daily_date_i == NULL ? "N/A" :  daily_date_i);
 	fclose(f);
 	free(daily_date_i);
 	free(daily_date_o);
@@ -1176,7 +1176,7 @@ bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	char config[] = "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=0, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"
+	char config[] = "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"
 					"sources: (MZ=1, KEYS=1)\n"
 					"notices: (MZ=1, KEYS=1)\n"
 					"attribution: (KEYS=1, FIELDS=2)\n"
@@ -1413,13 +1413,6 @@ int ldb_import(ldb_importation_config_t * job)
 	int result = -1;
 	ldb_importation_config_t config = *job;
 
-	logger_set_level(config.opt.params.verbose);
-	if (config.opt.params.version_validation && !version_import(&config))
-	{
-		logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
-		exit(EXIT_FAILURE);
-	}
-	
 	if (strstr(config.csv_path, ".mz"))
 		config.opt.params.is_mz_table = true;
 	else
@@ -1807,7 +1800,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 
 	if (!ldb_database_exists(job.dbname))
 		ldb_create_database(job.dbname);
-
+	
 	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .common_opt = job.opt};
 	strcpy(jobs.dbname, job.dbname);
 	jobs.unsorted_index = 0;
@@ -1828,6 +1821,15 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	if (!table && ldb_dir_exists(path))
 	{
 		strcpy(job.path, path);
+			//check if the version file is present and update the kb version.
+		bool version_present = version_import(&job);
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (job.opt.params.version_validation && !version_present)
+		{
+			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			exit(EXIT_FAILURE);
+		}
+
 		recurse_directory(&jobs, path, NULL);		
 		print_jobs(&jobs);
 		/* Process jobs*/
@@ -1881,6 +1883,13 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		else
 		{
 			strcpy(job.path,path);
+		}
+		bool version_present = version_import(&job);
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (job.opt.params.version_validation && !version_present)
+		{
+			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			exit(EXIT_FAILURE);
 		}
 		load_import_config(&job);
 		process_sectors(&job, threads_list);

@@ -56,6 +56,15 @@ test_8_unicode_chars() {
     assert_equals "b337487d67c0307bb9d009e2b5e248c8,e7bc2c903379c1eda3ec7a12e88b933d,系列1-MyBatis源码解析/第10节课/mybatis-3-master/src/test/java/org/apache/ibatis/submitted/language/VelocitySqlSourceBuilder.java" $result
 }
 
+test_9_version_validation() {
+    ../ldb -q -u source/mined2 -n test_kb -q
+    result=$(cat /var/lib/ldb/test_kb/version.json)
+    assert_equals "{\"monthly\":\"23.10\", \"daily\":\"24.10.23\"}" "$result"
+    echo " bulk insert test_kb from source/mined3 with (FILE_DEL=0,VALIDATE_VERSION=0)" | ../ldb
+    result=$(cat /var/lib/ldb/test_kb/version.json)
+    assert_equals "{\"monthly\":\"23.10\", \"daily\":\"25.10.23\"}" "$result"
+}
+
 setup_suite () {
     ../ldb -u source/mined -n test_kb
 }
