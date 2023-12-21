@@ -60,14 +60,14 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         KEYS: Number of binary keys in the CSV file.
         MZ: MZ file indicator.
         WFP: WFP file indicator.
-        OVERWRITE: Overwrite the destination table.
-        SORT: Sort the tuples during the import process.
+        OVERWRITE: Overwrite the destination table. (Default: 0).
+        SORT: Sort the tuples during the import process. (Default: 1).
         FIELDS: Number of CSV fields.
-        VALIDATE_FIELDS: Check field quantity during importation.
-        VALIDATE_VERSION: Validate version.json.
-        VERBOSE: Enable verbose mode.
+        VALIDATE_FIELDS: Check field quantity during importation. (Default: 1).
+        VALIDATE_VERSION: Validate version.json.(Default: 1).
+        VERBOSE: Enable verbose mode. (Default: 0).
         COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.
-        MAX_RECORD: Maximum record size in bytes (default: 1024).
+        MAX_RECORD: Maximum record size in bytes (Default: 2048).
         MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
         TMP_PATH: Path to the folder used for temporary files (default: /tmp).
 
