@@ -78,12 +78,13 @@ void help()
 	printf("    MZ: MZ file indicator.\n");
 	printf("    WFP: WFP file indicator.\n");
 	printf("    OVERWRITE: Overwrite the destination table.\n");
-	printf("    SORT: Sort during the importation.\n");
+	printf("    SORT: Sort during the importation. Default: 1\n");
 	printf("    FIELDS: Number of CSV fields.\n");
-	printf("    VALIDATE_FIELDS: Check field quantity during importation.\n");
-	printf("    VALIDATE_VERSION: Validate version.json.\n");
-	printf("    VERBOSE: Enable verbose mode.\n");
-	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n");
+	printf("    VALIDATE_FIELDS: Check field quantity during importation. Default: 1\n");
+	printf("    VALIDATE_VERSION: Validate version.json. Default: 1\n");
+	printf("    VERBOSE: Enable verbose mode. Default: 0\n");
+	printf("    THREADS: Define the number of threads to be used during the importation process. Defaul value: half of system available.\n");
+	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. Default: 0\n");
 	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
 	printf("    MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.\n");
 	printf("    TMP_PATH: Define the temporary directory. Default value \"/tmp\".\n");
