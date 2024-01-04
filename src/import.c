@@ -1122,6 +1122,22 @@ const char * config_parameters[] = {
 										.collate_max_rec = 1024,\
 										.collate_max_ram_percent = 50}
 
+#define LDB_IMPORTATION_CONFIG_UNDEFINED {.delete_after_import = -1,\
+										.keys_number = -1,\
+										.overwrite = -1,\
+										.sort = -1,\
+										.version_validation = -1,\
+										.verbose = -1,\
+										.is_mz_table = -1,\
+										.binary_mode = -1,\
+										.is_wfp_table = -1,\
+										.csv_fields = -1,\
+										.validate_fields = -1,\
+										.threads = -1,\
+										.collate = -1,\
+										.collate_max_rec = -1,\
+										.collate_max_ram_percent = 50}
+
 bool ldb_importation_config_parse(import_params_t * opt, char * line)
 {
 	if (!opt)
@@ -1131,7 +1147,6 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 	char no_spaces[LDB_MAX_COMMAND_SIZE];
 	char * line_c = line;
 	int i = 0;
-
 	do
 	{
 		//skip spaces
@@ -1153,12 +1168,7 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 			continue;
 		param = strchr(param,'=');
 		
-		if (sscanf(param,"=%d", &val))
-		{
-			opt->params_arr[i] = val;
-		}
-		
-		else if (!strcmp(config_parameters[i], "TMP_PATH"))
+		if (!strcmp(config_parameters[i], "TMP_PATH"))
 		{
 			strncpy(opt->params.tmp_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
 			//remove spurius ")" or "," from path TODO: improve
@@ -1171,6 +1181,10 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 				 if (c)
 				 	*c = 0;
 			} 
+		}
+		else if (sscanf(param,"=%d", &val))
+		{
+			opt->params_arr[i] = val;
 		}
 
 		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
@@ -1219,8 +1233,8 @@ bool ldb_create_db_config_default(char * dbname)
 
 void log_table_config(char * name, import_params_t * opt)
 {
-	log_info("%s configuration: (VALIDATE_FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
-	name, opt->params.validate_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
+	log_info("%s configuration: (KEYS=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
+	name, opt->params.keys_number, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
 	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
 }
 
@@ -1344,7 +1358,7 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
 
 	if (availableMemory < max_collate_ram)
 	{
-		log_info("Not enough memory to allocate the sector %02x. Available RAM (%ld) is lower than max collate ram (%ld)\n", availableMemory, max_collate_ram);
+		log_info("Not enough memory to allocate the sector %02x. Available RAM (%ld) is lower than max collate ram (%ld)\n", sector, availableMemory, max_collate_ram);
 		return false;
 	}
 
@@ -1522,7 +1536,8 @@ struct ldb_importation_jobs_s
 	int sorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted_index;
-	import_params_t * common_opt;
+	import_params_t * user_opt;
+	import_params_t * global_opt;
 };
 
 //cmd_in take precedency of the global cfg
@@ -1535,7 +1550,7 @@ static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
 		{
 			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
 		}
-		else if (cmd_in->params_arr[i] != def.params_arr[i])
+		else if (cmd_in->params_arr[i] > -1)
 		{
 			cfg->params_arr[i] = cmd_in->params_arr[i];
 		}
@@ -1581,8 +1596,8 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				jobs->job = realloc(jobs->job, ((jobs->number+1) * sizeof(ldb_importation_config_t*)));
 				jobs->job[jobs->number] = calloc(1, sizeof(ldb_importation_config_t));
 				/* load default config*/
-				import_params_t opt = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
-				jobs->job[jobs->number]->opt = opt;
+				import_params_t opt_def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+				jobs->job[jobs->number]->opt = opt_def;
 				strcpy(jobs->job[jobs->number]->dbname, jobs->dbname);
 				strncpy(jobs->job[jobs->number]->table, table_name, LDB_MAX_NAME);
 				
@@ -1595,20 +1610,10 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				/*dir of the job*/
 				snprintf(jobs->job[jobs->number]->path, LDB_MAX_PATH, "%s", dirname(path));
 				//load of the configuration of the table (if it is defined).
-				int sort = load_import_config(jobs->job[jobs->number], &opt);
+				int sort = load_import_config(jobs->job[jobs->number], jobs->global_opt);
 
 				//force stdin command priority
-				if (jobs->common_opt)
-				{
-					opt_add(jobs->common_opt, &opt);
-					*jobs->common_opt = opt;
-					opt_add(jobs->common_opt, &jobs->job[jobs->number]->opt);
-				}
-				else
-				{
-					jobs->common_opt = malloc(sizeof(*jobs->common_opt));
-					memcpy(jobs->common_opt, &opt, sizeof(*jobs->common_opt));
-				}
+				opt_add(jobs->user_opt, &jobs->job[jobs->number]->opt);
 				
 				if (sort >= 0)
 					jobs->sorted[sort] = jobs->number;
@@ -1807,7 +1812,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 
 	signal(SIGINT, signalHandler);
 	srand(time(NULL));
-	import_params_t common_opt = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	import_params_t user_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
+	import_params_t global_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
 	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT, .csv_path = "\0", .path = "\0"};
 	
 	char *table = strrchr(dbtable, '/');
@@ -1830,15 +1836,15 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	//Parse the stdin configuration
 	if (*config)
 	{
-		ldb_importation_config_parse(&common_opt, config);
-		if (common_opt.params.verbose)
+		ldb_importation_config_parse(&user_opt, config);
+		if (user_opt.params.verbose > 0)
 			logger_set_level(LOG_INFO);
 	}
 
 	if (!ldb_database_exists(job.dbname))
 		ldb_create_database(job.dbname);
 	
-	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .common_opt = *config != 0 ? &common_opt : NULL};
+	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .user_opt = &user_opt, .global_opt = &global_opt};
 	strcpy(jobs.dbname, job.dbname);
 	jobs.unsorted_index = 0;
 	for (int i = 0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
@@ -1859,14 +1865,16 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 			exit(EXIT_FAILURE);
 		}
 
-		recurse_directory(&jobs, path, NULL);		
+		recurse_directory(&jobs, path, NULL);
+		opt_add(jobs.user_opt, jobs.global_opt);
+		opt_add(jobs.global_opt, jobs.user_opt);
 		print_jobs(&jobs);
-		max_threads = jobs.common_opt->params.threads;
+		max_threads = jobs.user_opt->params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);
 		pthread_mutex_init(&lock, NULL);
 		threads_list = calloc(max_threads, sizeof(pthread_t));
 		logger_init(job.dbname, max_threads, threads_list);
-		log_table_config("GLOBAL", jobs.common_opt);
+		log_table_config("GLOBAL", jobs.user_opt);
 		/* Process jobs*/
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
@@ -1930,10 +1938,10 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
 			exit(EXIT_FAILURE);
 		}
-		import_params_t global_opt = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+		//import_params_t global_opt_def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
 		load_import_config(&job, &global_opt);
-		opt_add(&common_opt, &global_opt);
-		opt_add(&global_opt, &job.opt);
+		opt_add(&user_opt, &global_opt);
+		opt_add(&user_opt, &job.opt);
 
 		max_threads = job.opt.params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);

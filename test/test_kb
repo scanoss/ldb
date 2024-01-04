@@ -68,15 +68,15 @@ test_09_version_validation() {
 }
 
 test_10_configuration() {
-    config="GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    config="GLOBAL: (KEYS=-1, VALIDATE_FIELDS=1, FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
     sed -i "1s|.*|$config|" /usr/local/etc/scanoss/ldb/test_kb.conf
     ../ldb -q -u source/mined2 -n test_kb -q
     result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "GLOBAL configuration:")
-    config="GLOBAL configuration: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    config="GLOBAL configuration: (KEYS=-1, VALIDATE_FIELDS=1, FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
     assert_equals "$config" "$result"
     
-    echo "bulk insert test_kb/file from source/mined/file with (THREADS=30,TMP_PATH=/var)" | ../ldb
-    config="file configuration: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=30, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/var)"
+    echo "bulk insert test_kb/file from source/mined/file with (TMP_PATH=/var,FILE_DEL=0,THREADS=30)" | ../ldb
+    config="file configuration: (KEYS=2, VALIDATE_FIELDS=1, FIELDS=3, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=30, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/var)"
     result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:")
     assert_equals "$config" "$result"
 }
