@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-test_1_kb_dir_exist() {
+
+test_01_kb_dir_exist() {
     dir="/var/lib/ldb/test_kb"
     assert "test -e $dir"
 }
 
-test_2_kb_content() {
+test_02_kb_content() {
     assert_equals "9" $(echo "dump test_kb/file hex 32" | ../ldb | wc -l) "file table fails"
     assert_equals "7" $(echo "dump test_kb/url hex 16" | ../ldb | wc -l) "url table fails"
     assert_equals "5" $(echo "dump test_kb/pivot hex 32" |../ldb | wc -l) "pivot table fails"
+    assert_equals "19" $(echo "dump test_kb/wfp hex -1" |../ldb | wc -l) "wfp table fails"
 }
 
-test_3_kb_query() {
+test_03_kb_query() {
     result=$(echo "select from test_kb/file key 00000000000000000000000000000001 csv hex 32" | ../ldb) 
     assert_equals "00000000000000000000000000000001,ca80efeae39f6de1dc102fb0fd9df8e1,test1/file/to/see/if/the/fisrt/record/is/imported0.test" $result "file table query fails"
     result=$(echo "select from test_kb/url key ca80efeae39f6de1dc102fb0fd9df8e2 csv hex 16" | ../ldb) 
@@ -20,7 +22,7 @@ test_3_kb_query() {
     assert_equals "$comp" "$result"
 }
 
-test_4_kb_delete_record() {
+test_04_kb_delete_record() {
     echo "delete from test_kb/url records from source/test_remove_record.txt" | ../ldb -q 
     result=$(echo "select from test_kb/url key ba80efeae39f6de1dc102fb0fd9df8e1 csv hex 16" | ../ldb -q) 
     assert_equals "ba80efeae39f6de1dc102fb0fd9df8e1,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download2.zip" $result
@@ -28,7 +30,7 @@ test_4_kb_delete_record() {
     assert_equals "" $result
 }
 
-test_5_kb_delete_keys() {
+test_05_kb_delete_keys() {
     echo "delete from test_kb/file max 2048 keys 00100000000000000000000000000001,85100000000000000000000000000001,b3100000000000000000000000000001" | ../ldb -q
     result=$(echo "select from test_kb/file key 00100000000000000000000000000001 csv hex 32" | ../ldb)
     result+=$(echo "select from test_kb/file key 85100000000000000000000000000001 csv hex 32" | ../ldb)
@@ -41,28 +43,42 @@ test_5_kb_delete_keys() {
 }
 
 #import again, but with the collate option, so the duplicated will be removed. Then test again the content.
-test_6_kb_collate() {
+test_06_kb_collate() {
     ../ldb -q -u source/mined -n test_kb -c
-    test_2_kb_content
+    test_02_kb_content
 }
 
-test_7_kb_query_from_file() {
+test_07_kb_query_from_file() {
     result=$(../ldb -f source/test_file_commands.txt | wc -l)
     assert_equals "21" $result
 }
 
-test_8_unicode_chars() {
+test_08_unicode_chars() {
     result=$(echo "select from test_kb/file key b337487d67c0307bb9d009e2b5e248c8 csv hex 32" | ../ldb) 
     assert_equals "b337487d67c0307bb9d009e2b5e248c8,e7bc2c903379c1eda3ec7a12e88b933d,系列1-MyBatis源码解析/第10节课/mybatis-3-master/src/test/java/org/apache/ibatis/submitted/language/VelocitySqlSourceBuilder.java" $result
 }
 
-test_9_version_validation() {
+test_09_version_validation() {
     ../ldb -q -u source/mined2 -n test_kb -q
     result=$(cat /var/lib/ldb/test_kb/version.json)
     assert_equals "{\"monthly\":\"23.10\", \"daily\":\"24.10.23\"}" "$result"
-    echo " bulk insert test_kb from source/mined3 with (FILE_DEL=0,VALIDATE_VERSION=0)" | ../ldb
+    echo "bulk insert test_kb from source/mined3 with (FILE_DEL=0,VALIDATE_VERSION=0)" | ../ldb
     result=$(cat /var/lib/ldb/test_kb/version.json)
     assert_equals "{\"monthly\":\"23.10\", \"daily\":\"25.10.23\"}" "$result"
+}
+
+test_10_configuration() {
+    config="GLOBAL: (KEYS=-1, VALIDATE_FIELDS=1, FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    sed -i "1s|.*|$config|" /usr/local/etc/scanoss/ldb/test_kb.conf
+    ../ldb -q -u source/mined2 -n test_kb -q
+    result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "GLOBAL configuration:")
+    config="GLOBAL configuration: (KEYS=-1, VALIDATE_FIELDS=1, FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    assert_equals "$config" "$result"
+    
+    echo "bulk insert test_kb/file from source/mined/file with (TMP_PATH=/var,FILE_DEL=0,THREADS=30)" | ../ldb
+    config="file configuration: (KEYS=2, VALIDATE_FIELDS=1, FIELDS=3, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=30, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/var)"
+    result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:")
+    assert_equals "$config" "$result"
 }
 
 setup_suite () {

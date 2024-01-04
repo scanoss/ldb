@@ -66,8 +66,9 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         VALIDATE_FIELDS: Check field quantity during importation. (Default: 1).
         VALIDATE_VERSION: Validate version.json.(Default: 1).
         VERBOSE: Enable verbose mode. (Default: 0).
-        COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.
-        MAX_RECORD: Maximum record size in bytes (Default: 2048).
+        THREADS: Define the number of threads to be used during the importation process. Defaul value: half of system available.
+        COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. (Default: 0).
+        MAX_RECORD: Maximum record size in bytes (Default value: 2048).
         MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
         TMP_PATH: Path to the folder used for temporary files (default: /tmp).
 
