@@ -1110,7 +1110,7 @@ const char * config_parameters[] = {
 										.keys_number = 1,\
 										.overwrite = 0,\
 										.sort = 1,\
-										.version_validation = 0,\
+										.version_validation = 1,\
 										.verbose = 0,\
 										.is_mz_table = 0,\
 										.binary_mode = 0,\
@@ -1192,6 +1192,23 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 	return true;
 }
 
+//cmd_in take precedency of the global cfg
+static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
+{
+	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	for (int i = 0; i < IMPORT_PARAMS_NUMBER; i++)
+	{
+		if (i == IMPORT_PARAMS_NUMBER -1 && strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
+		{
+			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
+		}
+		else if (cmd_in->params_arr[i] > -1)
+		{
+			cfg->params_arr[i] = cmd_in->params_arr[i];
+		}
+	}
+}
+
 bool ldb_create_db_config_default(char * dbname)
 {
 	#define DEFAULT_CONFIG_STRING "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=%d, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"\
@@ -1244,6 +1261,9 @@ static int load_import_config(ldb_importation_config_t * config, import_params_t
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
 	int result = -1;
 	bool found = false;
+	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	config->opt = def;
+	common->params = def.params;
 	
 	if (ldb_file_exists(config_path))
 	{
@@ -1264,13 +1284,13 @@ static int load_import_config(ldb_importation_config_t * config, import_params_t
 				strncpy(table_test, line, separator - line);
 
 				const char global_def[]= "GLOBAL";			
-				if (!strcmp(table_test, global_def))
+				if (!strcmp(table_test, global_def) && result < 0) // force global config on the top of the file
 				{
 				//	if (config->opt.params.verbose)
 				//		fprintf(stderr, "The table %s is defined at %s as GLOBAL, some parameter may be overwritten\n", config->table, config_path);
 					
 					ldb_importation_config_parse(common, line + strlen(global_def));
-					config->opt.params = common->params;
+					opt_add(common, &config->opt);
 				}
 				else
 				{
@@ -1540,23 +1560,6 @@ struct ldb_importation_jobs_s
 	import_params_t * global_opt;
 };
 
-//cmd_in take precedency of the global cfg
-static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
-{
-	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
-	for (int i = 0; i < IMPORT_PARAMS_NUMBER; i++)
-	{
-		if (i == IMPORT_PARAMS_NUMBER -1 && strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
-		{
-			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
-		}
-		else if (cmd_in->params_arr[i] > -1)
-		{
-			cfg->params_arr[i] = cmd_in->params_arr[i];
-		}
-	}
-}
-
 static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
 {
 	DIR *dir;
@@ -1609,9 +1612,9 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				
 				/*dir of the job*/
 				snprintf(jobs->job[jobs->number]->path, LDB_MAX_PATH, "%s", dirname(path));
+				
 				//load of the configuration of the table (if it is defined).
 				int sort = load_import_config(jobs->job[jobs->number], jobs->global_opt);
-
 				//force stdin command priority
 				opt_add(jobs->user_opt, &jobs->job[jobs->number]->opt);
 				
@@ -1862,6 +1865,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		if (job.opt.params.version_validation && !version_present)
 		{
 			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			logger_basic("You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n", job.path);
+
 			exit(EXIT_FAILURE);
 		}
 
@@ -1938,7 +1943,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
 			exit(EXIT_FAILURE);
 		}
-		//import_params_t global_opt_def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+
 		load_import_config(&job, &global_opt);
 		opt_add(&user_opt, &global_opt);
 		opt_add(&user_opt, &job.opt);
