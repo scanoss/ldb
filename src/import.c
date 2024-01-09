@@ -1250,6 +1250,8 @@ bool ldb_create_db_config_default(char * dbname)
 
 void log_table_config(char * name, import_params_t * opt)
 {
+	if (!(name && opt) || !*name)
+		return;
 	log_info("%s configuration: (KEYS=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
 	name, opt->params.keys_number, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
 	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
@@ -1911,7 +1913,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 				else
 					lines_to_add = max_threads;
 				
-				log_table_config(jobs.job[jobs.sorted[i]]->table, &jobs.job[jobs.sorted[i]]->opt);
+				log_table_config(jobs.job[jobs.unsorted[i]]->table, &jobs.job[jobs.unsorted[i]]->opt);
 				logger_basic("%s",jobs.job[jobs.unsorted[i]]->table);
 				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
 				free(jobs.job[jobs.unsorted[i]]);
