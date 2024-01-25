@@ -31,7 +31,6 @@
 #include <libgen.h>
 #include <dirent.h>
 #include <string.h>
-#include <dlfcn.h>
 #include <time.h>
 #include "import.h"
 #include "./ldb.h"
@@ -44,9 +43,7 @@
 #include "collate.h"
 #include "logger.h"
 #include "ldb_error.h"
-
-#define DECODE_BASE64 8
-#define MAX_CSV_LINE_LEN 1024
+#include "decode.h"
 #define REC_SIZE_LEN 2
 
 pthread_mutex_t lock;
@@ -54,37 +51,7 @@ pthread_mutex_t lock;
 int max_threads = 0;
 pthread_t * threads_list;
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
-
-int (*decode) (int op, unsigned char *key, unsigned char *nonce,
-		        const char *buffer_in, int buffer_in_len, unsigned char *buffer_out) = NULL;
-
 double progress_timer = 0;
-
-
-void * lib_handle = NULL;
-bool ldb_import_decoder_lib_load(void)
-{
-	if (lib_handle != NULL)
-		return true;
-	/*set decode funtion pointer to NULL*/
-	decode = NULL;
-	lib_handle = dlopen("libscanoss_encoder.so", RTLD_NOW);
-	char * err;
-    if (lib_handle) 
-	{
-		log_info("Lib scanoss_encoder present\n");
-		decode = dlsym(lib_handle, "scanoss_decode");
-		if ((err = dlerror())) 
-		{
-			log_info("%s\n", err);
-			return false;
-		}
-		return true;
-     }
-	 
-	 return false;
-}
-
 
 /**
  * @brief Sort a csv file invokinkg a new process and executing a sort command
@@ -1491,7 +1458,7 @@ int ldb_import(ldb_importation_config_t * job)
 	{
 		pthread_mutex_lock(&lock);
 		if(!decode)
-			ldb_import_decoder_lib_load();
+			ldb_decoder_lib_load();
 		pthread_mutex_unlock(&lock);
 	}
 

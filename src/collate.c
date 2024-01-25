@@ -23,6 +23,7 @@
 #include "mz.h"
 #include "collate.h"
 #include "logger.h"
+#include "decode.h"
 /**
   * @file collate.c
   * @date 19 Aug 2020 
@@ -524,11 +525,25 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 				if (result)
 				{
-					char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, 
-										size - (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln);
+					if (collate->in_table.definitions & LDB_TABLE_DEFINITION_ENCRYPTED)
+					{
+						unsigned char tuple_bin[MAX_CSV_LINE_LEN];
+						if(!decode && !ldb_decoder_lib_load())
+							return false;
 
-					result = data_compare(collate->del_tuples->tuples[i]->data + char_to_skip, aux);
-					free(aux);
+						int r_size = decode(DECODE_BASE64, NULL, NULL, collate->del_tuples->tuples[i]->data + char_to_skip, strlen(collate->del_tuples->tuples[i]->data) - char_to_skip, tuple_bin);
+						if (r_size > 0)
+							result = !memcmp(tuple_bin, data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, r_size);
+						else
+							result = false;
+					}
+					else
+					{
+						char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, 
+						size - (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln);
+						result = data_compare(collate->del_tuples->tuples[i]->data + char_to_skip, aux);
+						free(aux);
+					}
 				}
 			}
 			/* Increment del_count and return true */
