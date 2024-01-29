@@ -2,6 +2,7 @@
 #define __IMPORT_H
 #include <stdbool.h>
 #include "ldb.h"
+ 
 #define IMPORT_PARAMS_NUMBER 15
 typedef union import_params {
 	struct __attribute__((__packed__)) params

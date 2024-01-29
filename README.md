@@ -105,6 +105,9 @@ unlink list from DBNAME/TABLENAME key KEY
 
 dump DBNAME/TABLENAME hex N
     Dumps table contents with first N bytes in hex
+
+dump keys from DBNAME/TABLENAME [sector N]
+    Dumps a unique list of existing keys
 ```
 ## Other Uses
 

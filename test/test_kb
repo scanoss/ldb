@@ -6,10 +6,11 @@ test_01_kb_dir_exist() {
 }
 
 test_02_kb_content() {
-    assert_equals "9" $(echo "dump test_kb/file hex 32" | ../ldb | wc -l) "file table fails"
-    assert_equals "7" $(echo "dump test_kb/url hex 16" | ../ldb | wc -l) "url table fails"
+    assert_equals "10" $(echo "dump test_kb/file hex 32" | ../ldb | wc -l) "file table fails"
+    assert_equals "5" $(echo "dump keys from test_kb/url" | ../ldb | wc -l) "url table fails"
     assert_equals "5" $(echo "dump test_kb/pivot hex 32" |../ldb | wc -l) "pivot table fails"
     assert_equals "19" $(echo "dump test_kb/wfp hex -1" |../ldb | wc -l) "wfp table fails"
+    assert_equals "2" $(echo "dump keys from test_kb/sources" |../ldb | wc -l) "sources table fails"
 }
 
 test_03_kb_query() {
@@ -27,6 +28,9 @@ test_04_kb_delete_record() {
     result=$(echo "select from test_kb/url key ba80efeae39f6de1dc102fb0fd9df8e1 csv hex 16" | ../ldb -q) 
     assert_equals "ba80efeae39f6de1dc102fb0fd9df8e1,test_vendor,test_component,1.0.0_test,2023-11-03,my_license,pkg:test_vendor/test_component,https://testurl.com/download2.zip" $result
     result=$(echo "select from test_kb/url key ca80efeae39f6de1dc102fb0fd9df8e2 csv hex 16" | ../ldb -q)
+    assert_equals "" $result
+    echo "delete from test_kb/file record 397754ba49e9e0cf4e7c190da78dda05,06e47378dedd2ca50e4c7257a54de9de,prettyCheckable-1.1/jquery-1.9.1.min.js" | ../ldb -q 
+    result=$(echo "select from test_kb/file key 397754ba49e9e0cf4e7c190da78dda05 csv hex 32" | ../ldb -q)
     assert_equals "" $result
 }
 
@@ -50,7 +54,7 @@ test_06_kb_collate() {
 
 test_07_kb_query_from_file() {
     result=$(../ldb -f source/test_file_commands.txt | wc -l)
-    assert_equals "21" $result
+    assert_equals "22" $result
 }
 
 test_08_unicode_chars() {
@@ -81,7 +85,7 @@ test_10_configuration() {
     result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:")
     assert_equals "$config" "$result"
 
-    config="GLOBAL: (COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    config="GLOBAL: (COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, VALIDATE_VERSION=1, TMP_PATH=/tmp)"
     cores=$(nproc)
     threads=$((cores / 2))
     sed -i "1s|.*|$config|" /usr/local/etc/scanoss/ldb/test_kb.conf

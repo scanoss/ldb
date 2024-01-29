@@ -16,6 +16,7 @@
 #define MD5_LEN 16
 #define MD5_LEN_HEX 32
 #define BUFFER_SIZE 1048576
+#define MAX_CSV_LINE_LEN 1024
 
 extern char ldb_root[];
 extern char ldb_lock_path[];

@@ -132,8 +132,8 @@ void help()
 	printf("	dump DBNAME/TABLENAME hex N [sector N], use 'hex -1' to print the complete register as hex\n");
 	printf("    	Dumps table contents with first N bytes in hex\n\n");
 	
-	printf("	dump keys from DBNAME/TABLENAME\n");
-	printf("    	Dumps a unique list of existing keys (binary output)\n\n");
+	printf("	dump keys from DBNAME/TABLENAME [sector N]\n");
+	printf("    	Dumps a unique list of existing keys\n\n");
 	
 	printf("	cat KEY from DBNAME/MZTABLE\n");
 	printf("		Shows the contents for KEY in MZ archive\n");

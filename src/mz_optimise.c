@@ -69,6 +69,11 @@ bool mz_optimise_dup_handler(struct mz_job *job)
 	{
 		job->dup_c++;
 	}
+	else if ((long) job->mz_ln - (long) job->ptr_ln - (long) job->ln < 0)
+	{
+		mz_id_fill(job->md5, job->id);
+		log_info("Incorrect size of source file %s on pos %u from sector: %s\n", job->md5, job->ptr_ln, job->path);
+	}
 	else
 	{
 		memcpy(job->ptr + job->ptr_ln, job->id, job->ln);
@@ -93,8 +98,16 @@ void mz_collate(struct mz_job *job)
 	/* Read source mz file into memory */
 	job->mz = file_read(job->path, &job->mz_ln);
 
+	if (!job->mz)
+		return;
+
 	/* Reserve memory for destination mz */
 	job->ptr = calloc(job->mz_ln, 1);
+	if (!job->ptr)
+	{
+		free(job->mz);
+		return;
+	}
 
 	/* Launch optimisation */
 
@@ -112,7 +125,6 @@ void mz_collate(struct mz_job *job)
 	free(job->mz);
 	free(job->ptr);
 }
-
 
 void ldb_mz_collate(struct ldb_table table, int p_sector)
 {
