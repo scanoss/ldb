@@ -72,6 +72,7 @@ char *ldb_commands[] =
 	"dump {ascii} hex {ascii} sector {hex}",
 	"dump {ascii} hex {ascii}",
 	"dump keys from {ascii}",
+	"dump keys from {ascii} sector {hex}",
 	"cat {hex} from {ascii}"
 };
 int ldb_commands_count = sizeof(ldb_commands) / sizeof(ldb_commands[0]);
@@ -914,12 +915,29 @@ void ldb_command_dump_keys(char *command)
 {
 	/* Extract values from command */
 	char *dbtable = ldb_extract_word(4, command);
+	char * sector = ldb_extract_word(5, command);
+	int sectorn = -1;
+	if (*sector)
+	{
+		char *sector_n  = ldb_extract_word(6, command);
+		sectorn = (int) strtol(sector_n, NULL, 16);
+		free(sector_n);
+	}
+	free(sector);
 
 	if (ldb_valid_table(dbtable))
 	{
 			/* Assembly ldb table structure */
 			struct ldb_table ldbtable = ldb_read_cfg(dbtable);
-			ldb_dump_keys(ldbtable);
+			if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+				(!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices")))
+			{
+				mz_list_keys(ldbtable, sectorn);
+			}
+			else
+			{
+				ldb_dump_keys(ldbtable, sectorn);
+			}
 	}
 
 	/* Free memory */

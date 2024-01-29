@@ -27,7 +27,7 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "4.0.7"
+#define LDB_VERSION "4.0.8"
 
 #define LDB_TABLE_DEFINITION_UNDEFINED -1
 #define LDB_TABLE_DEFINITION_STANDARD 0
@@ -90,7 +90,7 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes, int sector);
-void ldb_dump_keys(struct ldb_table table);
+void ldb_dump_keys(struct ldb_table table, int s);
 
 char * ldb_file_extension(char * path);
 bool ldb_create_dir(char *path);

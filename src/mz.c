@@ -41,7 +41,7 @@
 #include "ldb.h"
 #include "mz.h"
 #include <gcrypt.h>
-
+#include "logger.h"
 /**
  * @brief compare two MZ keys
  * 
@@ -117,7 +117,7 @@ void mz_dump_keys(struct mz_job *job)
  * @param job pointer to mz input struct
  * @return true Always true
  */
-bool mz_list_handler(struct mz_job *job)
+bool mz_list_check_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
 	mz_id_fill(job->md5, job->id);
@@ -145,12 +145,21 @@ bool mz_list_handler(struct mz_job *job)
 	return true;
 }
 
+bool mz_list_handler(struct mz_job *job)
+{
+	/* Fill MD5 with item id */
+	mz_id_fill(job->md5, job->id);
+	printf("%s %lu bytes\n", job->md5, job->zdata_ln);
+
+	return true;
+}
+
 /**
  * @brief 
  * 
  * @param job MZ job to be procesed
  */
-void mz_list(struct mz_job *job)
+void mz_list_check(struct mz_job *job)
 {
 	/* Extract first two MD5 bytes from the file name */
 	memcpy(job->md5, basename(job->path), 4);
@@ -159,12 +168,50 @@ void mz_list(struct mz_job *job)
 	job->mz = file_read(job->path, &job->mz_ln);
 
 	/* List mz contents */
-	if (!job->dump_keys) mz_parse(job, mz_list_handler);
+	if (!job->dump_keys) mz_parse(job, mz_list_check_handler);
 
 	/* Dump mz keys */
 	else mz_dump_keys(job);
 
 	free(job->mz);
+}
+
+/**
+ * @brief 
+ * 
+ * @param job MZ job to be procesed
+ */
+void mz_list_keys(struct ldb_table table, int sector)
+{
+	char sector_path[LDB_MAX_PATH] = "\0";
+	
+	for(int k = sector >= 0 ? sector : 0; k < 0xffff; k++)
+	{
+		sprintf(sector_path, "%s/%s/%s/%.4x.mz", ldb_root, table.db, table.table, k);
+		bool file_exist = ldb_file_exists(sector_path);
+		if (!file_exist) //check for encoded files
+		{
+			strcat(sector_path, ".enc");
+			file_exist = ldb_file_exists(sector_path);
+		}
+
+		if (file_exist)
+		{
+			struct mz_job job;
+			strcpy(job.path, sector_path);
+
+			/* Extract first two MD5 bytes from the file name */
+			memcpy(job.md5, basename(job.path), 4);
+
+			/* Read source mz file into memory */
+			job.mz = file_read(job.path, &job.mz_ln);
+			mz_parse(&job, mz_list_handler);
+			free(job.mz);
+		}
+
+		if (sector >= 0)
+			break;
+	}
 }
 
 /**
@@ -434,8 +481,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 		ptr += job->ln;
 		if (ptr > job->mz_ln)
 		{
-			printf("%s integrity failed\n", job->path);
-			exit(EXIT_FAILURE);
+			fprintf(stderr, "%s integrity failed\n", job->path);
 		}
 	}
 }
@@ -786,4 +832,3 @@ void mz_deflate(struct mz_job *job)
 	job->data_ln = uncompress_by_chunks((uint8_t **) &job->data, job->zdata, job->zdata_ln);
 	job->data_ln--;
 }
-

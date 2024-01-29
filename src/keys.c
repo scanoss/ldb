@@ -56,12 +56,9 @@ bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t
 	/* Save into last key */
 	memcpy(table->last_key, table->current_key, table->key_ln);
 
-	/* Output key to stdout */
-	for (int i = 0; i < table->key_ln; i++) 
-	{
-	    fwrite(table->current_key + i, 1, 1, stdout);
-	}
-
+	char hex[MD5_LEN * 2 + 1];
+	ldb_bin_to_hex(table->current_key, MD5_LEN, hex);
+	printf("%s\n", hex);
 	return false;
 }
 
@@ -70,10 +67,10 @@ bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t
  * 
  * @param table input table
  */
-void ldb_dump_keys(struct ldb_table table)
+void ldb_dump_keys(struct ldb_table table, int s)
 {
 	/* Read each DB sector */
-	uint8_t k0 = 0;
+	uint8_t k0 = s >= 0 ? s : 0;
 	setlocale(LC_NUMERIC, "");
 
 	table.current_key = calloc(table.key_ln, 1);
@@ -93,14 +90,14 @@ void ldb_dump_keys(struct ldb_table table)
 						k[1] = k1;
 						k[2] = k2;
 						k[3] = k3;
-						/* If there is a pointer, read the list */
-						if (ldb_map_pointer_pos(k))
-						{
-							/* Process records */
-							ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, &table);
-						}
+						
+						/* Process records */
+						ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, &table);
+						
 					}
 			free(sector);
+			if (s >=0)
+				break;
 		}
 	} while (k0++ < 255);
 

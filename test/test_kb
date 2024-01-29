@@ -7,9 +7,10 @@ test_01_kb_dir_exist() {
 
 test_02_kb_content() {
     assert_equals "10" $(echo "dump test_kb/file hex 32" | ../ldb | wc -l) "file table fails"
-    assert_equals "7" $(echo "dump test_kb/url hex 16" | ../ldb | wc -l) "url table fails"
+    assert_equals "5" $(echo "dump keys from test_kb/url" | ../ldb | wc -l) "url table fails"
     assert_equals "5" $(echo "dump test_kb/pivot hex 32" |../ldb | wc -l) "pivot table fails"
     assert_equals "19" $(echo "dump test_kb/wfp hex -1" |../ldb | wc -l) "wfp table fails"
+    assert_equals "2" $(echo "dump keys from test_kb/sources" |../ldb | wc -l) "sources table fails"
 }
 
 test_03_kb_query() {
@@ -84,7 +85,7 @@ test_10_configuration() {
     result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:")
     assert_equals "$config" "$result"
 
-    config="GLOBAL: (COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)"
+    config="GLOBAL: (COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, VALIDATE_VERSION=1, TMP_PATH=/tmp)"
     cores=$(nproc)
     threads=$((cores / 2))
     sed -i "1s|.*|$config|" /usr/local/etc/scanoss/ldb/test_kb.conf

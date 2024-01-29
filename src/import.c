@@ -488,6 +488,20 @@ int ldb_import_mz(ldb_importation_config_t * job)
 	if (!ldb_table_exists(job->dbname, job->table))
 		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
 						(job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD));
+	else
+	{
+			/* Create table structure for bulk import (32-bit key) */
+		char db_table[LDB_MAX_NAME];
+		snprintf(db_table,LDB_MAX_NAME-1, "%s/%s", job->dbname, job->table);
+		struct ldb_table oss_bulk = ldb_read_cfg(db_table);
+		if (oss_bulk.keys < 1 || oss_bulk.definitions == LDB_TABLE_DEFINITION_UNDEFINED)
+		{
+			oss_bulk.keys = job->opt.params.keys_number;
+			ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, 
+						job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_MZ | LDB_TABLE_DEFINITION_ENCRYPTED :  LDB_TABLE_DEFINITION_MZ | LDB_TABLE_DEFINITION_STANDARD);
+			log_info("Table %s config file was updated\n", oss_bulk.table);
+		}
+	}
 	
 	return (ldb_bin_join(job->csv_path, dest_path, job->opt.params.overwrite, false, job->opt.params.delete_after_import));
 }
@@ -1787,7 +1801,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	import_params_t user_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
 	import_params_t global_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
 	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT, .csv_path = "\0", .path = "\0"};
-	
+
 	char *table = strrchr(dbtable, '/');
 	if (table)
 		strncpy(job.dbname, dbtable, table - dbtable);
@@ -1830,18 +1844,19 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		strcpy(job.path, path);
 			//check if the version file is present and update the kb version.
 		bool version_present = version_import(&job);
-		//abort the job if VERSION_VALIDATION is active and the json file is not present
-		if (job.opt.params.version_validation && !version_present)
-		{
-			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
-			logger_basic("You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n", job.path);
-
-			exit(EXIT_FAILURE);
-		}
 
 		recurse_directory(&jobs, path, NULL);
 		opt_add(jobs.user_opt, jobs.global_opt);
 		opt_add(jobs.global_opt, jobs.user_opt);
+
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (job.opt.params.version_validation && !version_present)
+		{
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
+			exit(EXIT_FAILURE);
+		}
+
 		print_jobs(&jobs);
 		max_threads = jobs.user_opt->params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);
@@ -1905,17 +1920,18 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 			strcpy(job.path,path);
 		}
 
+		load_import_config(&job, &global_opt);
+		opt_add(&user_opt, &global_opt);
+		opt_add(&user_opt, &job.opt);
+
 		bool version_present = version_import(&job);
 		//abort the job if VERSION_VALIDATION is active and the json file is not present
 		if (job.opt.params.version_validation && !version_present)
 		{
-			logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
 			exit(EXIT_FAILURE);
 		}
-
-		load_import_config(&job, &global_opt);
-		opt_add(&user_opt, &global_opt);
-		opt_add(&user_opt, &job.opt);
 
 		max_threads = job.opt.params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);
