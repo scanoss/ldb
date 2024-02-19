@@ -27,11 +27,12 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "4.0.8"
+#define LDB_VERSION "4.1.0"
 
 #define LDB_TABLE_DEFINITION_UNDEFINED -1
 #define LDB_TABLE_DEFINITION_STANDARD 0
 #define LDB_TABLE_DEFINITION_ENCRYPTED 1
+#define LDB_TABLE_DEFINITION_COMPRESSED 4
 #define LDB_TABLE_DEFINITION_MZ 2
 
 bool ldb_file_exists(char *path);
@@ -72,7 +73,7 @@ struct ldb_table ldb_read_cfg(char *db_table);
 void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys, int definitions);
 bool ldb_valid_table(char *table);
 bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
-void ldb_version();
+void ldb_version(char **version);
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
 bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys, int definitions);

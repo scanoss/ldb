@@ -518,12 +518,15 @@ int ldb_import_mz(ldb_importation_config_t * job)
 int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
+	bool is_compressed = false;
 	bool skip_csv_check = !job->opt.params.validate_fields;
 	bool sectors_modified[256] = {false};
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
 		skip_csv_check = true;
+		if (strstr(job->csv_path, ".cmp"))
+			is_compressed = true;
 	}
 	
 	FILE *fp = fopen(job->csv_path, "r");
@@ -575,9 +578,14 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (!ldb_database_exists(job->dbname))
 		ldb_create_database(job->dbname);
 
+	int table_definitions = LDB_TABLE_DEFINITION_STANDARD;
+
+	if (bin_mode)
+		table_definitions |= LDB_TABLE_DEFINITION_ENCRYPTED;
+	if (is_compressed)
+		table_definitions |= LDB_TABLE_DEFINITION_COMPRESSED;
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, 
-							bin_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD);
+		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, table_definitions);
 	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
@@ -588,8 +596,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (oss_bulk.keys < 1)
 	{
 		oss_bulk.keys = job->opt.params.keys_number;
-		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, 
-					bin_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD);
+		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, table_definitions);
 		log_info("Table %s config file was updated\n", oss_bulk.table);
 	}
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/

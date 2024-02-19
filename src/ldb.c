@@ -63,8 +63,11 @@ void ldb_error (char *txt)
  * @brief Print ldb version
  * 
  */
-void ldb_version()
+void ldb_version(char **version)
 {
-	printf("ldb-%s\n", LDB_VERSION);
+  if (!version)
+    printf("ldb-%s\n", LDB_VERSION);
+  else
+    *version = strdup(LDB_VERSION);
 }
 
