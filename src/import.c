@@ -593,11 +593,17 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	snprintf(db_table,LDB_MAX_NAME-1, "%s/%s", job->dbname, job->table);
 
 	struct ldb_table oss_bulk = ldb_read_cfg(db_table);
-	if (oss_bulk.keys < 1)
+	if (oss_bulk.keys < 1 || oss_bulk.definitions < 0)
 	{
 		oss_bulk.keys = job->opt.params.keys_number;
 		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, table_definitions);
 		log_info("Table %s config file was updated\n", oss_bulk.table);
+	}
+	else if (table_definitions != oss_bulk.definitions)
+	{
+		log_info("The existent table definitions do not match with the table being imported, the file %s will be skipped.\nVerify %s.cfg file and try again\n",
+		job->csv_path, job->table);
+		return LDB_ERROR_CSV_WRONG_ENCODING;
 	}
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
 	oss_bulk.key_ln = 4; 
