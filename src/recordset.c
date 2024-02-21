@@ -207,3 +207,105 @@ bool ldb_key_exists(struct ldb_table table, uint8_t *key)
 	return (ldb_fetch_recordset(NULL, table, key, false, ldb_key_exists_handler, NULL) > 0);
 }
 
+/**
+ * @brief Fixed width recordset handler for hexdump
+ * 
+ * For Example: See in function ldb_hexprint();
+ * 
+ * @param key block key
+ * @param subkey block subkey
+ * @param subkey_ln block subkey lenght
+ * @param data Buffer to print
+ * @param len Length of buffer
+ * @param iteration Not used
+ * @param ptr Pointer to integer. Stores the number of columns to be printed.
+ * @return false Always return false. It 
+ */
+bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
+{
+	int *width = ptr;
+	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
+	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	printf("\n");
+	ldb_hexprint(data, len, *width);
+	printf("\n");
+	return false;
+}
+
+/**
+ * @brief Prints to stdout all the parameters in pretty CSV format.
+ * 
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
+ */
+bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+{
+	/* Print key in hex (first CSV field) */
+	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
+	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+
+	/* Print remaining hex bytes (if any, as a second CSV field) */
+	int *hex_bytes = ptr;
+	int remaining_hex = 0;
+	if (*hex_bytes < 0)
+		remaining_hex = size;
+	else
+	 	remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
+
+	if (remaining_hex < 0) remaining_hex = 0;
+	
+	if (remaining_hex)
+	{
+		printf(",");
+		for (int i = 0; i < remaining_hex; i++)  printf("%02x", data[i]);
+	}
+
+	/* Print remaining CSV data */
+	printf(",");
+	for (int i = remaining_hex; i < size; i++)
+			fwrite(data + i, 1, 1, stdout);
+
+	fwrite("\n", 1, 1, stdout);
+	return false;
+}
+
+/**
+ * @brief Prints to stdout all the parameters in pretty format.
+ * 
+ * Prints the key and subkey in hex format and then prints the data in ascii format.
+ * If the data contains non printable characters a dot will be printed instead.
+ * 
+ * @param key key to print
+ * @param subkey 	subkey to print
+ * @param subkey_ln length of the subkey
+ * @param data data to print
+ * @param size size of the data
+ * @param iteration not used
+ * @param ptr not used
+ * @return false always. not used
+ */
+bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+{
+	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
+	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+
+	printf(": ");
+
+	for (int i = 0; i < size; i++)
+		if (data[i] >= 32 && data[i] <= 126)
+			fwrite(data + i, 1, 1, stdout);
+		else
+			fwrite(".", 1, 1, stdout);
+
+	fwrite("\n", 1, 1, stdout);
+	return false;
+}
