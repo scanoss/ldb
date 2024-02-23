@@ -92,31 +92,6 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 }
 
 /**
- * @brief Fixed width recordset handler for hexdump
- * 
- * For Example: See in function ldb_hexprint();
- * 
- * @param key block key
- * @param subkey block subkey
- * @param subkey_ln block subkey lenght
- * @param data Buffer to print
- * @param len Length of buffer
- * @param iteration Not used
- * @param ptr Pointer to integer. Stores the number of columns to be printed.
- * @return false Always return false. It 
- */
-bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
-{
-	int *width = ptr;
-	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
-	printf("\n");
-	ldb_hexprint(data, len, *width);
-	printf("\n");
-	return false;
-}
-
-/**
  * @brief Converts binary to a string of hex digits
  * Does the opposite of ldb_hex_to_bin();
  * 
