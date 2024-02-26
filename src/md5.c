@@ -22,7 +22,7 @@ void md5_string(const unsigned char *input, int len, unsigned char output[16])
  * @param path string path
  * @return pointer to file md5 array
  */
-uint8_t *file_md5(char *path) 
+uint8_t * md5_file(char *path) 
 {
     uint8_t *c = calloc(1, gcry_md_get_algo_dlen(GCRY_MD_MD5));  // Allocate memory for MD5 hash
     FILE *fp = fopen(path, "rb");

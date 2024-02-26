@@ -30,7 +30,7 @@ clean: clean_build
 	rm -rf $(LIB)
 distclean: clean
 
-install:
+install: $(TARGET) lib
 	@cp $(TARGET) /usr/bin
 	@cp $(LIB) /usr/lib
 	@cp -r src/ldb /usr/include
