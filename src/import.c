@@ -536,14 +536,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		return -1;
 	}
 
-	int expected_fields = (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
-
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t lineln;
 
 	/* A CSV line should contain at least an MD5, a comma separator per field and a LF */
-	int min_line_size = 2 * MD5_LEN + expected_fields;
+	int min_line_size = 2 * MD5_LEN + (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
 
 	/* Node size is a 16-bit int */
 	int node_limit = 65536;
@@ -723,9 +721,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				r_size = strlen(data);
 			}
 			/* Check if number of fields matches the expectation */
-			if (expected_fields && csv_fields(line) != expected_fields)
+			if (!skip_csv_check && (csv_fields(line) != job->opt.params.csv_fields))
 			{
-				log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, expected_fields);
+				log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, job->opt.params.csv_fields);
 				skip = true;
 			}
 
@@ -1158,7 +1156,7 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 	{
 		char * param = strstr(normalized, config_parameters[i]);
 		int val = 0;
-		if (!param)
+		if (!param || !(*(param-1) == ',' || *(param-1) == '(')) //the previous char must be a comma or a parentesis
 			continue;
 		param = strchr(param,'=');
 		

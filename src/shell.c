@@ -144,9 +144,6 @@ void help()
 	printf("		If \"--collate\" option is present, each table will be collated during the importation process.\n");
 	printf("		This command is an alias of \"bulk insert\" using the default parameters of an standar ldb\n");
 	printf("	ldb -f [filename]	Process a list of commands from a file named filename\n");
-
-
-
 }
 
 /**
