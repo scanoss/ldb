@@ -65,7 +65,7 @@ void logger_basic(const char * fmt, ...)
 
 void log_info(const char * fmt, ...)
 {
-    logger_basic(NULL);
+    //logger_basic(NULL);
     
     pthread_mutex_lock(&logger_lock);
     
