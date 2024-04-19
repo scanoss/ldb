@@ -5,7 +5,7 @@ The LDB (Linked-list database) is a headless database management system focused 
 # Build and Install
 
 ## Prerequisites
-Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
+Building LDB requires libgcrypt and zlib. Make sure packages `zlib1g-dev` and `libgcrypt-dev` are installed.
 
 ## Build
 Run `make all` to build the shell binary and the shared library.
@@ -93,6 +93,14 @@ select from DBNAME/TABLENAME key KEY csv hex N
 
 delete from DBNAME/TABLENAME max LENGTH keys KEY_LIST
     Deletes all records for the given comma separated hex key list from the db/table. Max record length expected
+
+delete from DBNAME/TABLENAME record CSV_RECORD\n"
+	Deletes the specific CSV record from the specified table. Some field of the CSV may be skippet from the comparation using '*'
+	Example: delete from db/url record key,madler,*,2.4,20171227,zlib,pkg:github/madler/pigz,https://github.com/madler/pigz/archive/v2.4.zip
+	All the records matching the all the csv's field with exception of the second thirdone will be removed.
+
+delete from DBNAME/TABLENAME records from PATH\
+	Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH.
 
 collate DBNAME/TABLENAME max LENGTH
     Collates all lists in a table, removing duplicates and records greater than LENGTH bytes
