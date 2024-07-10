@@ -480,8 +480,8 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 		if (mainkey > 0) 
 			return false;
 
-		char key_hex1[MD5_LEN*2+1];
-		char key_hex2[MD5_LEN*2+1];
+		char key_hex1[HASH_LEN*2+1];
+		char key_hex2[HASH_LEN*2+1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
 		
@@ -698,7 +698,7 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 	
 	for (int i = 0; i < job->tuples_number; i++)
 	{
-		char key_hex[MD5_LEN*2+1];
+		char key_hex[HASH_LEN*2+1];
 		ldb_bin_to_hex(job->tuples[i]->key, key_len, key_hex);
 		log_info("<key: %s", key_hex);
 		if (job->tuples[i]->data)

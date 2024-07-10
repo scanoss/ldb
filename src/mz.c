@@ -55,7 +55,7 @@ int mz_key_cmp(const void * a, const void * b)
     const uint8_t *vb = b;
 
     /* Compare byte by byte */
-    for (int i = 0; i < MD5_LEN; i++)
+    for (int i = 0; i < HASH_LEN; i++)
     {
         if (va[i] > vb[i]) return 1;
         if (va[i] < vb[i]) return -1;
@@ -75,8 +75,8 @@ bool mz_dump_keys_handler(struct mz_job *job)
 	/* Fill MD5 with item id */
 	mz_id_fill(job->md5, job->id);
 
-	ldb_hex_to_bin(job->md5, MD5_LEN * 2, job->ptr + job->ptr_ln);
-	job->ptr_ln += MD5_LEN;
+	ldb_hex_to_bin(job->md5, HASH_LEN * 2, job->ptr + job->ptr_ln);
+	job->ptr_ln += HASH_LEN;
 
 	return true;
 }
@@ -95,17 +95,17 @@ void mz_dump_keys(struct mz_job *job)
 	mz_parse(job, mz_dump_keys_handler);
 
 	/* Sort keys */
-	qsort(job->ptr, job->ptr_ln / MD5_LEN, MD5_LEN, mz_key_cmp);
+	qsort(job->ptr, job->ptr_ln / HASH_LEN, HASH_LEN, mz_key_cmp);
 
 	/* Output keys */
 	for (int i = 0; i < job->ptr_ln; i += 16)
 	{
 		bool skip = false;
-		if (i) if (!memcmp(job->ptr + i, job->ptr + i - MD5_LEN, MD5_LEN))
+		if (i) if (!memcmp(job->ptr + i, job->ptr + i - HASH_LEN, HASH_LEN))
 		{
 			skip = true;
 		}
-		if (!skip) fwrite(job->ptr + i, MD5_LEN, 1, stdout);
+		if (!skip) fwrite(job->ptr + i, HASH_LEN, 1, stdout);
 	}
 
 	free(job->ptr);
@@ -126,12 +126,12 @@ bool mz_list_check_handler(struct mz_job *job)
 	mz_deflate(job);
 
 	/* Calculate resulting data MD5 */
-	uint8_t actual_md5[MD5_LEN];
+	uint8_t actual_md5[HASH_LEN];
 	MD5( (unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
-	char actual[MD5_LEN * 2 + 1] = "\0";
-	ldb_bin_to_hex(actual_md5, MD5_LEN, actual);
+	char actual[HASH_LEN * 2 + 1];
+	ldb_bin_to_hex(actual_md5, HASH_LEN, actual);
 
 	if (strcmp(job->md5, actual))
 	{
@@ -265,7 +265,8 @@ bool mz_cat_handler(struct mz_job *job)
 bool mz_key_exists(struct mz_job *job, uint8_t *key)
 {
 	/* Calculate mz file path */
-	char mz_path[LDB_MAX_PATH + MD5_LEN] = "\0";
+	char mz_path[LDB_MAX_PATH + HASH_LEN];
+	mz_path[0] = 0;
 	char mz_file_id[5] = "\0\0\0\0\0";
 	ldb_bin_to_hex(key, 2, mz_file_id);
 	sprintf(mz_path, "%s/%s.mz", job->path, mz_file_id);
@@ -294,15 +295,16 @@ bool mz_key_exists(struct mz_job *job, uint8_t *key)
 void mz_cat(struct mz_job *job, char *key)
 {
 	/* Calculate mz file path */
-	char mz_path[LDB_MAX_PATH + MD5_LEN] = "\0";
+	char mz_path[LDB_MAX_PATH + HASH_LEN];
+	mz_path[0] = 0;
 	char mz_file_id[5] = "\0\0\0\0\0";
 	memcpy(mz_file_id, key, 4);
 
 	sprintf(mz_path, "%s/%s.mz", job->path, mz_file_id);
 
 	/* Save path and key on job */
-	job->key = calloc(MD5_LEN, 1);
-	ldb_hex_to_bin(key, MD5_LEN * 2, job->key);	
+	job->key = calloc(HASH_LEN, 1);
+	ldb_hex_to_bin(key, HASH_LEN * 2, job->key);	
 
 	/* Read source mz file into memory */
 	job->mz = file_read(mz_path, &job->mz_ln);
@@ -330,12 +332,12 @@ bool mz_extract_handler(struct mz_job *job)
 	mz_deflate(job);
 
 	/* Calculate resulting data MD5 */
-	uint8_t actual_md5[MD5_LEN];
+	uint8_t actual_md5[HASH_LEN];
 	MD5((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
-	char actual[MD5_LEN * 2 + 1] = "\0";
-	ldb_bin_to_hex(actual_md5, MD5_LEN, actual);
+	char actual[HASH_LEN * 2 + 1];
+	ldb_bin_to_hex(actual_md5, HASH_LEN, actual);
 
 	if (strcmp(job->md5, actual))
 	{

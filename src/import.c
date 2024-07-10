@@ -409,15 +409,16 @@ char *field_n(int n, char *data)
  * @param is_file_table true for processing a file table
  * @return true if succed
  */
-bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *itemid, uint8_t *field2, bool is_file_table)
+//TODO this function must be improved
+bool file_id_to_bin(char *line, int hash_len, uint8_t first_byte, bool got_1st_byte, uint8_t *itemid, uint8_t *field2, bool is_file_table)
 {
 
 	/* File ID is only the last 15 bytes (first byte should be in the file name) */
-	if (line[30] == ',')
+	if (line[hash_len * 2 - 2] == ',')
 	{
 		if (!got_1st_byte)
 		{
-			printf("Key is incomplete. File name does not contain the first byte\n");
+			log_debug("Key is incomplete. File name does not contain the first byte\n");
 			return false;
 		}
 
@@ -428,11 +429,11 @@ bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *
 			*itemid = first_byte;
 
 			/* Convert remaining 15 bytes */
-			ldb_hex_to_bin(line, MD5_LEN_HEX - 2, itemid + 1);
+			ldb_hex_to_bin(line, hash_len*2 - 2, itemid + 1);
 
 			/* Convert urlid if needed (file table) */
 			if (is_file_table)
-				ldb_hex_to_bin(line + (MD5_LEN_HEX - 2 + 1), MD5_LEN_HEX, field2);
+				ldb_hex_to_bin(line + (hash_len*2 - 2 + 1), hash_len*2, field2);
 		}
 	}
 
@@ -440,21 +441,22 @@ bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *
 	else
 	{
 		/* Convert item id */
-		ldb_hex_to_bin(line, MD5_LEN_HEX, itemid);
+		ldb_hex_to_bin(line, hash_len*2, itemid);
 
 		/* Convert url id if needed (file table) */
 		if (is_file_table)
-			ldb_hex_to_bin(field_n(2, line), MD5_LEN_HEX, field2);
+			ldb_hex_to_bin(field_n(2, line), hash_len*2, field2);
 	}
 
-	uint8_t zero_md5[MD5_LEN] = {0xd4,0x1d,0x8c,0xd9,0x8f,0x00,0xb2,0x04,0xe9,0x80,0x09,0x98,0xec,0xf8,0x42,0x7e}; //empty string md5
-
-	if (!memcmp(itemid,zero_md5, MD5_LEN)) //the md5 key of an empty string must be skipped.
-		return false;
+	uint8_t zero_md5[hash_len];// = {0xd4,0x1d,0x8c,0xd9,0x8f,0x00,0xb2,0x04,0xe9,0x80,0x09,0x98,0xec,0xf8,0x42,0x7e}; //empty string md5
 	
-	memset(zero_md5, 0, MD5_LEN); // al zeros md5 must be skippets
 
-	if (!memcmp(itemid,zero_md5, MD5_LEN))
+	/*if (!memcmp(itemid,zero_md5, hash_len)) //the md5 key of an empty string must be skipped.
+		return false;*/ //TODO re-enable when HASH_CALC macro is defined
+	
+	memset(zero_md5, 0, hash_len); // al zeros md5 must be skippets
+
+	if (!memcmp(itemid,zero_md5, hash_len))
 		return false;
 
 
@@ -486,7 +488,7 @@ int ldb_import_mz(ldb_importation_config_t * job)
 	sprintf(dest_path, "%s/%s/%s/%s", ldb_root, job->dbname, job->table, basename(job->csv_path));
 	
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
+		ldb_create_table_new(job->dbname, job->table, hash_len, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
 						(job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD));
 	else
 	{
@@ -515,12 +517,16 @@ int ldb_import_mz(ldb_importation_config_t * job)
  * @param nfields number of fileds
  * @return true if succed
  */
+const int hash_len = 8;
+const int hash_len_hex = 16;
 int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
 	bool is_compressed = false;
 	bool skip_csv_check = !job->opt.params.validate_fields;
 	bool sectors_modified[256] = {false};
+//	int hash_len = job->opt.params.keys_size;
+//	int hash_len_hex = hash_len * 2;
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
@@ -537,20 +543,20 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	}
 
 	/* A CSV line should contain at least an MD5, a comma separator per field and a LF */
-	int min_line_size = 2 * MD5_LEN + (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
+	int min_line_size = 2 * hash_len + (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
 
 	/* Node size is a 16-bit int */
 	int node_limit = 65536;
 
-	uint8_t *itemid = calloc(MD5_LEN, 1);
-	uint8_t *field2 = calloc(MD5_LEN, 1);
+	uint8_t *itemid = calloc(hash_len, 1);
+	uint8_t *field2 = calloc(hash_len, 1);
 	uint8_t *item_buf = malloc(LDB_MAX_NODE_LN);
-	uint8_t *item_lastid = calloc(MD5_LEN * 2 + 1, 1);
+	uint8_t *item_lastid = calloc(hash_len, 1);
 	uint16_t item_ptr = 0;
 	FILE *item_sector = NULL;
 	uint16_t item_rg_start = 0; // record group size
 	uint16_t item_rg_size = 0;	// record group size
-	char last_id[MD5_LEN * 2 + 1 -2]; //save last 30th chars from the last md5.
+	char last_id[hash_len_hex + 1 -2]; //save last 30th chars from the last md5.
 	memset(last_id, 0, sizeof(last_id));
 
 	/* Counters */
@@ -579,7 +585,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (is_compressed)
 		table_definitions |= LDB_TABLE_DEFINITION_COMPRESSED;
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, table_definitions);
+		ldb_create_table_new(job->dbname, job->table, hash_len, 0, job->opt.params.keys_number, table_definitions);
 	pthread_mutex_unlock(&lock);
 
 	/* Create table structure for bulk import (32-bit key) */
@@ -605,8 +611,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (job->opt.params.overwrite)
 		oss_bulk.tmp = true;
 
-	int field2_ln = (oss_bulk.keys - 1) * MD5_LEN;
-	char last_url_id[MD5_LEN_HEX+1] = "\0";
+	int field2_ln = (oss_bulk.keys - 1) * hash_len;
+	char last_url_id[hash_len_hex + 1]; 
+	memset(last_url_id, 0, sizeof(last_url_id));
 
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
@@ -647,9 +654,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			continue;
 		}
 		int key_len = first_comma - line;
-		if (key_len != MD5_LEN_HEX && key_len != MD5_LEN_HEX - 2)
+		if (key_len != hash_len_hex && key_len != hash_len_hex - 2)
 		{
-			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght.\n", job->csv_path, line_number, key_len);
+			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght should be %d.\n", job->csv_path, line_number, key_len, hash_len_hex);
 			skipped++;
 			continue;
 		}
@@ -668,10 +675,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		/* Check if this ID is the same as last */
 		bool dup_id = false;
-		if (!memcmp(last_id, line, MD5_LEN * 2 - 2)) //compare 30 chars of the md5
+		if (!memcmp(last_id, line, hash_len * 2 - 2)) //compare 30 chars of the md5
 			dup_id = true;
 		else
-			memcpy(last_id, line, MD5_LEN * 2 - 2); //copy 30 chars of the md5
+			memcpy(last_id, line, hash_len * 2 - 2); //copy 30 chars of the md5
 
 		/* First CSV field is the data key. Data starts with the second CSV field */
 		char *data = field_n(2, line);
@@ -690,13 +697,13 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (oss_bulk.keys > 1)
 		{
 			/* Skip line if the URL is the same as last, importing unique files per url */
-			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
+			if (dup_id && *last_url_id && !memcmp(data, last_url_id, hash_len * 2))
 			{
 				log_debug("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
 				skip = true;
 			}
 			else
-				memcpy(last_url_id, data, MD5_LEN * 2);
+				memcpy(last_url_id, data, hash_len * 2);
 			
 			if (job->opt.params.csv_fields > 2)
 			{
@@ -752,19 +759,18 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
+			if (!file_id_to_bin(line, hash_len ,first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
 				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
 				skipped++;
 				continue;
 			}
-
 			/* Check if we have a whole new key (first 4 bytes), or just a new subkey (last 12 bytes) */
 			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, 4) != 0);
 			first_record = false;
-			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, MD5_LEN) != 0);
+			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, hash_len) != 0);
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
-			if (new_key || (item_ptr + 5 * LDB_PTR_LN + MD5_LEN + 2 * REC_SIZE_LEN + r_size) >= node_limit)
+			if (new_key || (item_ptr + 5 * LDB_PTR_LN + hash_len + 2 * REC_SIZE_LEN + r_size) >= node_limit)
 			{
 				/* Write buffer to disk and initialize buffer */
 				if (item_rg_size > 0)
@@ -779,6 +785,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 					else
 					{
+						printf("\n aca %d - %s\n", item_ptr, (char*) item_buf);
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
 						if (error < 0)
@@ -812,8 +819,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				item_rg_start = item_ptr;
 
 				/* K: Add remaining part of key to buffer */
-				memcpy(item_buf + item_ptr, itemid + 4, MD5_LEN - LDB_KEY_LN);
-				item_ptr += MD5_LEN - LDB_KEY_LN;
+				memcpy(item_buf + item_ptr, itemid + 4, hash_len - LDB_KEY_LN);
+				item_ptr += hash_len - LDB_KEY_LN;
 
 				/* GS: Add record group size (zeroed) */
 				uint16_t zero = 0;
@@ -821,7 +828,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				item_ptr += REC_SIZE_LEN;
 
 				/* Update item_lastid */
-				memcpy(item_lastid, itemid, MD5_LEN);
+				memcpy(item_lastid, itemid, hash_len);
 
 				/* Update variables */
 				item_rg_size = 0;
@@ -837,6 +844,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			item_rg_size += (field2_ln + REC_SIZE_LEN);
 			if (data)
 			{
+				printf("data: %s\n", data);
 				/* Add record to buffer */
 				if (!bin_mode)
 					memcpy(item_buf + item_ptr, data, r_size);
@@ -852,7 +860,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	/* Flush buffer */
 	if (item_rg_size > 0)
-		uint16_write(item_buf + item_rg_start + MD5_LEN - LDB_KEY_LN, item_rg_size);
+		uint16_write(item_buf + item_rg_start + hash_len - LDB_KEY_LN, item_rg_size);
 	
 	if (item_ptr)
 	{
@@ -861,7 +869,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			item_sector = ldb_open(oss_bulk, itemid, "r+");
 			sectors_modified[itemid[0]] = true;
 		}
-		
+								printf("\n aca 2 %d - %s\n", item_ptr, (char*) item_buf);
+
 		int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 		//abort in case of error
 		if (error < 0)
@@ -1099,6 +1108,7 @@ bool version_import(ldb_importation_config_t *job)
 const char * config_parameters[] = {
 									"FILE_DEL",
 									"KEYS",
+									"HASH_SIZE",
 									"OVERWRITE",
 									"SORT",
 									"VALIDATE_VERSION",
@@ -1118,6 +1128,7 @@ const char * config_parameters[] = {
 #define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
 #define LDB_IMPORTATION_CONFIG_DEFAULT {.delete_after_import = 0,\
 										.keys_number = 1,\
+										.keys_size = 8,\
 										.overwrite = 0,\
 										.sort = 1,\
 										.version_validation = 1,\
@@ -1134,6 +1145,7 @@ const char * config_parameters[] = {
 
 #define LDB_IMPORTATION_CONFIG_UNDEFINED {.delete_after_import = -1,\
 										.keys_number = -1,\
+										.keys_size = -1,\
 										.overwrite = -1,\
 										.sort = -1,\
 										.version_validation = -1,\
@@ -1262,8 +1274,8 @@ void log_table_config(char * name, import_params_t * opt)
 {
 	if (!(name && opt) || !*name)
 		return;
-	log_info("%s configuration: (KEYS=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
-	name, opt->params.keys_number, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
+	log_info("%s configuration: (KEYS=%d, KEYS_SIZE=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
+	name, opt->params.keys_number, opt->params.keys_size, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
 	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
 }
 

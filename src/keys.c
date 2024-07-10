@@ -45,7 +45,7 @@
 bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	struct ldb_table *table = ptr;
-
+	printf("acaaaaaa % d\n", subkey_ln);
 	/* Assemble full key */
 	memcpy(table->current_key, key, LDB_KEY_LN);
 	memcpy(table->current_key + LDB_KEY_LN, subkey, subkey_ln);
@@ -55,9 +55,9 @@ bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t
 
 	/* Save into last key */
 	memcpy(table->last_key, table->current_key, table->key_ln);
-
-	char hex[MD5_LEN * 2 + 1];
-	ldb_bin_to_hex(table->current_key, MD5_LEN, hex);
+	
+	char hex[(LDB_KEY_LN + subkey_ln) * 2 + 1];
+	ldb_bin_to_hex(table->current_key, LDB_KEY_LN + subkey_ln, hex);
 	printf("%s\n", hex);
 	return false;
 }
@@ -75,7 +75,6 @@ void ldb_dump_keys(struct ldb_table table, int s)
 
 	table.current_key = calloc(table.key_ln, 1);
 	table.last_key = calloc(table.key_ln, 1);
-
 	do {
 		uint8_t *sector = ldb_load_sector(table, &k0);
 		if (sector)
@@ -90,7 +89,7 @@ void ldb_dump_keys(struct ldb_table table, int s)
 						k[1] = k1;
 						k[2] = k2;
 						k[3] = k3;
-						
+
 						/* Process records */
 						ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, &table);
 						
