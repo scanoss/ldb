@@ -9,6 +9,7 @@ typedef union import_params {
 	{
 		int delete_after_import;
     	int keys_number;
+		int keys_size;
 		int overwrite;
 		int sort;
 		int version_validation;

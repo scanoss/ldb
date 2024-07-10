@@ -45,10 +45,10 @@ bool mz_id_excluded(struct mz_job *job)
 {
 	if (!job->xkeys_ln) return false;
 
-	for (uint64_t i = 0; i < job->xkeys_ln; i += MD5_LEN)
+	for (uint64_t i = 0; i < job->xkeys_ln; i += HASH_LEN)
 	{
 		/* Compare job id (bytes 3-16) */
-		if (!memcmp(job->xkeys + i + 2, job->id, MD5_LEN - 2))
+		if (!memcmp(job->xkeys + i + 2, job->id, HASH_LEN - 2))
 		{
 			/* Compare mz id (bytes 1-2) */
 			if (!memcmp(job->xkeys + i, job->mz_id, 2)) return true;
@@ -252,11 +252,11 @@ void ldb_mz_collate_delete(struct ldb_table table, job_delete_tuples_t * delete)
 			job.dup_c = 0;
 			strcpy(job.path, sector_path);
 
-			job.xkeys = calloc(delete->tuples_number, MD5_LEN);
-			job.xkeys_ln = delete->tuples_number * MD5_LEN;
+			job.xkeys = calloc(delete->tuples_number, HASH_LEN);
+			job.xkeys_ln = delete->tuples_number * HASH_LEN;
 			for (; i < delete->tuples_number; i++)
 			{
-				memcpy(job.xkeys + i * MD5_LEN, delete->tuples[i]->key, MD5_LEN);
+				memcpy(job.xkeys + i * HASH_LEN, delete->tuples[i]->key, HASH_LEN);
 				if (i + 1 < delete->tuples_number)
 					if (memcmp(delete->tuples[i + 1]->key, delete->tuples[i]->key, 2))
 						break;

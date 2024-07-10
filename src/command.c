@@ -734,7 +734,7 @@ void ldb_command_select(char *command, select_format format)
 				job.data_ln = 0;
 				job.zdata = NULL;      // Compressed data
 				job.zdata_ln = 0;
-				job.md5[MD5_LEN] = 0;
+				job.md5[HASH_LEN] = 0;
 				job.key = NULL;
 				job.decrypt = NULL;
 
