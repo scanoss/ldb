@@ -802,22 +802,18 @@ T_RawRes * ldb_query_raw(char *dbtable, char *key)
 			{
 			
 			  	T_RawRes *results =malloc(sizeof( T_RawRes));
-			 	results->data=malloc(200000);
+			 	results->data=malloc(LDB_MAX_NODE_DATA_LN);
 	   			results->size=0;
 				ldb_fetch_recordset(NULL, ldbtable, keybin, false, ldb_dump_row, results);
+
+				free(dbtable);
+				free(keybin);
+				free(rs);
 				return results;
 			}
 		}
-	} else {
-				T_RawRes *results =malloc(sizeof( T_RawRes));
-			 	results->data=NULL;
-	   			results->size=-1;
-				return results;
-	}
-	
-	free(hexbytes);
+	} 
 	free(dbtable);
-	free(key);
 	free(keybin);
 	free(rs);
 	return NULL;
