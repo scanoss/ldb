@@ -45,7 +45,6 @@
 bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
 	struct ldb_table *table = ptr;
-	printf("acaaaaaa % d\n", subkey_ln);
 	/* Assemble full key */
 	memcpy(table->current_key, key, LDB_KEY_LN);
 	memcpy(table->current_key + LDB_KEY_LN, subkey, subkey_ln);

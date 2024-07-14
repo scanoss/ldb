@@ -3,13 +3,13 @@
 #include <stdbool.h>
 #include "ldb.h"
  
-#define IMPORT_PARAMS_NUMBER 15
+#define IMPORT_PARAMS_NUMBER 16
 typedef union import_params {
 	struct __attribute__((__packed__)) params
 	{
 		int delete_after_import;
     	int keys_number;
-		int keys_size;
+		int key_size;
 		int overwrite;
 		int sort;
 		int version_validation;

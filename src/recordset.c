@@ -89,7 +89,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 		/* Extract and pass variable-size records to handler */
 		else
 		{
-			if (!ldb_validate_node(node, node_size, subkey_ln)) continue;
+			//if (!ldb_validate_node(node, node_size, subkey_ln)) continue;
 
 			/* Extract datasets from node */
 			node_ptr = 0;

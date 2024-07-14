@@ -24,7 +24,7 @@ extern char *ldb_commands[];
 extern int ldb_commands_count;
 extern int ldb_cmp_width;
 
-extern const int hash_len;
+extern int hash_len;
 #define HASH_LEN hash_len
 #define HASH_LEN_HEX hash_len * 2
 void hash_set_size(int size);
