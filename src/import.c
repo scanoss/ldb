@@ -488,7 +488,7 @@ int ldb_import_mz(ldb_importation_config_t * job)
 	sprintf(dest_path, "%s/%s/%s/%s", ldb_root, job->dbname, job->table, basename(job->csv_path));
 	
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, hash_len, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
+		ldb_create_table_new(job->dbname, job->table, job->opt.params.key_size, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
 						(job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD));
 	else
 	{
@@ -517,16 +517,15 @@ int ldb_import_mz(ldb_importation_config_t * job)
  * @param nfields number of fileds
  * @return true if succed
  */
-const int hash_len = 8;
-const int hash_len_hex = 16;
+
 int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
 	bool is_compressed = false;
 	bool skip_csv_check = !job->opt.params.validate_fields;
 	bool sectors_modified[256] = {false};
-//	int hash_len = job->opt.params.keys_size;
-//	int hash_len_hex = hash_len * 2;
+	int hash_len = job->opt.params.key_size;
+	int hash_len_hex = hash_len * 2;
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
@@ -605,7 +604,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		job->csv_path, job->table);
 		return LDB_ERROR_CSV_WRONG_ENCODING;
 	}
-/* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
+/* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. TODO: IMPROVE IT, is this a bug?*/
 	oss_bulk.key_ln = 4; 
 
 	if (job->opt.params.overwrite)
@@ -766,7 +765,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				continue;
 			}
 			/* Check if we have a whole new key (first 4 bytes), or just a new subkey (last 12 bytes) */
-			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, 4) != 0);
+			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, LDB_KEY_LN) != 0);
 			first_record = false;
 			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, hash_len) != 0);
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
@@ -774,7 +773,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			{
 				/* Write buffer to disk and initialize buffer */
 				if (item_rg_size > 0)
-					uint16_write(item_buf + item_rg_start + 12, item_rg_size);
+					uint16_write(item_buf + item_rg_start + (hash_len - LDB_KEY_LN), item_rg_size);
 				
 				if (item_ptr)
 				{
@@ -785,7 +784,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 					else
 					{
-						printf("\n aca %d - %s\n", item_ptr, (char*) item_buf);
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
 						if (error < 0)
@@ -815,11 +813,11 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			{
 				/* Write size of previous record group */
 				if (item_rg_size > 0)
-					uint16_write(item_buf + item_rg_start + 12, item_rg_size);
+					uint16_write(item_buf + item_rg_start + (hash_len - LDB_KEY_LN), item_rg_size);
 				item_rg_start = item_ptr;
 
 				/* K: Add remaining part of key to buffer */
-				memcpy(item_buf + item_ptr, itemid + 4, hash_len - LDB_KEY_LN);
+				memcpy(item_buf + item_ptr, itemid + LDB_KEY_LN, hash_len - LDB_KEY_LN);
 				item_ptr += hash_len - LDB_KEY_LN;
 
 				/* GS: Add record group size (zeroed) */
@@ -844,7 +842,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			item_rg_size += (field2_ln + REC_SIZE_LEN);
 			if (data)
 			{
-				printf("data: %s\n", data);
 				/* Add record to buffer */
 				if (!bin_mode)
 					memcpy(item_buf + item_ptr, data, r_size);
@@ -869,7 +866,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			item_sector = ldb_open(oss_bulk, itemid, "r+");
 			sectors_modified[itemid[0]] = true;
 		}
-								printf("\n aca 2 %d - %s\n", item_ptr, (char*) item_buf);
 
 		int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 		//abort in case of error
@@ -1108,7 +1104,7 @@ bool version_import(ldb_importation_config_t *job)
 const char * config_parameters[] = {
 									"FILE_DEL",
 									"KEYS",
-									"HASH_SIZE",
+									"KEY_SIZE",
 									"OVERWRITE",
 									"SORT",
 									"VALIDATE_VERSION",
@@ -1128,7 +1124,7 @@ const char * config_parameters[] = {
 #define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
 #define LDB_IMPORTATION_CONFIG_DEFAULT {.delete_after_import = 0,\
 										.keys_number = 1,\
-										.keys_size = 8,\
+										.key_size = 16,\
 										.overwrite = 0,\
 										.sort = 1,\
 										.version_validation = 1,\
@@ -1145,7 +1141,7 @@ const char * config_parameters[] = {
 
 #define LDB_IMPORTATION_CONFIG_UNDEFINED {.delete_after_import = -1,\
 										.keys_number = -1,\
-										.keys_size = -1,\
+										.key_size = -1,\
 										.overwrite = -1,\
 										.sort = -1,\
 										.version_validation = -1,\
@@ -1274,8 +1270,8 @@ void log_table_config(char * name, import_params_t * opt)
 {
 	if (!(name && opt) || !*name)
 		return;
-	log_info("%s configuration: (KEYS=%d, KEYS_SIZE=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
-	name, opt->params.keys_number, opt->params.keys_size, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
+	log_info("%s configuration: (KEYS=%d, KEY_SIZE=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
+	name, opt->params.keys_number, opt->params.key_size, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
 	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
 }
 
