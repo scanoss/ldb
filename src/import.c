@@ -398,72 +398,6 @@ char *field_n(int n, char *data)
 }
 
 /**
- * @brief Extract binary item ID (and optional first field binary ID) from CSV line
- * where the first field is the hex itemid and the second could also be hex (if is_file_table)
- *
- * @param line pointer to line
- * @param first_byte fisrt byte to be added
- * @param got_1st_byte true if the line got the 1st byte.
- * @param itemid pointer to item id
- * @param field2 pointer to second field
- * @param is_file_table true for processing a file table
- * @return true if succed
- */
-//TODO this function must be improved
-bool file_id_to_bin(char *line, int hash_len, uint8_t first_byte, bool got_1st_byte, uint8_t *itemid, uint8_t *field2, bool is_file_table)
-{
-
-	/* File ID is only the last 15 bytes (first byte should be in the file name) */
-	if (line[hash_len * 2 - 2] == ',')
-	{
-		if (!got_1st_byte)
-		{
-			log_debug("Key is incomplete. File name does not contain the first byte\n");
-			return false;
-		}
-
-		/* Concatenate first_byte and 15 remaining bytres into itemid */
-		else
-		{
-			/* Add 1st byte */
-			*itemid = first_byte;
-
-			/* Convert remaining 15 bytes */
-			ldb_hex_to_bin(line, hash_len*2 - 2, itemid + 1);
-
-			/* Convert urlid if needed (file table) */
-			if (is_file_table)
-				ldb_hex_to_bin(line + (hash_len*2 - 2 + 1), hash_len*2, field2);
-		}
-	}
-
-	/* Entire file ID included */
-	else
-	{
-		/* Convert item id */
-		ldb_hex_to_bin(line, hash_len*2, itemid);
-
-		/* Convert url id if needed (file table) */
-		if (is_file_table)
-			ldb_hex_to_bin(field_n(2, line), hash_len*2, field2);
-	}
-
-	uint8_t zero_md5[hash_len];// = {0xd4,0x1d,0x8c,0xd9,0x8f,0x00,0xb2,0x04,0xe9,0x80,0x09,0x98,0xec,0xf8,0x42,0x7e}; //empty string md5
-	
-
-	/*if (!memcmp(itemid,zero_md5, hash_len)) //the md5 key of an empty string must be skipped.
-		return false;*/ //TODO re-enable when HASH_CALC macro is defined
-	
-	memset(zero_md5, 0, hash_len); // al zeros md5 must be skippets
-
-	if (!memcmp(itemid,zero_md5, hash_len))
-		return false;
-
-
-	return true;
-}
-
-/**
  * @brief Vaerify if a string is a valid hexadecimal number
  *
  * @param str input string
@@ -481,6 +415,43 @@ bool valid_hex(char *str, int bytes)
 	return true;
 }
 
+int keys_from_line(uint8_t **keys, ldb_importation_config_t *job, char *line) {
+    char *l = strdup(line);
+    if (!l) 
+        return -1;
+    
+    const char delimiter[2] = ",";
+    char *token = strtok(l, delimiter);
+    int i = 0;
+    
+    while (token != NULL && i < job->opt.params.keys_number) {
+        if (!valid_hex(token, job->opt.params.key_size * 2 - 2)) {
+            free(l);
+            return -1;
+        }
+
+        uint8_t bin_key[job->opt.params.key_size];
+        int pos = 0;
+        
+        if (strlen(token) < job->opt.params.key_size * 2) {
+            pos++;
+            if (valid_hex(basename(job->csv_path), 2)) {
+                ldb_hex_to_bin(basename(job->csv_path), 2, &bin_key[0]);
+            } else {
+                free(l);
+                return -1;
+            }
+        }
+
+        ldb_hex_to_bin(token, strlen(token), bin_key + pos);
+        memcpy(keys[i], bin_key, job->opt.params.key_size);
+        i++;
+        token = strtok(NULL, delimiter);
+    }
+
+    free(l);
+    return i;
+}
 
 int ldb_import_mz(ldb_importation_config_t * job)
 {
@@ -550,7 +521,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	uint8_t *itemid = calloc(hash_len, 1);
 	uint8_t *field2 = calloc(hash_len, 1);
 	uint8_t *item_buf = malloc(LDB_MAX_NODE_LN);
-	uint8_t *item_lastid = calloc(hash_len, 1);
 	uint16_t item_ptr = 0;
 	FILE *item_sector = NULL;
 	uint16_t item_rg_start = 0; // record group size
@@ -564,13 +534,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	uint64_t totalbytes = ldb_file_size(job->csv_path);
 	size_t bytecounter = 0;
-
-	/* Get 1st byte of the item ID from csv filename (if available) */
-	uint8_t first_byte = 0;
-	bool got_1st_byte = false;
-	if (valid_hex(basename(job->csv_path), 2))
-		got_1st_byte = true;
-	ldb_hex_to_bin(basename(job->csv_path), 2, &first_byte);
 
 	/* Create table if it doesn't exist */
 	pthread_mutex_lock(&lock);
@@ -610,10 +573,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (job->opt.params.overwrite)
 		oss_bulk.tmp = true;
 
-	int field2_ln = (oss_bulk.keys - 1) * hash_len;
-	char last_url_id[hash_len_hex + 1]; 
-	memset(last_url_id, 0, sizeof(last_url_id));
-
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
 	sprintf(lock_file, "%s.%s",oss_bulk.db,oss_bulk.table);
@@ -626,6 +585,17 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	char *line = NULL;
 	size_t len = 0;
 	ssize_t lineln;
+	//uint8_t keys_bin_prev[job->opt.params.keys_number][job->opt.params.key_size];
+
+	uint8_t ** keys_bin = malloc(job->opt.params.keys_number * sizeof(uint8_t*));
+	for (uint8_t i = 0; i < job->opt.params.keys_number; i++)
+		keys_bin[i] = calloc(job->opt.params.key_size, 1);
+
+	uint8_t ** keys_bin_prev = malloc(job->opt.params.keys_number * sizeof(uint8_t*));
+	for (uint8_t i = 0; i < job->opt.params.keys_number; i++)
+		keys_bin_prev[i] = calloc(job->opt.params.key_size, 1);
+
+
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		bytecounter += lineln;
@@ -644,6 +614,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			skipped++;
 			continue;			
 		}
+
 		//skip keys with the incorrect lenght.
 		char * first_comma = strchr(line, ',');
 		if (!first_comma)
@@ -659,6 +630,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			skipped++;
 			continue;
 		}
+
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
@@ -674,21 +646,31 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		/* Check if this ID is the same as last */
 		bool dup_id = false;
-		if (!memcmp(last_id, line, hash_len * 2 - 2)) //compare 30 chars of the md5
+		if (!memcmp(last_id, line, hash_len * 2 - 2)) 
 			dup_id = true;
 		else
-			memcpy(last_id, line, hash_len * 2 - 2); //copy 30 chars of the md5
-
-		/* First CSV field is the data key. Data starts with the second CSV field */
-		char *data = field_n(2, line);
-		bool skip = false;
-
-		if (!data)
+			memcpy(last_id, line, hash_len * 2 - 2); 
+		
+		 //[job->opt.params.keys_number][job->opt.params.key_size];
+		int keys_detected = keys_from_line(keys_bin, job, line);
+		if (keys_detected <= 0 || keys_detected < job->opt.params.keys_number)
 		{
-			log_debug("%s: Line %d -- Skipped, data is missed %d.\n", job->csv_path, line_number);
+			log_debug("%s: Line %d -- Skipped, %d Failed to parse keys. Needed %d - found %d.\n", job->csv_path, line_number, job->opt.params.keys_number);
 			skipped++;
 			continue;
 		}
+
+	/*	for (uint8_t i = 0; i < job->opt.params.keys_number;i++)
+		{
+			char hex[33];
+			ldb_bin_to_hex(keys_bin[i], job->opt.params.key_size, hex);
+			printf("key %d: %s\n", i, hex);
+		}
+		printf("<<<%d - %s>>\n", keys_detected, line);*/
+
+		/* First CSV field is the data key. Data starts with the second CSV field */
+		char *data = field_n(keys_detected + 1, line);
+		bool skip = false;
 
 		/* File table will have the url id as the second field, which will be
 			 converted to binary. Data then starts on the third field. Also file extensions
@@ -696,15 +678,13 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (oss_bulk.keys > 1)
 		{
 			/* Skip line if the URL is the same as last, importing unique files per url */
-			if (dup_id && *last_url_id && !memcmp(data, last_url_id, hash_len * 2))
+			if (dup_id && !first_record && !memcmp(keys_bin_prev[1], keys_bin[1], hash_len))
 			{
 				log_debug("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
 				skip = true;
 			}
-			else
-				memcpy(last_url_id, data, hash_len * 2);
 			
-			if (job->opt.params.csv_fields > 2)
+			/*if (job->opt.params.csv_fields > 2)
 			{
 				data = field_n(3, line);
 				if (!data)
@@ -714,7 +694,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				}
 			}
 			else
-				data = NULL;
+				data = NULL;*/
 		}
 
 		/* Calculate record size */
@@ -755,19 +735,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			}
 		}
 
-		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
+		//if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
 		{
-			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, hash_len ,first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
-			{
-				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
-				skipped++;
-				continue;
-			}
 			/* Check if we have a whole new key (first 4 bytes), or just a new subkey (last 12 bytes) */
-			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, LDB_KEY_LN) != 0);
+			bool new_key = first_record ? true : (memcmp(keys_bin[0], keys_bin_prev[0], LDB_KEY_LN) != 0);
 			first_record = false;
-			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, hash_len) != 0);
+			bool new_subkey = new_key ? true : (memcmp(keys_bin[0], keys_bin_prev[0], hash_len) != 0);
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
 			if (new_key || (item_ptr + 5 * LDB_PTR_LN + hash_len + 2 * REC_SIZE_LEN + r_size) >= node_limit)
 			{
@@ -779,12 +752,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				{
 					if (!item_sector)
 					{
-						item_sector = ldb_open(oss_bulk, item_lastid, "r+");
-						sectors_modified[item_lastid[0]] = true;
+						item_sector = ldb_open(oss_bulk, keys_bin_prev[0], "r+");
+						sectors_modified[keys_bin_prev[0][0]] = true;
 					}
 					else
 					{
-						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+						int error = ldb_node_write(oss_bulk, item_sector, keys_bin_prev[0], item_buf, item_ptr, 0);
 						//abort in case of error
 						if (error < 0 || ldb_read_failure)
 						{
@@ -794,12 +767,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 				}
 				/* Open new sector if needed */
-				if (*itemid != *item_lastid || (*itemid == 0 && !item_ptr))
+				if (keys_bin[0][0] != keys_bin_prev[0][0] || (keys_bin_prev[0][0] == 0 && !item_ptr))
 				{
 					if (item_sector)
 						ldb_close_unlock(item_sector);
-					item_sector = ldb_open(oss_bulk, itemid, "r+");
-					sectors_modified[itemid[0]] = true;
+					item_sector = ldb_open(oss_bulk, keys_bin[0], "r+");
+					sectors_modified[keys_bin[0][0]] = true;
 				}
 
 				item_ptr = 0;
@@ -817,7 +790,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				item_rg_start = item_ptr;
 
 				/* K: Add remaining part of key to buffer */
-				memcpy(item_buf + item_ptr, itemid + LDB_KEY_LN, hash_len - LDB_KEY_LN);
+				memcpy(item_buf + item_ptr, keys_bin[0] + LDB_KEY_LN, hash_len - LDB_KEY_LN);
 				item_ptr += hash_len - LDB_KEY_LN;
 
 				/* GS: Add record group size (zeroed) */
@@ -826,20 +799,27 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				item_ptr += REC_SIZE_LEN;
 
 				/* Update item_lastid */
-				memcpy(item_lastid, itemid, hash_len);
+
+				for (uint8_t i = 0; i < job->opt.params.keys_number; i++)
+					memcpy(keys_bin_prev[i], keys_bin[i], hash_len);
 
 				/* Update variables */
 				item_rg_size = 0;
 			}
 
-			/* Add record length to record */
-			uint16_write(item_buf + item_ptr, r_size + field2_ln);
+			/* Add record length to record, r_size plus keys size */
+			uint16_write(item_buf + item_ptr, r_size + job->opt.params.key_size * (job->opt.params.keys_number - 1));
 			item_ptr += REC_SIZE_LEN;
 
 			/* Add url id to record */
-			memcpy(item_buf + item_ptr, field2, field2_ln);
-			item_ptr += field2_ln;
-			item_rg_size += (field2_ln + REC_SIZE_LEN);
+			for (int i = 1; i < job->opt.params.keys_number; i++)
+			{
+				memcpy(item_buf + item_ptr, keys_bin[i], job->opt.params.key_size);
+				item_ptr += job->opt.params.key_size;
+				item_rg_size += job->opt.params.key_size;
+			}
+			item_rg_size += REC_SIZE_LEN;
+			
 			if (data)
 			{
 				/* Add record to buffer */
@@ -863,11 +843,11 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	{
 		if (!item_sector)
 		{
-			item_sector = ldb_open(oss_bulk, itemid, "r+");
-			sectors_modified[itemid[0]] = true;
+			item_sector = ldb_open(oss_bulk, keys_bin[0], "r+");
+			sectors_modified[keys_bin_prev[0][0]] = true;
 		}
 
-		int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
+		int error = ldb_node_write(oss_bulk, item_sector, keys_bin[0], item_buf, item_ptr, 0);
 		//abort in case of error
 		if (error < 0)
 			return error;
@@ -889,9 +869,16 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	free(itemid);
 	free(item_buf);
-	free(item_lastid);
 	free(field2);
 
+	for (uint8_t i = 0; i < job->opt.params.keys_number; i++)
+		free(keys_bin[i]);
+	free(keys_bin);
+
+
+	for (uint8_t i = 0; i < job->opt.params.keys_number; i++)
+		free(keys_bin_prev[i]);
+	free(keys_bin_prev);
 	
 	if (job->opt.params.overwrite)
 	{
