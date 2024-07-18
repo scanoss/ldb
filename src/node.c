@@ -76,7 +76,7 @@ void ldb_load_node(struct ldb_recordset *rs)
 
 	/* Read node */
 	rs->node = malloc(rs->node_ln + 1);
-	if (!fread(rs->node, 1, rs->node_ln, rs->sector)) printf("Warning: cannot load node\n");
+	if (!fread(rs->node, 1, rs->node_ln, rs->sector)) log_info("Warning: cannot load node\n");
 
 	/* Terminate with a chr(0) */
 	rs->node[rs->node_ln] = 0;
@@ -229,7 +229,8 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 	{
 		fseeko64(ldb_sector, ptr, SEEK_SET);
 		buffer = calloc(LDB_PTR_LN + table.ts_ln + LDB_KEY_LN, 1);
-		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector)) printf("Warning: cannot read LDB node\n");
+		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector)) 
+			log_info("Warning: cannot read LDB node\n");
 	}
 
 	/* NN: Obtain the next node */
@@ -261,7 +262,7 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 		}
 		else
 		{
-			if (!fread(*out, 1, actual_size, ldb_sector)) printf("Warning: cannot read entire LDB node\n");
+			if (!fread(*out, 1, actual_size, ldb_sector)) log_info("Warning: cannot read entire LDB node\n");
 		}
 		*bytes_read = actual_size;
 
@@ -323,7 +324,7 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 					uint8_t *buffer = malloc(LDB_PTR_LN + table.ts_ln + table.key_ln);
 					if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector))
 					{
-						printf("Warning: cannot read LDB node info\n");
+						log_info("Warning: cannot read LDB node info\n");
 						break;
 					}
 
@@ -354,7 +355,7 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 							/* Read K and GS (2) if needed */
 							if (!fread(buffer, 1, get_bytes, ldb_sector))
 							{
-								printf("Warning: cannot read LDB node info (K/GS)\n");
+								log_info("Warning: cannot read LDB node info (K/GS)\n");
 								break;
 							}
 
