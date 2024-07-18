@@ -31,7 +31,8 @@
 
 typedef struct {
 	uint32_t size;
-	uint8_t *data;
+    uint32_t capacity;
+    uint8_t *data;
 } T_RawRes;
 
 
