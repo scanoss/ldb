@@ -11,5 +11,4 @@ bool ldb_valid_ascii(char *str);
 int ldb_split_string(char *string, char separator);
 bool ldb_valid_name(char *str);
 char *ldb_extract_word(int n, char *wordlist);
-
 #endif

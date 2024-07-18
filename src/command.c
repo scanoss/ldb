@@ -767,6 +767,7 @@ void ldb_command_select(char *command, select_format format)
 	free(rs);
 }
 
+
 /**
  * @brief Execute LDB comman create database
  * 
