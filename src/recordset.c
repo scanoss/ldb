@@ -309,13 +309,3 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
 	fwrite("\n", 1, 1, stdout);
 	return false;
 }
-
-
-bool ldb_dump_row(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr) {
-   
-	T_RawRes *r=ptr;
-	memcpy(&r->data[r->size],&size,4);
-	memcpy(&r->data[r->size+4],data,size);
-	r->size+=size+4;
-	return false;
-}
