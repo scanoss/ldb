@@ -536,10 +536,6 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		return -1;
 	}
 
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t lineln;
-
 	/* A CSV line should contain at least an MD5, a comma separator per field and a LF */
 	int min_line_size = 2 * MD5_LEN + (skip_csv_check > 0 ? 0 : job->opt.params.csv_fields);
 
@@ -621,18 +617,36 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	csv_sort(job);
 	int line_number = 0;
 	bool first_record = true;
+	char *line = NULL;
+	size_t len = 0;
+	ssize_t lineln;
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
 		bytecounter += lineln;
 		line_number++;
+
+		if (lineln < job->opt.params.csv_fields)
+		{
+			log_debug("%s: Line %d -- Skipped, the line %s is too short (size %d)\n", job->csv_path, line_number, line, lineln);
+			skipped++;
+			continue;			
+		}
 		//skip lines starting with non alphanumeric char
 		if (!isalnum(line[0]))
 		{
+			log_debug("%s: Line %d -- Skipped, Non alphanumeric char %d on line %s\n", job->csv_path, line_number, line[0], line);
 			skipped++;
 			continue;			
 		}
 		//skip keys with the incorrect lenght.
-		int key_len = strchr(line, ',') - line;
+		char * first_comma = strchr(line, ',');
+		if (!first_comma)
+		{
+			log_debug("%s: Line %d -- Skipped, wrong csv format on line %s .\n", job->csv_path, line_number, line);
+			skipped++;
+			continue;
+		}
+		int key_len = first_comma - line;
 		if (key_len != MD5_LEN_HEX && key_len != MD5_LEN_HEX - 2)
 		{
 			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght.\n", job->csv_path, line_number, key_len);
@@ -665,6 +679,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		if (!data)
 		{
+			log_debug("%s: Line %d -- Skipped, data is missed %d.\n", job->csv_path, line_number);
 			skipped++;
 			continue;
 		}
@@ -688,7 +703,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				data = field_n(3, line);
 				if (!data)
 				{
-					log_debug("%s: Error in line: %d -- Skipped\n", job->csv_path, line_number);
+					log_debug("%s: Error in line: %d, data is missing -- %s Skipped\n", job->csv_path, line_number, line);
 					skipped++;
 				}
 			}
@@ -766,8 +781,11 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					{
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
-						if (error < 0)
+						if (error < 0 || ldb_read_failure)
+						{
+							log_info("failed to process file %s, last line %s\n", job->csv_path, line);
 							return error;
+						}
 					}
 				}
 				/* Open new sector if needed */
@@ -1835,7 +1853,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	{
 		ldb_importation_config_parse(&user_opt, config);
 		if (user_opt.params.verbose > 0)
-			logger_set_level(LOG_INFO);
+			logger_set_level(user_opt.params.verbose);
 	}
 
 	if (!ldb_database_exists(job.dbname))

@@ -35,6 +35,8 @@
 #define LDB_TABLE_DEFINITION_COMPRESSED 4
 #define LDB_TABLE_DEFINITION_MZ 2
 
+extern bool ldb_read_failure;
+
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
 bool ldb_locked();
