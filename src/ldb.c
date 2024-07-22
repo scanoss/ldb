@@ -48,6 +48,7 @@ char ldb_root[] = "/var/lib/ldb";
 char ldb_lock_path[] = "/dev/shm/ldb.lock";
 int ldb_cmp_width = 0;
 
+bool ldb_read_failure = false;
 /**
  * @brief Display LDB error and exit program
  * 

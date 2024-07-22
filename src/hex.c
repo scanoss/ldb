@@ -30,7 +30,7 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/hex.c
   */
 #include "ldb.h"
-
+#include "logger.h"
 /**
  * @brief Prints a hexdump of 'len' bytes from 'data' organized 'width' columns
  * 
@@ -176,7 +176,12 @@ void ldb_uint32_write(FILE *ldb_sector, uint32_t value)
 uint32_t ldb_uint32_read(FILE *ldb_sector)
 {
 	uint32_t out = 0;
-	if (!fread((uint8_t*)&out, 1, 4, ldb_sector)) printf("Warning: cannot read LDB sector\n");
+	if (!fread((uint8_t*)&out, 1, 4, ldb_sector))
+	{
+		log_debug("Warning: cannot read LDB sector\n");
+		ldb_read_failure = true;
+
+	}
 	return out;
 }
 
@@ -189,7 +194,11 @@ uint32_t ldb_uint32_read(FILE *ldb_sector)
 uint64_t ldb_uint40_read(FILE *ldb_sector)
 {
 	uint64_t out = 0;
-	if (!fread((uint8_t*)&out, 1, 5, ldb_sector)) printf("Warning: cannot read LDB sector\n");
+	if (!fread((uint8_t*)&out, 1, 5, ldb_sector))
+	{
+		log_debug("Warning: cannot read LDB sector\n");
+		ldb_read_failure = true;
+	}
 	return out;
 }
 
@@ -202,7 +211,11 @@ uint64_t ldb_uint40_read(FILE *ldb_sector)
 uint16_t ldb_uint16_read(FILE *ldb_sector)
 {
 	uint16_t out = 0;
-	if (!fread((uint8_t*)&out, 1, 2, ldb_sector)) printf("Warning: cannot read LDB sector\n");
+	if (!fread((uint8_t*)&out, 1, 2, ldb_sector))
+	{ 
+		log_debug("Warning: cannot read LDB sector\n");
+		ldb_read_failure = true;
+	}
 	return out;
 }
 

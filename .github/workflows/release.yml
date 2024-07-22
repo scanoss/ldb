@@ -28,7 +28,6 @@ jobs:
           mkdir -p ./artifacts/
           cp ldb ./artifacts/ldb
           cp libldb.so ./artifacts/libldb.so
-          cp LICENSE ./artifacts/LICENSE
           echo "Produced artifact at ${PWD}/artifacts/ldb"
 
       - name: 'Tar files'

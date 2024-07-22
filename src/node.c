@@ -76,7 +76,7 @@ void ldb_load_node(struct ldb_recordset *rs)
 
 	/* Read node */
 	rs->node = malloc(rs->node_ln + 1);
-	if (!fread(rs->node, 1, rs->node_ln, rs->sector)) printf("Warning: cannot load node\n");
+	if (!fread(rs->node, 1, rs->node_ln, rs->sector)) log_info("Warning: cannot load node\n");
 
 	/* Terminate with a chr(0) */
 	rs->node[rs->node_ln] = 0;
@@ -109,11 +109,11 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
 	/* Obtain the pointer to the last node of the list */
 	uint64_t list = ldb_list_pointer(ldb_sector, key);
 
-	if (list > 0 && list < LDB_MAP_SIZE) {
-		printf("\nFatal data corruption on list %lu for key %02x%02x%02x%02x\n", list, key[0], key[1], key[2], key[3]);
-		fprintf(stdout, "E057 Map location %08lx\n", ldb_map_pointer_pos(key));
+	if ((list > 0 && list < LDB_MAP_SIZE) || ldb_read_failure) {
+		log_info("\nFatal data corruption on list %lu for key %02x%02x%02x%02x from table %s/%s\n", list, key[0], key[1], key[2], key[3], table.db, table.table);
+		log_info("E057 Map location %08lx\n", ldb_map_pointer_pos(key));
+		ldb_read_failure = false;
 		return LDB_ERROR_MAP_CORRUPTED;
-		//exit(EXIT_FAILURE);
 	}
 
 	/* Seek end of file, and save the pointer to the new node */
@@ -215,7 +215,10 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 			ptr = ldb_list_pointer(ldb_sector, key);
 
 		/* If pointer is zero, then there are no records for the key */
-		if (ptr == 0) { return 0; }
+		if (ptr == 0) 
+		{ 
+			return 0; 
+		}
 
 		/* If there is a list, we skip the first bytes (LN: last node pointer) to move into the first node */
 		ptr += LDB_PTR_LN;
@@ -224,12 +227,17 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 	uint8_t *buffer;
 
 	/* Read node information into buffer: NN(5) and TS(2/4) */
-	if (sector) buffer = sector + ptr;
+	if (sector) 
+		buffer = sector + ptr;
 	else
 	{
 		fseeko64(ldb_sector, ptr, SEEK_SET);
 		buffer = calloc(LDB_PTR_LN + table.ts_ln + LDB_KEY_LN, 1);
-		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector)) printf("Warning: cannot read LDB node\n");
+		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector))
+		{
+			log_debug("Warning: cannot read LDB node\n");
+			ldb_read_failure = true;
+		} 
 	}
 
 	/* NN: Obtain the next node */
@@ -261,7 +269,11 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 		}
 		else
 		{
-			if (!fread(*out, 1, actual_size, ldb_sector)) printf("Warning: cannot read entire LDB node\n");
+			if (!fread(*out, 1, actual_size, ldb_sector)) 
+			{
+				log_debug("Warning: cannot read entire LDB node\n");
+				ldb_read_failure = true;
+			}
 		}
 		*bytes_read = actual_size;
 
@@ -279,7 +291,7 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
  * @param table Configuration of a table
  * @param key The key of the table
  */
-void ldb_node_unlink (struct ldb_table table, uint8_t *key)
+void ldb_node_unlink(struct ldb_table table, uint8_t *key)
 {
 
 	uint16_t subkeyln = table.key_ln - LDB_KEY_LN;
@@ -323,7 +335,7 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 					uint8_t *buffer = malloc(LDB_PTR_LN + table.ts_ln + table.key_ln);
 					if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector))
 					{
-						printf("Warning: cannot read LDB node info\n");
+						log_info("Warning: cannot read LDB node info\n");
 						break;
 					}
 
@@ -354,7 +366,7 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 							/* Read K and GS (2) if needed */
 							if (!fread(buffer, 1, get_bytes, ldb_sector))
 							{
-								printf("Warning: cannot read LDB node info (K/GS)\n");
+								log_info("Warning: cannot read LDB node info (K/GS)\n");
 								break;
 							}
 

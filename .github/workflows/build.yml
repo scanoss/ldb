@@ -30,7 +30,7 @@ jobs:
         run: echo ${{ steps.version.outputs.version }}
 
       - name: 'Tar files'
-        run: tar czvf ldb-${{ steps.version.outputs.version }}-amd64.tar.gz ldb libldb.so LICENSE
+        run: tar czvf ldb-${{ steps.version.outputs.version }}-amd64.tar.gz ldb libldb.so
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3

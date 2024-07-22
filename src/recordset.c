@@ -29,6 +29,7 @@
   * @see https://github.com/scanoss/ldb/blob/master/src/recordset.c
   */
 #include "ldb.h"
+#include "logger.h"
 
 #ifndef LDB_EXTRACT_DEFINED_EXTERN
 int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset_ptr, int record_size, struct ldb_table table, const uint8_t *key, const uint8_t *subkey)
@@ -81,15 +82,24 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 	{
 		/* Read node */
 		next = ldb_node_read(sector, table, ldb_sector, next, key, &node_size, &node, 0);
-		if (!node_size && !next) break; // reached end of list
+		if (ldb_read_failure)
+		{
+			log_info("Error reading table %s/%s - sector %02x: the file is not available or the node doesn't exist\n", table.db, table.table, *sector);
+			ldb_read_failure = false;
+			next = 0;
+		}
+		if (!node_size && !next) 
+			break; // reached end of list
 
 		/* Pass entire node (fixed record length) to handler */
-		if (table.rec_ln) done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
+		if (table.rec_ln) 
+			done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
 
 		/* Extract and pass variable-size records to handler */
 		else
 		{
-			if (!ldb_validate_node(node, node_size, subkey_ln)) continue;
+			if (!ldb_validate_node(node, node_size, subkey_ln)) 
+				continue;
 
 			/* Extract datasets from node */
 			node_ptr = 0;
@@ -106,7 +116,8 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 
 				/* Compare subkey */
 				bool key_matched = true;
-				if (!skip_subkey) if (subkey_ln) key_matched = (memcmp(subkey, key + 4, subkey_ln) == 0);
+				if (!skip_subkey && subkey_ln) 
+					key_matched = (memcmp(subkey, key + 4, subkey_ln) == 0);
 
 				if (key_matched)
 				{

@@ -27,13 +27,15 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "4.1.1"
+#define LDB_VERSION "4.1.2"
 
 #define LDB_TABLE_DEFINITION_UNDEFINED -1
 #define LDB_TABLE_DEFINITION_STANDARD 0
 #define LDB_TABLE_DEFINITION_ENCRYPTED 1
 #define LDB_TABLE_DEFINITION_COMPRESSED 4
 #define LDB_TABLE_DEFINITION_MZ 2
+
+extern bool ldb_read_failure;
 
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
