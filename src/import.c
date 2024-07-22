@@ -781,7 +781,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					{
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
-						if (error < 0 || ldb_read_failure)
+						if (error < 0)
 						{
 							log_info("failed to process file %s, last line %s\n", job->csv_path, line);
 							return error;

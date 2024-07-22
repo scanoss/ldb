@@ -27,7 +27,7 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "4.1.3"
+#define LDB_VERSION "4.1.2"
 
 #define LDB_TABLE_DEFINITION_UNDEFINED -1
 #define LDB_TABLE_DEFINITION_STANDARD 0
