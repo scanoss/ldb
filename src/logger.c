@@ -138,7 +138,7 @@ void logger_dbname_set(char * db)
     time_t currentTime = time(NULL);
 	struct tm *localTime = localtime(&currentTime);
 	char timeString[64];
-	strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S", localTime);
+	strftime(timeString, sizeof(timeString), "Exec Time: %Y-%m-%d %H:%M:%S", localTime);
     FILE * f = fopen(import_logger_path, "a");
     if (f)
     {
