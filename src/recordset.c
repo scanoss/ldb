@@ -77,14 +77,14 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 
 	uint32_t records = 0;
 	bool done = false;
-
+	logger_dbname_set(table.db);
 	do
 	{
 		/* Read node */
 		next = ldb_node_read(sector, table, ldb_sector, next, key, &node_size, &node, 0);
 		if (ldb_read_failure)
 		{
-			log_info("Error reading table %s/%s - sector %02x: the file is not available or the node doesn't exist\n", table.db, table.table, *sector);
+			log_info("Error reading table %s/%s - sector %02x: the file is not available or the node doesn't exist\n", table.db, table.table, key[0]);
 			ldb_read_failure = false;
 			next = 0;
 		}
