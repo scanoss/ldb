@@ -48,7 +48,7 @@ test_05_kb_delete_keys() {
 
 #import again, but with the collate option, so the duplicated will be removed. Then test again the content.
 test_06_kb_collate() {
-    echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8,COLLATE=1)' | ../ldb -q
+    echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8,COLLATE=1,VERBOSE=2)' | ../ldb -q
     test_02_kb_content
 }
 

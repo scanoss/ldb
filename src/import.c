@@ -69,7 +69,6 @@ bool csv_sort(ldb_importation_config_t * config)
 	char *command = malloc(5 * LDB_MAX_PATH);
 	snprintf(command, 5 * LDB_MAX_PATH,"sort -T %s -u -o %s.tmp %s && mv %s.tmp %s", config->opt.params.tmp_path, config->csv_path, config->csv_path,
 																					config->csv_path, config->csv_path);
-	
 	log_info("Sorting %s\n", config->csv_path);
 	
 	FILE *p = popen(command, "r");
@@ -415,13 +414,14 @@ bool valid_hex(char *str, int bytes)
 	return true;
 }
 
-int keys_from_line(uint8_t **keys, ldb_importation_config_t *job, char *line) {
+static int keys_from_line(uint8_t **keys, ldb_importation_config_t *job, char *line) {
     char *l = strdup(line);
     if (!l) 
         return -1;
     
     const char delimiter[2] = ",";
-    char *token = strtok(l, delimiter);
+    char *saveptr; // Puntero para strtok_r
+    char *token = strtok_r(l, delimiter, &saveptr);
     int i = 0;
     
     while (token != NULL && i < job->opt.params.keys_number) {
@@ -446,12 +446,13 @@ int keys_from_line(uint8_t **keys, ldb_importation_config_t *job, char *line) {
         ldb_hex_to_bin(token, strlen(token), bin_key + pos);
         memcpy(keys[i], bin_key, job->opt.params.key_size);
         i++;
-        token = strtok(NULL, delimiter);
+        token = strtok_r(NULL, delimiter, &saveptr);
     }
 
     free(l);
     return i;
 }
+
 
 int ldb_import_mz(ldb_importation_config_t * job)
 {
@@ -567,6 +568,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		job->csv_path, job->table);
 		return LDB_ERROR_CSV_WRONG_ENCODING;
 	}
+
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. TODO: IMPROVE IT, is this a bug?*/
 	oss_bulk.key_ln = 4; 
 
@@ -655,7 +657,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		int keys_detected = keys_from_line(keys_bin, job, line);
 		if (keys_detected <= 0 || keys_detected < job->opt.params.keys_number)
 		{
-			log_debug("%s: Line %d -- Skipped, %d Failed to parse keys. Needed %d - found %d.\n", job->csv_path, line_number, job->opt.params.keys_number);
+			log_debug("%s: Line %d -- Skipped, %d Failed to parse keys. Needed %d - found %d.\n", job->csv_path, line_number, job->opt.params.keys_number, keys_detected);
 			skipped++;
 			continue;
 		}
@@ -1143,58 +1145,77 @@ const char * config_parameters[] = {
 										.collate_max_rec = -1,\
 										.collate_max_ram_percent = 50}
 
+
 bool ldb_importation_config_parse(import_params_t * opt, char * line)
 {
-	if (!opt)
-		return false;
-//first normalize the line
-	char normalized[LDB_MAX_COMMAND_SIZE];
-	char no_spaces[LDB_MAX_COMMAND_SIZE];
-	char * line_c = line;
-	int i = 0;
-	do
-	{
-		//skip spaces
-		if (*line_c == ' ')
-			continue;
-		// remove casing
-		no_spaces[i] = *line_c;
-		normalized[i] = toupper(*line_c);
-		i++;
-	} while (*(line_c++) && i < LDB_MAX_COMMAND_SIZE);
-	
-	normalized[i] = 0;
+    if (!opt)
+        return false;
 
-	for (int i = 0; i < CONFIG_PARAMETERS_NUMBER; i++)
-	{
-		char * param = strstr(normalized, config_parameters[i]);
-		int val = 0;
-		if (!param || !(*(param-1) == ',' || *(param-1) == '(')) //the previous char must be a comma or a parentesis
-			continue;
-		param = strchr(param,'=');
-		
-		if (!strcmp(config_parameters[i], "TMP_PATH"))
-		{
-			strncpy(opt->params.tmp_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
-			//remove spurius ")" or "," from path TODO: improve
-			char * c = strchr(opt->params.tmp_path,',');
-			if (c)
-				*c = 0;
-			else
-			{
-				 c = strrchr(opt->params.tmp_path,')');	
-				 if (c)
-				 	*c = 0;
-			} 
-		}
-		else if (sscanf(param,"=%d", &val))
-		{
-			opt->params_arr[i] = val;
-		}
+    // Normalize the line
+    char normalized[LDB_MAX_COMMAND_SIZE];
+    char no_spaces[LDB_MAX_COMMAND_SIZE];
+    char *line_c = line;
+    int i = 0;
+    do
+    {
+        // Skip spaces and unwanted characters
+        if (*line_c == ' ' || *line_c == '(' || *line_c == ')' || *line_c == ':' || *line_c == '\n')
+            continue;
 
-		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
-	}
-	return true;
+        // Remove casing and normalize
+        no_spaces[i] = *line_c;
+        normalized[i] = toupper(*line_c);
+        i++;
+    } while (*(line_c++) && i < LDB_MAX_COMMAND_SIZE);
+
+    normalized[i] = 0;
+
+    // Use strtok_r instead of strtok
+    char *saveptr;  // Pointer for strtok_r state
+    char *key_value = strtok_r(normalized, ",", &saveptr);
+
+    while (key_value != NULL) 
+    {
+        for (int i = 0; i < CONFIG_PARAMETERS_NUMBER; i++)
+        {
+            int val = 0;
+            char *param = key_value;
+
+            // Compare with known parameters
+            if (strncmp(config_parameters[i], param, strlen(config_parameters[i])))
+                continue;
+
+            // Find '=' sign to get the value
+            param = strchr(param, '=');
+
+            if (!strcmp(config_parameters[i], "TMP_PATH"))
+            {
+                // Copy TMP_PATH value
+                strncpy(opt->params.tmp_path, no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
+
+                // Remove unwanted characters like ')' or ','
+                char *c = strchr(opt->params.tmp_path, ',');
+                if (c)
+                    *c = 0;
+                else
+                {
+                    c = strrchr(opt->params.tmp_path, ')');
+                    if (c)
+                        *c = 0;
+                }
+            }
+            else if (sscanf(param, "=%d", &val))
+            {
+                // Assign the value to the appropriate parameter
+                opt->params_arr[i] = val;
+            }
+
+            // Uncomment the line below for debugging
+            // printf("%d - found %s = %d\n", i, config_parameters[i], val);
+        }
+        key_value = strtok_r(NULL, ",", &saveptr);  // Use strtok_r to get the next token
+    }
+    return true;
 }
 
 //cmd_in take precedency of the global cfg
@@ -1257,6 +1278,7 @@ void log_table_config(char * name, import_params_t * opt)
 {
 	if (!(name && opt) || !*name)
 		return;
+	
 	log_info("%s configuration: (KEYS=%d, KEY_SIZE=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
 	name, opt->params.keys_number, opt->params.key_size, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
 	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
@@ -1308,7 +1330,7 @@ static int load_import_config(ldb_importation_config_t * config, import_params_t
 				{
 				//	if (config->opt.params.verbose)
 				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
-					//check if the KEYS parameter is defined
+					//KEYS parameter MUST BE defined
 					if (strstr(line, "KEYS"))
 					{
 						ldb_importation_config_parse(&config->opt, line + strlen(config->table));
@@ -1832,7 +1854,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 	else
 		strcpy(job.dbname, dbtable);
 	//look for the configuration on the KB config file
-	if (!table || !*config) 
+	//if (!table || !*config) 
 	{
 		char config_path[LDB_MAX_PATH] = "";
 		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
@@ -1874,7 +1896,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		opt_add(jobs.global_opt, jobs.user_opt);
 
 		//abort the job if VERSION_VALIDATION is active and the json file is not present
-		if (job.opt.params.version_validation && !version_present)
+		if (jobs.user_opt->params.version_validation && !version_present)
 		{
 			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
 			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
@@ -1963,6 +1985,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		threads_list = calloc(max_threads, sizeof(pthread_t));
 		logger_init(job.dbname, max_threads, threads_list);
 		log_table_config(job.table, &job.opt);
+		//exit(1);
 		process_sectors(&job, threads_list);
 	}
 	else

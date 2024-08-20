@@ -178,7 +178,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	/* Last record checksum to skip duplicates */
 	uint8_t *last_data = calloc(collate->rec_width, 1);
 	uint16_t last_rec_size = 0;
-
+	bool first = true;
 	for (long data_ptr = 0; data_ptr < collate->data_ptr; data_ptr += collate->rec_width)
 	{
 		rec_key = collate->data + data_ptr;
@@ -187,7 +187,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 
 		if (collate->table_rec_ln) rec_size = collate->table_rec_ln;
 		else rec_size = uint32_read(rec_key + collate->rec_width - LDB_KEY_LN);
-
+		
 		/* If record is duplicated, skip it */
 		if (rec_size == last_rec_size) if (!memcmp(data, last_data, rec_size)) continue;
 
@@ -198,7 +198,8 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		uint32_t projected_size = buffer_ptr + rec_size  + collate->table_key_ln + (2 * LDB_PTR_LN) + out_table.ts_ln;
 
 		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0) || first;
+		first = false;
 		/* If node size is exceeded, initialize buffer */
 		if (projected_size >= LDB_MAX_REC_LN)
 		{
@@ -235,11 +236,9 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 
 			/* Update last_key */
 			memcpy(last_key, rec_key, collate->table_key_ln);
-
 			/* Update variables */
 			rec_group_size   = 0;
 		}
-
 		/* Add record length to record */
 		uint16_write(buffer + buffer_ptr, rec_size);
 		buffer_ptr += 2;
@@ -259,7 +258,6 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		if (error < 0)
 			return false;
 	}
-
 	free(buffer);
 	free(last_key);
 	free(last_data);
@@ -405,7 +403,8 @@ void ldb_collate_sort(struct ldb_collate_data *collate)
 			fprintf(stderr,"Warning collate rec_width undefined\n");
 			return;
 		}
-		qsort(collate->data, items, size, ldb_collate_cmp);
+		if (items > 1)
+			qsort(collate->data, items, size, ldb_collate_cmp);
 }
 
 static bool data_compare(char * a, char * b)
