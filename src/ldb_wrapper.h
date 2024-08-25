@@ -37,6 +37,4 @@ typedef struct {
 
 
 T_RawRes * ldb_query_raw(char *dbtable, char *key);
-bool ldb_dump_row(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr) ;
-
 #endif

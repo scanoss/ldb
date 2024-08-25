@@ -19,7 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "ldb.h"
 /**
   * @file recordset.c
   * @date 12 Jul 2020
@@ -56,7 +55,7 @@ extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset
  * @param void_ptr This pointer is passed to the handler function
  * @return uint32_t The number of records found
  */
-uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr)
+uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t ldb_record_handler, void *void_ptr)
 {
 	FILE *ldb_sector = NULL;
 	uint8_t *node;
@@ -93,7 +92,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 
 		/* Pass entire node (fixed record length) to handler */
 		if (table.rec_ln) 
-			done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
+			done = ldb_record_handler(&table, key, NULL, node, node_size, records++, void_ptr);
 
 		/* Extract and pass variable-size records to handler */
 		else
@@ -117,7 +116,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 				/* Compare subkey */
 				bool key_matched = true;
 				if (!skip_subkey && subkey_ln) 
-					key_matched = (memcmp(subkey, key + 4, subkey_ln) == 0);
+					key_matched = (memcmp(subkey, key + LDB_KEY_LN, subkey_ln) == 0);
 
 				if (key_matched)
 				{
@@ -133,7 +132,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 
 						/* We drop records longer than the desired limit */
 						if (record_size + 32 < LDB_MAX_REC_LN)
-							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
+							done = ldb_record_handler(&table, key, subkey, dataset + dataset_ptr, record_size, records++, void_ptr);
 						/* Move pointer to end of record */
 						dataset_ptr += record_size;
 					}
@@ -165,7 +164,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
  * @param ptr Buffer where the record is written
  * @return true if datalen is > 0. False otherwise
  */
-bool ldb_get_first_record_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
+bool ldb_get_first_record_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	uint8_t *record = (uint8_t *) ptr;
 	if (datalen)
@@ -201,7 +200,7 @@ void ldb_get_first_record(struct ldb_table table, uint8_t* key, void *void_ptr)
  * @param ptr Not used
  * @return true always (the key exists) 
  */
-bool ldb_key_exists_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
+bool ldb_key_exists_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	return true;
 }
@@ -232,13 +231,32 @@ bool ldb_key_exists(struct ldb_table table, uint8_t *key)
  * @param ptr Pointer to integer. Stores the number of columns to be printed.
  * @return false Always return false. It 
  */
-bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
+bool ldb_hexprint_width(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
+	int subkey_ln = table->key_ln - LDB_KEY_LN;
+	for (int j = 0; j < table->keys; j++)
+	{
+		//print the main key
+		if (j == 0)
+		{
+			/* Print key in hex (first CSV field) */
+			for (int i = 0; i < LDB_KEY_LN; i++) 
+				printf("%02x", key[i]);
+			for (int i = 0; i < subkey_ln; i++)  
+				printf("%02x", subkey[i]);
+		}
+		//print secondaries keys
+		else 
+		{
+			printf(",");
+			for (int i = 0; i < table->key_ln; i++)  
+				printf("%02x", data[table->key_ln * (j-1) + i]);
+		}
+	};
+
 	int *width = ptr;
-	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
 	printf("\n");
-	ldb_hexprint(data, len, *width);
+	ldb_hexprint(data + table->key_ln * table->keys, len, *width);
 	printf("\n");
 	return false;
 }
@@ -258,31 +276,55 @@ bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *d
  * @param ptr not used
  * @return false always. not used
  */
-bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
-	/* Print key in hex (first CSV field) */
-	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	int subkey_ln = table->key_ln - LDB_KEY_LN;
+	for (int j = 0; j < table->keys; j++)
+	{
+		//print the main key
+		if (j == 0)
+		{
+			/* Print key in hex (first CSV field) */
+			for (int i = 0; i < LDB_KEY_LN; i++) 
+				printf("%02x", key[i]);
+			for (int i = 0; i < subkey_ln; i++)  
+				printf("%02x", subkey[i]);
+		}
+		//print secondaries keys
+		else 
+		{
+			printf(",");
+			for (int i = 0; i < table->key_ln; i++)  
+				printf("%02x", data[table->key_ln * (j-1) + i]);
+		}
+	}
 
 	/* Print remaining hex bytes (if any, as a second CSV field) */
 	int *hex_bytes = ptr;
 	int remaining_hex = 0;
+	//print everything as hex
 	if (*hex_bytes < 0)
 		remaining_hex = size;
 	else
-	 	remaining_hex = *hex_bytes - LDB_KEY_LN - subkey_ln;
+	 	remaining_hex = *hex_bytes - table->key_ln * table->keys;
 
 	if (remaining_hex < 0) remaining_hex = 0;
 	
+	if (table->key_ln * table->keys + remaining_hex >= size)
+	{
+		fwrite("\n", 1, 1, stdout);
+		return false;
+	}
+
 	if (remaining_hex)
 	{
 		printf(",");
-		for (int i = 0; i < remaining_hex; i++)  printf("%02x", data[i]);
+		for (int i = 0; i < remaining_hex; i++)  
+			printf("%02x", data[table->key_ln * (table->keys-1) + i]);
 	}
-
 	/* Print remaining CSV data */
 	printf(",");
-	for (int i = remaining_hex; i < size; i++)
+	for (int i = table->key_ln * (table->keys - 1) + remaining_hex; i < size; i++)
 			fwrite(data + i, 1, 1, stdout);
 
 	fwrite("\n", 1, 1, stdout);
@@ -304,14 +346,32 @@ bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, u
  * @param ptr not used
  * @return false always. not used
  */
-bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_asciiprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
-	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	int subkey_ln = table->key_ln - LDB_KEY_LN;
+	for (int j = 0; j < table->keys; j++)
+	{
+		//print the main key
+		if (j == 0)
+		{
+			/* Print key in hex (first CSV field) */
+			for (int i = 0; i < LDB_KEY_LN; i++) 
+				printf("%02x", key[i]);
+			for (int i = 0; i < subkey_ln; i++)  
+				printf("%02x", subkey[i]);
+		}
+		//print secondaries keys
+		else 
+		{
+			printf(",");
+			for (int i = 0; i < table->key_ln; i++)  
+				printf("%02x", data[table->key_ln * (j-1) + i]);
+		}
+	};
 
 	printf(": ");
 
-	for (int i = 0; i < size; i++)
+	for (int i = (table->keys - 1) * table->key_ln; i < size; i++)
 		if (data[i] >= 32 && data[i] <= 126)
 			fwrite(data + i, 1, 1, stdout);
 		else

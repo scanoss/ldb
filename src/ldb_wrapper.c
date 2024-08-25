@@ -1,4 +1,43 @@
 #include "ldb_wrapper.h"
+
+/**
+ * @brief Function handle to retrieve a recordset
+ * @details Appends to T_RawRes output a record for a that key. As result size is unknown,
+*           this function realocate memory in chunks.
+ * @param key key of the record to be fetched
+ * @param subkey  subkey of the record to be fetched
+ * @param subkey_ln number of byes considering a subkey
+ * @param data data fetched
+ * @param size size of the fetched record
+ * @param iteration record index 
+ * @param ptr result pointer
+ */
+
+
+bool ldb_dump_row(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr) {
+   
+	T_RawRes *r=ptr;
+    if (r->size + size > r->capacity) {
+        size_t new_capacity = r->capacity + 	2*LDB_MAX_NODE_DATA_LN;
+        while (r->size + size > new_capacity) {
+            new_capacity += 2*LDB_MAX_NODE_DATA_LN;
+        }
+        uint8_t *new_data = realloc(r->data, new_capacity);
+        if (!new_data) {
+            perror("Failed to reallocate memory");
+            exit(EXIT_FAILURE);
+        }
+        r->data = new_data;
+        r->capacity = new_capacity;
+    }
+
+	memcpy(&r->data[r->size],&size,4);
+	memcpy(&r->data[r->size+4],data,size);
+	r->size+=size+4;
+
+	return false;
+}
+
 /**
  * @brief Queries a LDB table given a key
  * 
@@ -45,41 +84,4 @@ T_RawRes * ldb_query_raw(char *dbtable, char *key)
 	free(keybin);
 	free(rs);
 	return NULL;
-}
-/**
- * @brief Function handle to retrieve a recordset
- * @details Appends to T_RawRes output a record for a that key. As result size is unknown,
-*           this function realocate memory in chunks.
- * @param key key of the record to be fetched
- * @param subkey  subkey of the record to be fetched
- * @param subkey_ln number of byes considering a subkey
- * @param data data fetched
- * @param size size of the fetched record
- * @param iteration record index 
- * @param ptr result pointer
- */
-
-
-bool ldb_dump_row(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr) {
-   
-	T_RawRes *r=ptr;
-    if (r->size + size > r->capacity) {
-        size_t new_capacity = r->capacity + 	2*LDB_MAX_NODE_DATA_LN;
-        while (r->size + size > new_capacity) {
-            new_capacity += 2*LDB_MAX_NODE_DATA_LN;
-        }
-        uint8_t *new_data = realloc(r->data, new_capacity);
-        if (!new_data) {
-            perror("Failed to reallocate memory");
-            exit(EXIT_FAILURE);
-        }
-        r->data = new_data;
-        r->capacity = new_capacity;
-    }
-
-	memcpy(&r->data[r->size],&size,4);
-	memcpy(&r->data[r->size+4],data,size);
-	r->size+=size+4;
-
-	return false;
 }

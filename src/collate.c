@@ -568,9 +568,9 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
  * @param size data size
  * @return true
  */
-bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_collate_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
-
+	int subkey_ln = table->key_ln - LDB_KEY_LN;
 	struct ldb_collate_data *collate = ptr;
 	if (!collate->rec_width)
 	{

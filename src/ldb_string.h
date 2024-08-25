@@ -1,8 +1,9 @@
 #ifndef _LDB_STRING_H
 #define __LDB_STRING_H
 #include "ldb.h"
-bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
-bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
+bool ldb_asciiprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr);
+bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr);
+bool ldb_hexprint_width(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr);
 void ldb_trim(char *str);
 int ldb_word_len(char *text);
 int ldb_word_count(char *text);

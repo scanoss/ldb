@@ -562,7 +562,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		ldb_write_cfg(oss_bulk.db, oss_bulk.table, oss_bulk.key_ln, oss_bulk.rec_ln, oss_bulk.keys, table_definitions);
 		log_info("Table %s config file was updated\n", oss_bulk.table);
 	}
-	else if (table_definitions != oss_bulk.definitions)
+	else if (table_definitions != oss_bulk.definitions || oss_bulk.keys != job->opt.params.keys_number || oss_bulk.key_ln != job->opt.params.key_size)
 	{
 		log_info("The existent table definitions do not match with the table being imported, the file %s will be skipped.\nVerify %s.cfg file and try again\n",
 		job->csv_path, job->table);

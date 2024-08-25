@@ -42,9 +42,9 @@
  * @return true to finish the fetch
  * @return false to continue the fetch
  */
-bool ldb_dump_keys_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_dump_keys_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
-	struct ldb_table *table = ptr;
+	int subkey_ln = table->key_ln - LDB_KEY_LN; 
 	/* Assemble full key */
 	memcpy(table->current_key, key, LDB_KEY_LN);
 	memcpy(table->current_key + LDB_KEY_LN, subkey, subkey_ln);
@@ -90,7 +90,7 @@ void ldb_dump_keys(struct ldb_table table, int s)
 						k[3] = k3;
 
 						/* Process records */
-						ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, &table);
+						ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, NULL);
 						
 					}
 			free(sector);

@@ -17,6 +17,9 @@
 #include <unistd.h>
 
 #include "definitions.h"
+
+typedef size_t (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
+
 struct ldb_table
 {
 	char db[LDB_MAX_NAME];
@@ -28,8 +31,11 @@ struct ldb_table
 	int keys;
 	uint8_t *current_key;
 	uint8_t *last_key;
-	int definitions;	// Table definitions: is MZ? is encrypted? 
+	int definitions;	// Table definitions: is MZ? is encrypted?
+	hash_calc_t hash_calc;
 };
+
+typedef bool (*ldb_record_handler_t) (struct ldb_table * table, uint8_t * key, uint8_t * subkey, uint8_t * data, uint32_t data_len, int record_number, void * ptr);
 
 struct ldb_recordset
 {
@@ -47,9 +53,5 @@ struct ldb_recordset
 	uint64_t last_node; // Location of last node of the list
     uint8_t ts_ln;      // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 };
-
-typedef bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *);
-
-
 
 #endif
