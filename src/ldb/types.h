@@ -18,7 +18,7 @@
 
 #include "definitions.h"
 
-typedef size_t (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
+typedef void (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
 
 struct ldb_table
 {

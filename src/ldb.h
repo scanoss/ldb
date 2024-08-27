@@ -100,7 +100,7 @@ bool ldb_reverse_memcmp(uint8_t *a, uint8_t *b, int bytes);
 
 void md5_string(const unsigned char *input, int len, unsigned char output[16]);
 uint8_t * md5_file(char *path);
-void ldb_hash_mode_select(int key_ln);
+void ldb_crc64(const unsigned char * data, int len, uint8_t * output);
 
 #define MD5(a, b, c)  md5_string(a, b, c)
 
