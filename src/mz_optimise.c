@@ -45,10 +45,10 @@ bool mz_id_excluded(struct mz_job *job)
 {
 	if (!job->xkeys_ln) return false;
 
-	for (uint64_t i = 0; i < job->xkeys_ln; i += HASH_LEN)
+	for (uint64_t i = 0; i < job->xkeys_ln; i += job->key_ln + 2)
 	{
 		/* Compare job id (bytes 3-16) */
-		if (!memcmp(job->xkeys + i + 2, job->id, HASH_LEN - 2))
+		if (!memcmp(job->xkeys + i + 2, job->id, job->key_ln))
 		{
 			/* Compare mz id (bytes 1-2) */
 			if (!memcmp(job->xkeys + i, job->mz_id, 2)) return true;
@@ -65,13 +65,13 @@ bool mz_optimise_dup_handler(struct mz_job *job)
 	{
 		job->exc_c++;
 	}
-	else if (mz_id_exists(job->ptr, job->ptr_ln, job->id))
+	else if (mz_id_exists(job))
 	{
 		job->dup_c++;
 	}
 	else if ((long) job->mz_ln - (long) job->ptr_ln - (long) job->ln < 0)
 	{
-		mz_id_fill(job->md5, job->id);
+		mz_id_fill(job->md5, job->id, job->key_ln);
 		log_info("Incorrect size of source file %s on pos %u from sector: %s\n", job->md5, job->ptr_ln, job->path);
 	}
 	else
@@ -178,6 +178,8 @@ void ldb_mz_collate(struct ldb_table table, int p_sector)
 			job.license_count = 0;
 			job.exc_c = 0;
 			job.dup_c = 0;
+			job.key_ln = table.key_ln -2;
+			job.hash_calc = table.hash_calc;
 			strcpy(job.path, sector_path);
 			mz_collate(&job);
 			free(job.xkeys);
@@ -250,13 +252,15 @@ void ldb_mz_collate_delete(struct ldb_table table, job_delete_tuples_t * delete)
 			job.license_count = 0;
 			job.exc_c = 0;
 			job.dup_c = 0;
+			job.key_ln = table.key_ln - 2;
+			job.hash_calc = table.hash_calc;
 			strcpy(job.path, sector_path);
 
-			job.xkeys = calloc(delete->tuples_number, HASH_LEN);
-			job.xkeys_ln = delete->tuples_number * HASH_LEN;
+			job.xkeys = calloc(delete->tuples_number, delete->key_ln);
+			job.xkeys_ln = delete->tuples_number * delete->key_ln;
 			for (; i < delete->tuples_number; i++)
 			{
-				memcpy(job.xkeys + i * HASH_LEN, delete->tuples[i]->key, HASH_LEN);
+				memcpy(job.xkeys + i * delete->key_ln, delete->tuples[i]->key, delete->key_ln);
 				if (i + 1 < delete->tuples_number)
 					if (memcmp(delete->tuples[i + 1]->key, delete->tuples[i]->key, 2))
 						break;

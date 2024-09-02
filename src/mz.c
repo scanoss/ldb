@@ -42,6 +42,8 @@
 #include "mz.h"
 #include <gcrypt.h>
 #include "logger.h"
+
+static int m_key_len = MZ_MD5;
 /**
  * @brief compare two MZ keys
  * 
@@ -55,7 +57,7 @@ int mz_key_cmp(const void * a, const void * b)
     const uint8_t *vb = b;
 
     /* Compare byte by byte */
-    for (int i = 0; i < HASH_LEN; i++)
+    for (int i = 0; i < m_key_len; i++)
     {
         if (va[i] > vb[i]) return 1;
         if (va[i] < vb[i]) return -1;
@@ -73,10 +75,10 @@ int mz_key_cmp(const void * a, const void * b)
 bool mz_dump_keys_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, job->key_ln);
 
-	ldb_hex_to_bin(job->md5, HASH_LEN * 2, job->ptr + job->ptr_ln);
-	job->ptr_ln += HASH_LEN;
+	ldb_hex_to_bin(job->md5, job->key_ln * 2, job->ptr + job->ptr_ln);
+	job->ptr_ln += job->key_ln;
 
 	return true;
 }
@@ -93,19 +95,20 @@ void mz_dump_keys(struct mz_job *job)
 
 	/* Fetch keys */
 	mz_parse(job, mz_dump_keys_handler);
+	m_key_len = job->key_ln;
 
 	/* Sort keys */
-	qsort(job->ptr, job->ptr_ln / HASH_LEN, HASH_LEN, mz_key_cmp);
+	qsort(job->ptr, job->ptr_ln / job->key_ln, job->key_ln, mz_key_cmp);
 
 	/* Output keys */
 	for (int i = 0; i < job->ptr_ln; i += 16)
 	{
 		bool skip = false;
-		if (i) if (!memcmp(job->ptr + i, job->ptr + i - HASH_LEN, HASH_LEN))
+		if (i) if (!memcmp(job->ptr + i, job->ptr + i - job->key_ln, job->key_ln))
 		{
 			skip = true;
 		}
-		if (!skip) fwrite(job->ptr + i, HASH_LEN, 1, stdout);
+		if (!skip) fwrite(job->ptr + i, job->key_ln, 1, stdout);
 	}
 
 	free(job->ptr);
@@ -120,18 +123,18 @@ void mz_dump_keys(struct mz_job *job)
 bool mz_list_check_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, job->key_ln);
 
 	/* Decompress */
 	mz_deflate(job);
 
 	/* Calculate resulting data MD5 */
-	uint8_t actual_md5[HASH_LEN];
+	uint8_t actual_md5[job->key_ln];
 	MD5( (unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
-	char actual[HASH_LEN * 2 + 1];
-	ldb_bin_to_hex(actual_md5, HASH_LEN, actual);
+	char actual[job->key_ln * 2 + 1];
+	ldb_bin_to_hex(actual_md5, job->key_ln, actual);
 
 	if (strcmp(job->md5, actual))
 	{
@@ -148,7 +151,7 @@ bool mz_list_check_handler(struct mz_job *job)
 bool mz_list_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, job->key_ln);
 	printf("%s %lu bytes\n", job->md5, job->zdata_ln);
 
 	return true;
@@ -198,6 +201,8 @@ void mz_list_keys(struct ldb_table table, int sector)
 		if (file_exist)
 		{
 			struct mz_job job;
+			job.key_ln = table.key_ln - 2;
+			job.hash_calc = table.hash_calc;
 			strcpy(job.path, sector_path);
 
 			/* Extract first two MD5 bytes from the file name */
@@ -222,7 +227,7 @@ void mz_list_keys(struct ldb_table table, int sector)
  */
 bool mz_key_exists_handler(struct mz_job *job)
 {
-	if (!memcmp(job->id, job->key + 2, MZ_MD5))
+	if (!memcmp(job->id, job->key + 2, job->key_ln))
 	{
 		job->key_found = true;
 		return false;
@@ -239,7 +244,7 @@ bool mz_key_exists_handler(struct mz_job *job)
  */
 bool mz_cat_handler(struct mz_job *job)
 {
-	if (!memcmp(job->id, job->key + 2, MZ_MD5))
+	if (!memcmp(job->id, job->key + 2, job->key_ln))
 	{
 		/* Decrypt (if encrypted) */
 		if (job->decrypt)
@@ -265,7 +270,7 @@ bool mz_cat_handler(struct mz_job *job)
 bool mz_key_exists(struct mz_job *job, uint8_t *key)
 {
 	/* Calculate mz file path */
-	char mz_path[LDB_MAX_PATH + HASH_LEN];
+	char mz_path[LDB_MAX_PATH + job->key_ln];
 	mz_path[0] = 0;
 	char mz_file_id[5] = "\0\0\0\0\0";
 	ldb_bin_to_hex(key, 2, mz_file_id);
@@ -295,7 +300,7 @@ bool mz_key_exists(struct mz_job *job, uint8_t *key)
 void mz_cat(struct mz_job *job, char *key)
 {
 	/* Calculate mz file path */
-	char mz_path[LDB_MAX_PATH + HASH_LEN];
+	char mz_path[LDB_MAX_PATH + job->key_ln];
 	mz_path[0] = 0;
 	char mz_file_id[5] = "\0\0\0\0\0";
 	memcpy(mz_file_id, key, 4);
@@ -303,8 +308,8 @@ void mz_cat(struct mz_job *job, char *key)
 	sprintf(mz_path, "%s/%s.mz", job->path, mz_file_id);
 
 	/* Save path and key on job */
-	job->key = calloc(HASH_LEN, 1);
-	ldb_hex_to_bin(key, HASH_LEN * 2, job->key);	
+	job->key = calloc(job->key_ln + 2, 1);
+	ldb_hex_to_bin(key, (job->key_ln + 2) * 2, job->key);	
 
 	/* Read source mz file into memory */
 	job->mz = file_read(mz_path, &job->mz_ln);
@@ -326,18 +331,18 @@ void mz_cat(struct mz_job *job, char *key)
 bool mz_extract_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, job->key_ln);
 
 	/* Decompress */
 	mz_deflate(job);
 
 	/* Calculate resulting data MD5 */
-	uint8_t actual_md5[HASH_LEN];
+	uint8_t actual_md5[job->key_ln];
 	MD5((unsigned char*) job->data, job->data_ln, actual_md5);
 
 	/* Compare data checksum to validate */
-	char actual[HASH_LEN * 2 + 1];
-	ldb_bin_to_hex(actual_md5, HASH_LEN, actual);
+	char actual[job->key_ln * 2 + 1];
+	ldb_bin_to_hex(actual_md5, job->key_ln, actual);
 
 	if (strcmp(job->md5, actual))
 	{
@@ -428,25 +433,29 @@ void file_write(char *filename, uint8_t *src, uint64_t src_ln)
  * @param id id to be found
  * @return true if the id exist
  */
-bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id)
+bool mz_id_exists(struct mz_job *job)
+//(uint8_t *mz, uint64_t size, uint8_t *id)
 {
+	uint8_t *mz = job->ptr;
+	uint64_t size = job->ptr_ln;
+	uint8_t * id = job->id;
 	/* Recurse mz contents */
 	uint64_t ptr = 0;
 	while (ptr < size)
 	{
 		/* Position pointers */
 		uint8_t *file_id = mz + ptr;
-		uint8_t *file_ln = file_id + MZ_MD5;
+		uint8_t *file_ln = file_id + job->key_ln;
 
 		/* Compare id */
-		if (!memcmp(file_id, id, MZ_MD5)) return true;
+		if (!memcmp(file_id, id, job->key_ln)) return true;
 
 		/* Get compressed data size */
 		uint32_t tmpln;
 		memcpy((uint8_t*)&tmpln, file_ln, MZ_SIZE);
 
 		/* Increment pointer */
-		ptr += tmpln + MZ_MD5 + MZ_SIZE;
+		ptr += tmpln + job->key_ln + MZ_SIZE;
 	}
 	return false;
 }
@@ -465,7 +474,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 	{
 		/* Position pointers */
 		job->id = job->mz + ptr;
-		uint8_t *file_ln = job->id + MZ_MD5;
+		uint8_t *file_ln = job->id + job->key_ln;
 		job->zdata = file_ln + MZ_SIZE;
 
 		/* Get compressed data size */
@@ -474,7 +483,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 		job->zdata_ln = tmpln;
 
 		/* Get total mz record length */
-		job->ln = MZ_MD5 + MZ_SIZE + job->zdata_ln;
+		job->ln = job->key_ln + MZ_SIZE + job->zdata_ln;
 
 		/* Pass job to handler */
 		if (!mz_parse_handler(job)) return;
@@ -506,26 +515,26 @@ static uint16_t uint16(uint8_t *data)
  * @param mz_cache pointer to mz cache data
  * @return true if exist
  */
-bool mz_exists_in_cache(uint8_t *md5, struct mz_cache_item *mz_cache)
+bool mz_exists_in_cache(uint8_t *key, int key_ln, struct mz_cache_item *mz_cache)
 {
-	int mzid = uint16(md5);
+	int mzid = uint16(key);
 
 	/* False if cache is empty */
 	if (!mz_cache[mzid].length) return false;
 
-	/* Search md5 in cache */
+	/* Search key in cache */
 	uint8_t *cache = mz_cache[mzid].data;
 	int cacheln = mz_cache[mzid].length;
 
 	while (cache < (mz_cache[mzid].data + cacheln))
 	{
-		/* MD5 comparison starts on the third byte of the MD5 */
-		if (!memcmp(md5 + 2, cache, MZ_MD5)) return true;
+		/* key comparison starts on the third byte of the key */
+		if (!memcmp(key + 2, cache, key_ln)) return true;
 
 		/* Extract zsrc and displace cache pointer */
 		uint32_t zsrc_ln;
-		memcpy((uint8_t*)&zsrc_ln, cache + MZ_MD5, MZ_SIZE);
-		cache += (MZ_HEAD + zsrc_ln);
+		memcpy((uint8_t*)&zsrc_ln, cache + key_ln, MZ_SIZE);
+		cache += (key_ln + MZ_SIZE + zsrc_ln);
 	}
 
 	return false;
@@ -538,12 +547,12 @@ bool mz_exists_in_cache(uint8_t *md5, struct mz_cache_item *mz_cache)
  * @param mined_path path to the mz file
  * @return true if the ID exist
  */
-bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
+bool mz_exists_in_disk(uint8_t *key, int key_ln, char *mined_path)
 {
 	char path[LDB_MAX_PATH];
 
 	/* Assemble MZ path */
-	uint16_t mzid = uint16(md5);
+	uint16_t mzid = uint16(key);
 	sprintf(path, "%s/sources/%04x.mz", mined_path, mzid);
 
 	/* Open mz file */
@@ -551,7 +560,7 @@ bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
 	if (mz < 0) return false;
 
 	uint64_t ptr = 0;
-	uint8_t header[MZ_HEAD];
+	uint8_t header[key_ln + MZ_SIZE];
 
 	/* Get file size */
 	uint64_t size = lseek64(mz, 0, SEEK_END);
@@ -562,15 +571,15 @@ bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
 	{
 		/* Read MZ header */
 		lseek64(mz, ptr, SEEK_SET);
-		if (!read(mz, header, MZ_HEAD))
+		if (!read(mz, header, key_ln + MZ_SIZE))
 		{
 			printf("[READ_ERROR]\n");
 			exit(EXIT_FAILURE);
 		}
-		ptr += MZ_HEAD;
+		ptr += key_ln + MZ_SIZE;
 
-		/* If md5 matches, exit with true */
-		if (!memcmp(md5 + 2, header, MZ_MD5))
+		/* If key matches, exit with true */
+		if (!memcmp(key + 2, header, key_ln))
 		{
 			close(mz);
 			return true;
@@ -578,7 +587,7 @@ bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
 
 		/* Increment pointer */
 		uint32_t zsrc_ln;
-		memcpy((uint8_t*)&zsrc_ln, header + MZ_MD5, MZ_SIZE);
+		memcpy((uint8_t*)&zsrc_ln, header + key_ln, MZ_SIZE);
 		ptr += zsrc_ln;
 	}
 	close(mz);
@@ -594,11 +603,11 @@ bool mz_exists_in_disk(uint8_t *md5, char *mined_path)
  * @param mz_cache pointer to mz cache
  * @return true if the key exist
  */
-bool mz_exists(char *mined_path, uint8_t *md5, struct mz_cache_item *mz_cache)
+bool mz_exists(char *mined_path, uint8_t *key, int key_ln, struct mz_cache_item *mz_cache)
 {
-	if (mz_exists_in_cache(md5, mz_cache)) return true;
+	if (mz_exists_in_cache(key, key_ln, mz_cache)) return true;
 
-	return mz_exists_in_disk(md5, mined_path);
+	return mz_exists_in_disk(key, key_ln, mined_path);
 }
 
 /**
@@ -645,24 +654,24 @@ void mz_write(char *mined_path, int mzid, uint8_t *data, int datalen)
  * @param zsrc 
  * @param mz_cache pointer to mz cache
  */
-void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache)
+void mz_add(char *mined_path, uint8_t *key, int key_ln, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache)
 {
-	if (check) if (mz_exists(mined_path, md5, mz_cache)) return;
+	if (check) if (mz_exists(mined_path, key, key_ln, mz_cache)) return;
 
 	uint64_t zsrc_ln = compressBound(src_ln + 1);
 
 	/* We save the first bytes of zsrc to accomodate the MZ header */
-	compress(zsrc + MZ_HEAD, &zsrc_ln, (uint8_t *) src, src_ln + 1);
+	compress(zsrc + key_ln + MZ_SIZE, &zsrc_ln, (uint8_t *) src, src_ln + 1);
 	uint32_t zln = zsrc_ln;
 	
-	/* Only the last 14 bytes of the MD5 go to the mz record (first two bytes are the file name) */
-	memcpy(zsrc, md5 + 2, MZ_MD5); 
+	/* Only the last 14 bytes of the key go to the mz record (first two bytes are the file name) */
+	memcpy(zsrc, key + 2, key_ln); 
 
 	/* Add the 32-bit compressed file length */
-	memcpy(zsrc + MZ_MD5, (char *) &zln, MZ_SIZE);
+	memcpy(zsrc + key_ln, (char *) &zln, MZ_SIZE);
 
-	int mzid = uint16(md5);
-	int mzlen = zsrc_ln + MZ_HEAD;
+	int mzid = uint16(key);
+	int mzlen = zsrc_ln + key_ln + MZ_SIZE;
 	/* If it won't fit in the cache, write it directly */
 	if (mzlen > MZ_CACHE_SIZE)
 	{
@@ -711,7 +720,7 @@ void mz_flush(char *mined_path, struct mz_cache_item *mz_cache)
  * @param path mz file path
  * @return true if the test pass
  */
-bool mz_check(char *path)
+bool mz_check(char *path, int key_ln)
 {
 
 	/* Open mz file */
@@ -739,10 +748,10 @@ bool mz_check(char *path)
 	while (ptr < size)
 	{
 		/* Read compressed data length */
-		memcpy((uint8_t*)&ln, mz + ptr + MZ_MD5, MZ_SIZE);
+		memcpy((uint8_t*)&ln, mz + ptr + key_ln, MZ_SIZE);
 
 		/* Increment ptr */
-		ptr += (MZ_HEAD + ln);
+		ptr += (key_ln + MZ_SIZE + ln);
 	}
 	close(mzfile);
 	free(mz);
@@ -758,9 +767,9 @@ bool mz_check(char *path)
  * @param md5[out] md5 output
  * @param mz_id mz ID
  */
-void mz_id_fill(char *md5, uint8_t *mz_id)
+void mz_id_fill(char *md5, uint8_t *mz_id, int key_ln)
 {
-	for (int i = 0; i < 14; i++)
+	for (int i = 0; i < key_ln; i++)
 	{
 		sprintf(md5 + 4 + 2 * i, "%02x", mz_id[i]);
 	}

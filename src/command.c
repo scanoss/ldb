@@ -270,7 +270,7 @@ void ldb_command_delete(char *command)
 		tmptable.key_ln = LDB_KEY_LN;
 		logger_dbname_set(ldbtable.db);
 		logger_set_level(LOG_INFO);
-		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
 		int tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " keys "),",", ldbtable);
 		
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
@@ -323,7 +323,7 @@ void ldb_command_delete_records(char *command)
 		logger_dbname_set(ldbtable.db);
 		logger_set_level(LOG_INFO);
 
-		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0};
+		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
 
 		int tuples_number = 0;
 		if (single_mode)
@@ -734,10 +734,11 @@ void ldb_command_select(char *command, select_format format)
 				job.data_ln = 0;
 				job.zdata = NULL;      // Compressed data
 				job.zdata_ln = 0;
-				job.md5[HASH_LEN] = 0;
+				job.key_ln = ldbtable.key_ln - 2;
+				job.md5[job.key_ln] = 0;
 				job.key = NULL;
 				job.decrypt = NULL;
-
+				job.hash_calc = ldbtable.hash_calc;
 				mz_cat(&job, key);
 			}
 			else

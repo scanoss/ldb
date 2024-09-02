@@ -54,6 +54,7 @@ int ldb_collate_cmp(const void * a, const void * b)
 
     return 0;
 }
+static int m_key_ln = 16;
 
 int ldb_collate_tuple_cmp(const void * a, const void * b)
 {
@@ -61,7 +62,7 @@ int ldb_collate_tuple_cmp(const void * a, const void * b)
 	const tuple_t *vb = *(tuple_t **) b;
 	
 	/* Compare each byte until the end of the shorter record */
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < m_key_ln; i++)
     {
 		if (va->key[i] > vb->key[i]) 
 			return 1;
@@ -479,8 +480,8 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 		if (mainkey > 0) 
 			return false;
 
-		char key_hex1[HASH_LEN*2+1];
-		char key_hex2[HASH_LEN*2+1];
+		char key_hex1[collate->in_table.key_ln * 2 + 1];
+		char key_hex2[collate->in_table.key_ln * 2 + 1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
 		
@@ -691,13 +692,14 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 	job->tuples_number = tuples_index;
 	job->keys_number = table.keys;
 	job->key_ln = key_len;
+	m_key_ln = key_len;
 	qsort(job->tuples, tuples_index, sizeof(tuple_t *), ldb_collate_tuple_cmp);
 	
 	log_info("Keys to delete %d:\n", tuples_index);
 	
 	for (int i = 0; i < job->tuples_number; i++)
 	{
-		char key_hex[HASH_LEN*2+1];
+		char key_hex[table.key_ln *2+1];
 		ldb_bin_to_hex(job->tuples[i]->key, key_len, key_hex);
 		log_info("<key: %s", key_hex);
 		if (job->tuples[i]->data)

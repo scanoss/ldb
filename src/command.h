@@ -40,7 +40,6 @@ char *ldb_command_normalize(char *text);
 void ldb_command_show_tables(char *command);
 void ldb_command_show_databases();
 void ldb_command_select(char *command, select_format format);
-void ldb_command_telect(char *command);
 void ldb_command_insert(char *command, commandtype type);
 void ldb_command_create_table(char *command);
 void ldb_command_bulk(char *command, commandtype type);

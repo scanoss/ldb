@@ -7,7 +7,7 @@
 /* MZ  */
 #define MZ_CACHE_SIZE 16384
 #define MZ_FILES 65536
-#define MZ_HEAD 18 // Head contains 14 bytes of the MD5 + 4 bytes for compressed SIZE
+//#define MZ_HEAD 18 // Head contains 14 bytes of the MD5 + 4 bytes for compressed SIZE
 #define MZ_MD5 14
 #define MZ_SIZE 4
 #define MZ_MAX_FILE (4 * 1048576)
@@ -48,23 +48,24 @@ struct mz_job
 	int license_count;            // Number of known license identifiers
 	bool key_found;			// Used with mz_key_exists
 	void  (*decrypt) (uint8_t *data, uint32_t len);
+	hash_calc_t hash_calc;
+	int key_ln;
 };
 
 
 bool mz_key_exists(struct mz_job *job, uint8_t *key);
-bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id);
+bool mz_id_exists(struct mz_job *job);
 uint8_t *file_read(char *filename, uint64_t *size);
 
 void mz_deflate(struct mz_job *job);
 #define MZ_DEFLATE(job) mz_deflate(job)
 
-void mz_id_fill(char *md5, uint8_t *mz_id);
+void mz_id_fill(char *md5, uint8_t *mz_id, int key_ln);
 void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ());
 void file_write(char *filename, uint8_t *src, uint64_t src_ln);
-void mz_id_fill(char *md5, uint8_t *mz_id);
 void mz_corrupted();
-void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
-bool mz_check(char *path);
+void mz_add(char *mined_path, uint8_t *key, int key_ln, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
+bool mz_check(char *path, int key_ln);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
 void mz_list_check(struct mz_job *job);
 void mz_list_keys(struct ldb_table table, int sector);
