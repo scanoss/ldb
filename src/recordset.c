@@ -287,8 +287,11 @@ bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8
 			/* Print key in hex (first CSV field) */
 			for (int i = 0; i < LDB_KEY_LN; i++) 
 				printf("%02x", key[i]);
-			for (int i = 0; i < subkey_ln; i++)  
-				printf("%02x", subkey[i]);
+			if (subkey)
+			{
+				for (int i = 0; i < subkey_ln; i++)  
+					printf("%02x", subkey[i]);
+			}
 		}
 		//print secondaries keys
 		else 
@@ -303,14 +306,15 @@ bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8
 	int *hex_bytes = ptr;
 	int remaining_hex = 0;
 	//print everything as hex
+
 	if (*hex_bytes < 0)
-		remaining_hex = size;
+		remaining_hex = size - table->key_ln * (table->keys-1);
 	else
-	 	remaining_hex = *hex_bytes - table->key_ln * table->keys;
+	 	remaining_hex = *hex_bytes - table->key_ln * (table->keys-1);
 
 	if (remaining_hex < 0) remaining_hex = 0;
 	
-	if (table->key_ln * table->keys + remaining_hex >= size)
+	if (table->key_ln * (table->keys - 1) + remaining_hex >= size)
 	{
 		fwrite("\n", 1, 1, stdout);
 		return false;
@@ -323,6 +327,12 @@ bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8
 			printf("%02x", data[table->key_ln * (table->keys-1) + i]);
 	}
 	/* Print remaining CSV data */
+	if (remaining_hex >= size)
+	{
+		fwrite("\n", 1, 1, stdout);
+		return false;
+	}
+
 	printf(",");
 	for (int i = table->key_ln * (table->keys - 1) + remaining_hex; i < size; i++)
 			fwrite(data + i, 1, 1, stdout);

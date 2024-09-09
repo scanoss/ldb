@@ -91,14 +91,13 @@ bool csv_sort(ldb_importation_config_t * config)
  * @param sort
  * @return true
  */
-bool bin_sort(char *file_path, bool sort)
+bool bin_sort(char *file_path, int rec_ln)
 {
 	if (!ldb_file_size(file_path))
 		return false;
-	if (!sort)
-		return true;
+
 	log_info("Sorting %s\n", file_path);
-	return bsort(file_path);
+	return bsort(file_path, rec_ln);
 }
 
 
@@ -200,7 +199,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	strcpy(oss_wfp.db, config->dbname);
 	strcpy(oss_wfp.table, config->table);
 	oss_wfp.key_ln = 4;
-	oss_wfp.rec_ln = 18;
+	oss_wfp.rec_ln = config->opt.params.key_size + 2; //key_ln + 2 bytes for line number
 	oss_wfp.ts_ln = 2;
 	oss_wfp.tmp = config->opt.params.overwrite;
 
@@ -210,8 +209,8 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	size_t bytecounter = 0;
 	int tick = 10000; // activate progress every "tick" records
 
-	/* raw record length = wfp crc32(3) + file md5(16) + line(2) = 21 bytes */
-	int raw_ln = 21;
+	/* raw record length = wfp crc32(3) + file md5(16) / 8 + line(2) =  21 / 13 bytes */
+	int raw_ln = 3 + config->opt.params.key_size + 2;
 
 	/* First three bytes are bytes 2nd-4th of the wfp) */
 	int rec_ln = raw_ln - 3;
@@ -220,11 +219,14 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	uint8_t key1 = first_byte(config->csv_path);
 
 	/* File should contain 21 * N bytes */
-	if (ldb_file_size(config->csv_path) % 21)
+	if (ldb_file_size(config->csv_path) % (raw_ln))
 	{
-		printf("File %s does not contain 21-byte records\n", config->csv_path);
+		printf("File %s does not contain %d-byte records\n", config->csv_path, raw_ln);
 		exit(EXIT_FAILURE);
 	}
+
+	if (config->opt.params.sort)
+		bin_sort(config->csv_path, raw_ln);
 
 	/* Load ignored wfps into boolean array */
 	bool *bl = calloc(256 * 256 * 256, 1);
@@ -264,7 +266,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	/* Create table if it doesn't exist */
 	if (!ldb_table_exists(config->dbname, config->table))
-		ldb_create_table_new(config->dbname, config->table, 4, rec_ln, 1, LDB_TABLE_DEFINITION_STANDARD);
+		ldb_create_table_new(config->dbname, config->table, LDB_KEY_LN, rec_ln, 1, LDB_TABLE_DEFINITION_STANDARD);
 
 	/* Open ldb */
 	out = ldb_open(oss_wfp, last_wfp, "r+");
@@ -317,7 +319,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 				/* Skip duplicated records. Since md5 records to be imported are sorted, it will be faster
 					 to compare them from last to first byte. Also, we only compare the 16 byte md5 */
 				if (record_ln > 0)
-					if (!reverse_memcmp(record + record_ln - rec_ln, rec, 16))
+					if (!reverse_memcmp(record + record_ln - rec_ln, rec, config->opt.params.key_size))
 					{
 						memcpy(record + record_ln, rec, rec_ln);
 						record_ln += rec_ln;
@@ -1431,11 +1433,11 @@ int import_collate_sector(ldb_importation_config_t *config)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		int max_rec_len = config->opt.params.is_wfp_table == 1 ? 18 : config->opt.params.collate_max_rec;
+		int max_rec_len = config->opt.params.is_wfp_table == 1 ? config->opt.params.key_size + 2 : config->opt.params.collate_max_rec;
 
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max_rec_len)
 		{
-			log_info("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+			log_info("E076 Max record length should equal fixed record length (%d vs %d)\n", ldbtable.rec_ln, max_rec_len);
 			return LDB_ERROR_RECORD_LENGHT_INVAID;
 		}
 		else if (max_rec_len < ldbtable.key_ln)
@@ -1533,8 +1535,7 @@ int ldb_import(ldb_importation_config_t * job)
 	}
 	else if (config.opt.params.is_wfp_table)
 	{
-		if (bin_sort(config.csv_path, config.opt.params.sort))
-			result = ldb_import_snippets(&config);
+		result = ldb_import_snippets(&config);
 	}
 	else
 	{

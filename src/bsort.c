@@ -204,13 +204,13 @@ void close_sort(struct sort *sort)
 	}
 }
 
-int bsort(char *file_path) 
+int bsort(char *file_path, int rec_ln) 
 {
 	int char_start = 0;
 	int char_stop = 255;
-	int record_size=21;
-	int key_size=21;
-	int stack_size=5;
+	int record_size = rec_ln;
+	int key_size = rec_ln;
+	int stack_size = 5;
 	int cut_off = 4;
 
 	struct sort sort;
