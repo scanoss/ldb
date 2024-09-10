@@ -18,10 +18,9 @@
 typedef uint64_t CRC64_XZ_Type;
 
 // Polynomial, initial CRC and post CRC XOR value.
-static CRC64_XZ_Type const CRC64_XZ_POLYNOMIAL = UINT64_C(0xC96C5795D7870F42); // 0x42F0E1EBA9EA3693 reflected.
+//static CRC64_XZ_Type const CRC64_XZ_POLYNOMIAL = UINT64_C(0xC96C5795D7870F42); // 0x42F0E1EBA9EA3693 reflected.
 static CRC64_XZ_Type const CRC64_XZ_INITIAL = UINT64_C(0xFFFFFFFFFFFFFFFF);    // 0xFFFFFFFFFFFFFFFF reflected.
 static CRC64_XZ_Type const CRC64_XZ_FINIAL = UINT64_C(0xFFFFFFFFFFFFFFFF);     // 0xFFFFFFFFFFFFFFFF reflected.
-
 //-----------------------------------------------------------------------------
 // Uses:
 //   Finalize CRC.  Call once all data has been added to CRC.
@@ -364,7 +363,7 @@ void long_to_bytes(uint64_t value, uint8_t *buffer)
 
 void ldb_crc64(const unsigned char * data, int len, uint8_t * output) 
 {
-    uint64_t crc = 0xFFFFFFFFFFFFFFFF;
+    uint64_t crc = CRC64_XZ_INITIAL;
     crc = crc64_XZ_Buffer(crc, data, len);
     crc = crc64_XZ_Finalize(crc);
     long_to_bytes(crc, output);

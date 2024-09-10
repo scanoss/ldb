@@ -310,7 +310,7 @@ bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8
 	if (*hex_bytes < 0)
 		remaining_hex = size - table->key_ln * (table->keys-1);
 	else
-	 	remaining_hex = *hex_bytes - table->key_ln * (table->keys-1);
+	 	remaining_hex = *hex_bytes - table->key_ln * (table->keys);
 
 	if (remaining_hex < 0) remaining_hex = 0;
 	

@@ -270,7 +270,7 @@ void ldb_command_delete(char *command)
 		tmptable.key_ln = LDB_KEY_LN;
 		logger_dbname_set(ldbtable.db);
 		logger_set_level(LOG_INFO);
-		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
+		job_delete_tuples_t del_job = {.handler = NULL, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
 		int tuples_number = ldb_collate_load_tuples_to_delete(&del_job, keys_start(command, " keys "),",", ldbtable);
 		
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max)
@@ -323,7 +323,7 @@ void ldb_command_delete_records(char *command)
 		logger_dbname_set(ldbtable.db);
 		logger_set_level(LOG_INFO);
 
-		job_delete_tuples_t del_job = {.handler = NULL, .map = {-1}, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
+		job_delete_tuples_t del_job = {.handler = NULL, .tuples = NULL, .tuples_number = 0, .key_ln = ldbtable.key_ln};
 
 		int tuples_number = 0;
 		if (single_mode)
