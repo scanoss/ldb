@@ -1524,7 +1524,7 @@ int ldb_import(ldb_importation_config_t * job)
 		pthread_mutex_unlock(&lock);
 	}
 
-	if (!config.opt.params.tmp_path)
+	if (!*config.opt.params.tmp_path)
 	{
 		sprintf(config.opt.params.tmp_path, DEFAULT_TMP_PATH);
 	}
