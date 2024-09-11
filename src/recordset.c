@@ -313,13 +313,12 @@ bool ldb_csvprint(struct ldb_table * table, uint8_t *key, uint8_t *subkey, uint8
 	 	remaining_hex = *hex_bytes - table->key_ln * (table->keys);
 
 	if (remaining_hex < 0) remaining_hex = 0;
-	
-	if (table->key_ln * (table->keys - 1) + remaining_hex >= size)
+
+	if (table->key_ln * (table->keys - 1) + remaining_hex > size)
 	{
 		fwrite("\n", 1, 1, stdout);
 		return false;
 	}
-
 	if (remaining_hex)
 	{
 		printf(",");
