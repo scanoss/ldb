@@ -463,20 +463,18 @@ static bool data_compare(char * a, char * b)
  */
 bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t * data, uint32_t size)
 {
-	/* Position pointer to start of second byte in the sorted del_key array */
-	int tuple_index = collate->del_tuples->map[key[1]];
-
-	if (tuple_index == -1)
-		return false;
-
-	for (int i = tuple_index; i < collate->del_tuples->tuples_number; i++)
+	for (int i = 0; i < collate->del_tuples->tuples_number; i++)
 	{ 
 		/* Out if first byte doesnt match*/
-		if (collate->del_tuples->map[collate->del_tuples->tuples[i]->key[1]] != tuple_index)
+		/*The keys are sorted, if I'm in another sector a must out*/
+		if (collate->del_tuples->tuples[i]->key[0] > key[0])
 			return false;
+		else if (collate->del_tuples->tuples[i]->key[0] != key[0])
+			continue;
+
 
 		/* First byte is always the same, second too inside this loop. Compare bytes 3 and 4 */
-		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 2, key + 2, 2);
+		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 1, key + 1, LDB_KEY_LN - 1);
 		if (mainkey > 0) 
 			return false;
 
@@ -525,17 +523,24 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 				if (result)
 				{
+					log_info("Key to remove found: %s\n", key_hex2);
 					if (collate->in_table.definitions & LDB_TABLE_DEFINITION_ENCRYPTED)
 					{
-						unsigned char tuple_bin[MAX_CSV_LINE_LEN];
-						if(!decode && !ldb_decoder_lib_load())
-							return false;
-
-						int r_size = decode(DECODE_BASE64, NULL, NULL, collate->del_tuples->tuples[i]->data + char_to_skip, strlen(collate->del_tuples->tuples[i]->data) - char_to_skip, tuple_bin);
-						if (r_size > 0)
-							result = !memcmp(tuple_bin, data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, r_size);
+						//if we are ignoring the data the record must be removed.
+						if (strchr(collate->del_tuples->tuples[i]->data + char_to_skip, '*'))
+							result = true;
 						else
-							result = false;
+						{
+							unsigned char tuple_bin[MAX_CSV_LINE_LEN];
+							if(!decode && !ldb_decoder_lib_load())
+								return false;
+
+							int r_size = decode(DECODE_BASE64, NULL, NULL, collate->del_tuples->tuples[i]->data + char_to_skip, strlen(collate->del_tuples->tuples[i]->data) - char_to_skip, tuple_bin);
+							if (r_size > 0)
+								result = !memcmp(tuple_bin, data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, r_size);
+							else
+								result = false;
+						}
 					}
 					else
 					{
@@ -637,33 +642,6 @@ bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *
 	return false;
 }
 
-
-/**
- * @brief Distribute list of keys to be deleted into 256 arrays matching the second byte from the key.
- *	(the first byte is the same in all keys)
- * 
- * @param del_keys keys to be deleted
- * @param del_ln keys lenght
- * @param subkey_ln subkey lenght
- * @return pointer to the output map
- */
-
-void map_from_tuples(job_delete_tuples_t * job)
-{
-	int last_k = -1;
-	for (int i = 0; i < 256; i++)
-		job->map[i] = -1;
-
-	for (int index = 0; index < job->tuples_number; index++)
-	{
-		if (job->tuples[index]->key[1] != last_k)
-		{
-			job->map[job->tuples[index]->key[1]] = index;
-			last_k = job->tuples[index]->key[1];
-		}
-	}
-}
-
 int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, char * d, struct ldb_table table)
 {
 	char *delimiter = d;
@@ -707,13 +685,6 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 			log_info(">\n");
 	}
 
-	map_from_tuples(job);
-	
-	/*for (int i =0; i < 256; i++)
-	{
-		if (job->map[i] >= 0)
-			printf("map %x = %d", i, job->map[i]);
-	}*/
 	return tuples_index;
 }
 
@@ -821,7 +792,6 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
  */
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, collate_handler handler)
 {
-	long *del_map = NULL;
 	/* Start with sector 0, unless it is a delete command */
 	uint8_t k0 = 0;
 	if (p_sector >= 0)
@@ -864,8 +834,6 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 
 
 	fflush(stdout);
-
-	if (del_map) free(del_map);
 }
 
 
@@ -893,15 +861,16 @@ void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_
 	setlocale(LC_NUMERIC, "");
 	
 	logger_dbname_set(table.db);
+	int k0_last = -1;
 	/* Read each DB sector */
 	for (int i = 0; i < delete->tuples_number; i++) 
 	{
-		log_info("Removing keys from Table %s - Reading sector %02x\n", table.table, k0);
 		k0 = *delete->tuples[i]->key;
 		struct ldb_collate_data collate;
 		
-		if (ldb_collate_init(&collate, table, out_table, 2048, false, k0))
+		if (k0 != k0_last && ldb_collate_init(&collate, table, out_table, 2048, false, k0))
 		{
+			log_info("Removing keys from Table %s - Reading sector %02x\n", table.table, k0);
 			/* Load collate data structure */
 			collate.handler = handler;
 			collate.del_tuples = delete;
@@ -909,12 +878,11 @@ void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_
 			uint8_t * sector  = ldb_load_sector(table, &k0);
 			ldb_collate_sector(&collate, k0, sector);
 			total_records += collate.del_count;
+			k0_last = k0;
 		}
-		/* Exit here if it is a delete command, otherwise move to the next sector */
 	} 
 
 	/* Show processed totals */
 	log_info("Table %s: cleanup completed with %'ld records\n", table.table, total_records);
 	fflush(stdout);
-
 }

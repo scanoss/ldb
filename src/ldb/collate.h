@@ -19,7 +19,6 @@ typedef struct job_delete_tuples_t
 	int key_ln;
 	int keys_number;
 	collate_handler handler;
-	int map[256];
 } job_delete_tuples_t;
 
 struct ldb_collate_data
