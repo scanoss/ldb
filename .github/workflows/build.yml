@@ -33,7 +33,7 @@ jobs:
         run: tar czvf ldb-${{ steps.version.outputs.version }}-amd64.tar.gz ldb libldb.so
 
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ldb
           path: |
