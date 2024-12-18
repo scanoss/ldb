@@ -743,18 +743,19 @@ void ldb_command_select(char *command, select_format format)
 			}
 			else
 			{
+				ldb_sector_t sector = {.data = NULL, .size= 0, .id = *keybin};
 				switch (format)
 				{
 					case HEX:
-						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_hexprint_width, &width);
+						ldb_fetch_recordset(&sector, ldbtable, keybin, (key_ln == 4), ldb_hexprint_width, &width);
 						break;
 
 					case ASCII:
-						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_asciiprint, NULL);
+						ldb_fetch_recordset(&sector, ldbtable, keybin, (key_ln == 4), ldb_asciiprint, NULL);
 						break;
 
 					case CSV:
-						ldb_fetch_recordset(NULL, ldbtable, keybin, (key_ln == 4), ldb_csvprint, &hex_bytes);
+						ldb_fetch_recordset(&sector, ldbtable, keybin, (key_ln == 4), ldb_csvprint, &hex_bytes);
 						break;
 				}
 			}

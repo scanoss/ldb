@@ -20,7 +20,7 @@
 
 typedef void (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
 
-struct ldb_table
+typedef struct ldb_table
 {
 	char db[LDB_MAX_NAME];
 	char table[LDB_MAX_NAME];
@@ -33,7 +33,16 @@ struct ldb_table
 	uint8_t *last_key;
 	int definitions;	// Table definitions: is MZ? is encrypted?
 	hash_calc_t hash_calc;
-};
+} ldb_table_t;
+
+typedef struct ldb_sector_t
+{
+	uint8_t id;
+	size_t size;
+	uint8_t * data;
+	FILE * file;
+	bool failure;
+} ldb_sector_t;
 
 typedef bool (*ldb_record_handler_t) (struct ldb_table * table, uint8_t * key, uint8_t * subkey, uint8_t * data, uint32_t data_len, int record_number, void * ptr);
 

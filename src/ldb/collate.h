@@ -23,7 +23,8 @@ typedef struct job_delete_tuples_t
 
 struct ldb_collate_data
 {
-	void *data; 
+	void *data;
+	size_t data_size; 
 	void *tmp_data;
 	long data_ptr;
 	int table_key_ln;
@@ -43,7 +44,7 @@ struct ldb_collate_data
 	collate_handler handler;
 };
 bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, uint8_t sector);
-void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_t *sector_mem);
+void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector);
 int ldb_collate_load_tuples_to_delete(job_delete_tuples_t* job, char * buffer, char * d, struct ldb_table table);
 void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec_ln, bool merge, int p_sector, collate_handler handler);
 void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_delete_tuples_t * delete, collate_handler handler);

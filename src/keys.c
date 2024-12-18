@@ -75,8 +75,8 @@ void ldb_dump_keys(struct ldb_table table, int s)
 	table.current_key = calloc(table.key_ln, 1);
 	table.last_key = calloc(table.key_ln, 1);
 	do {
-		uint8_t *sector = ldb_load_sector(table, &k0);
-		if (sector)
+		ldb_sector_t sector = ldb_load_sector(table, &k0);
+		if (sector.data)
 		{
 			/* Read each one of the (256 ^ 3) list pointers from the map */
 			uint8_t k[LDB_KEY_LN];
@@ -90,10 +90,10 @@ void ldb_dump_keys(struct ldb_table table, int s)
 						k[3] = k3;
 
 						/* Process records */
-						ldb_fetch_recordset(sector, table, k, true, ldb_dump_keys_handler, NULL);
+						ldb_fetch_recordset(&sector, table, k, true, ldb_dump_keys_handler, NULL);
 						
 					}
-			free(sector);
+			free(sector.data);
 			if (s >=0)
 				break;
 		}

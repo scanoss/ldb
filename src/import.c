@@ -1449,42 +1449,42 @@ int import_collate_sector(ldb_importation_config_t *config)
 		char *ptr = NULL;
 		char *filename = basename(config->csv_path);
 		//extract the sector from the file name. If there is no sector (example license.csv) process the compleate table.
-		long sector = strtol(filename, &ptr, 16);
+		long sector_number = strtol(filename, &ptr, 16);
 		if (ptr - filename < 2 || (ptr && *ptr != '.'))
-			sector = -1;
+			sector_number = -1;
 
 		logger_basic("Collating - %s", dbtable);
 
-		if (sector < 0)
+		if (sector_number < 0)
 		{
-			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, sector, max_rec_len);
-			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL);
+			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, sector_number, max_rec_len);
+			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector_number, NULL);
 			return 0;
 		}
 		
-		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
+		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector_number, max_rec_len);
 		if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
 			 (ldbtable.definitions == LDB_TABLE_DEFINITION_UNDEFINED && config->opt.params.is_mz_table))
 		{
-			ldb_mz_collate(ldbtable, sector);
+			ldb_mz_collate(ldbtable, sector_number);
 		}
-		else if (sector >= 0)
+		else if (sector_number >= 0)
 		{
 			pthread_mutex_lock(&lock);
 			struct ldb_collate_data collate;
-			uint8_t k0 = sector;
-			uint8_t *sector_mem = NULL;
+			uint8_t k0 = sector_number;
+			ldb_sector_t sector = {.data=NULL, .size = 0, .id = sector_number};
 
 			bool init_ok = ldb_collate_init(&collate, ldbtable, tmptable, max_rec_len, false, k0);
 			if (!init_ok)
 				log_info("Collate init failed for sector %d\n", k0);
 
 			if (init_ok && check_system_available_ram(ldbtable, k0, config->opt.params.collate_max_ram_percent))
-				sector_mem = ldb_load_sector(ldbtable, &k0);
+				sector = ldb_load_sector(ldbtable, &k0);
 
 			pthread_mutex_unlock(&lock);
 			if (init_ok)
-				ldb_collate_sector(&collate, sector, sector_mem);
+				ldb_collate_sector(&collate, &sector);
 			else
 			{
 				log_info("ERROR: failed to allocate memory to collate sector %02x\n", k0);

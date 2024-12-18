@@ -27,7 +27,7 @@
 #include "./ldb/types.h"
 #include "./ldb/mz.h"
 
-#define LDB_VERSION "5.0.0-beta"
+#define LDB_VERSION "5.0.1-beta"
 
 #define LDB_TABLE_DEFINITION_UNDEFINED -1
 #define LDB_TABLE_DEFINITION_STANDARD 0
@@ -61,7 +61,7 @@ uint64_t ldb_list_pointer(FILE *ldb_sector, uint8_t *key);
 uint64_t ldb_last_node_pointer(FILE *ldb_sector, uint64_t list_pointer);
 void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uint64_t new_node);
 int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records);
-uint64_t ldb_node_read (uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size);
+uint64_t ldb_node_read(ldb_sector_t *sector, struct ldb_table table, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size);
 char *ldb_sector_path (struct ldb_table table, uint8_t *key, char *mode);
 FILE *ldb_open (struct ldb_table table, uint8_t *key, char *mode);
 bool ldb_close(FILE * sector);
@@ -83,12 +83,12 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key);
-uint8_t *ldb_load_sector (struct ldb_table table, uint8_t *key);
+ldb_sector_t ldb_load_sector(struct ldb_table table, uint8_t *key);
 bool ldb_validate_node(uint8_t *node, uint32_t node_size, int subkey_ln);
 //bool uint32_is_zero(uint8_t *n);
 bool ldb_key_exists(struct ldb_table table, uint8_t *key);
 bool ldb_key_in_recordset(uint8_t *rs, uint32_t rs_len, uint8_t *subkey, uint8_t subkey_ln);
-uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t f, void * p);
+uint32_t ldb_fetch_recordset(ldb_sector_t * sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t ldb_record_handler, void *void_ptr);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes, int sector);
