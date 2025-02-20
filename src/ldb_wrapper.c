@@ -71,7 +71,8 @@ T_RawRes * ldb_query_raw(char *dbtable, char *key)
 			 	results->data=malloc(LDB_MAX_NODE_DATA_LN);
 	   			results->size=0;
                 results->capacity=LDB_MAX_NODE_DATA_LN;
-				ldb_fetch_recordset(NULL, ldbtable, keybin, false, ldb_dump_row, results);
+				ldb_sector_t sector = {.data = NULL, .size= 0, .id = *keybin};
+				ldb_fetch_recordset(&sector, ldbtable, keybin, false, ldb_dump_row, results);
 
 				free(dbtable);
 				free(keybin);

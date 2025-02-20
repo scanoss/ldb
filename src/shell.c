@@ -414,7 +414,7 @@ int main(int argc, char **argv)
 	{
 		case LDB_UPDATE:
 		{
-			char cmd [LDB_MAX_PATH] = "(VALIDATE_VERSION=1";
+			char cmd [LDB_MAX_PATH] = "(SORT=0";
 			if (*path)
 			{
 				if (collate)
