@@ -652,19 +652,21 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 
     while (line != NULL) 
 	{
-		tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
-		tuples[tuples_index] = calloc(1, sizeof(tuple_t));
-		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
-
-		if (strchr(line, ','))
+		if (line && strlen(line) >= key_len * 2)
 		{
-			char * data = strdup(line + key_len * 2 + 1);
-			if (data && *data)
-				tuples[tuples_index]->data = data;
+			tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
+			tuples[tuples_index] = calloc(1, sizeof(tuple_t));
+			ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
+
+			if (strchr(line, ','))
+			{
+				char * data = strdup(line + key_len * 2 + 1);
+				if (data && *data)
+					tuples[tuples_index]->data = data;
+			}
+			tuples_index++;
 		}
-		
         line = strtok(NULL, delimiter);
-		tuples_index++;
     }
 	job->tuples = tuples;
 	job->tuples_number = tuples_index;
