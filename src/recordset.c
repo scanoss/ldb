@@ -156,6 +156,111 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 }
 
 /**
+ * @brief Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
+ * subkey, subkey length, fetched data, length and iteration number. This function acts on the .ldb for the
+ * provided *key*, but can also work from memory, if a pointer to a *sector* is provided (not NULL)
+ * 
+ * @param sector Optional: Pointer to a LDB sector allocated in memory. If NULL the function will use tha table struct and key to open the ldb
+ * @param table table struct config
+ * @param key key of the associated table
+ * @param skip_subkey true for skip the subkey
+ * @param ldb_record_handler Handler to print the data
+ * @param void_ptr This pointer is passed to the handler function
+ * @return uint32_t The number of records found
+ */
+uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr)
+{
+	uint8_t *node = NULL;
+
+	uint64_t next = 0;
+	uint32_t node_size = 0;
+	uint32_t node_ptr;
+	uint8_t subkey_ln = table.key_ln - LDB_KEY_LN;
+
+	uint32_t records = 0;
+	bool done = false;
+	do
+	{
+		/* Read node */
+		next = ldb_node_read_v2(sector, table, next, key, &node_size, &node, 0);
+
+		if (ldb_read_failure || sector->failure)
+		{
+			log_info("Error reading table %s/%s - sector %02x: the file is not available or the node doesn't exist\n", table.db, table.table, sector->id);
+			ldb_read_failure = false;
+			sector->failure = false;
+			break;
+		}
+		if (!node_size && !next) 
+			break; // reached end of list
+
+		/* Pass entire node (fixed record length) to handler */
+		if (table.rec_ln) 
+			done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
+
+		/* Extract and pass variable-size records to handler */
+		else
+		{
+			if (!ldb_validate_node(node, node_size, subkey_ln)) 
+				continue;
+
+			/* Extract datasets from node */
+			node_ptr = 0;
+
+			while (node_ptr < node_size && !done)
+			{
+				/* Get subkey */
+				uint8_t *subkey = node + node_ptr;
+				node_ptr += subkey_ln;
+
+				/* Get recordset length */
+				int dataset_size = uint16_read(node + node_ptr);
+				node_ptr += 2;
+
+				/* Compare subkey */
+				bool key_matched = true;
+				if (!skip_subkey && subkey_ln) 
+					key_matched = (memcmp(subkey, key + LDB_KEY_LN, subkey_ln) == 0);
+
+				if (key_matched)
+				{
+					/* Extract records from dataset */
+					uint32_t dataset_ptr = 0;
+					while (dataset_ptr < dataset_size)
+					{
+						uint8_t *dataset = node + node_ptr;
+						/* Get record length */
+						int record_size = uint16_read(dataset + dataset_ptr);
+						dataset_ptr += 2;
+						/* We drop records longer than the desired limit */
+						if (record_size + 32 < LDB_MAX_REC_LN){
+							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
+							if (done)
+								break;
+						}
+						/* Move pointer to end of record */
+						dataset_ptr += record_size;
+					}
+				}
+				/* Move pointer to end of dataset */
+				node_ptr += dataset_size;
+			}
+		}
+		free(node);
+
+	} while (next && !done);
+
+	if (sector->file)
+	{
+		fclose(sector->file);
+		sector->file = NULL;
+	}
+	
+	return records;
+}
+
+
+/**
  * @brief Handler function for ldb_get_first_record
  * 
  * @param key Not used

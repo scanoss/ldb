@@ -265,6 +265,41 @@ uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
 	return out;
 }
 
+
+/**
+ * @brief Loads an entire LDB sector into memory and returns a pointer
+   (NULL if the sector does not exist)
+ * 
+ * @param table  Instance of the table struct.
+ * @param key   Key of the sector to load.
+ * @return uint8_t* Pointer to the block of memory with the sector loaded.
+ */
+ldb_sector_t ldb_load_sector_v2(struct ldb_table table, uint8_t *key) {
+
+	ldb_sector_t sector = {.data = NULL, .id = *key, .size = 0};
+	FILE *ldb_sector = ldb_open(table, key, "r");
+	
+	if (!ldb_sector) 
+		return sector;
+
+	fseeko64(ldb_sector, 0, SEEK_END);
+	uint64_t size = ftello64(ldb_sector);
+
+	uint8_t *out = malloc(size);
+	if (!out)
+		 return sector;
+		 
+	fseeko64(ldb_sector, 0, SEEK_SET);
+	if (!fread(out, 1, size, ldb_sector)) 
+	{
+		out = NULL;
+	}
+	fclose(ldb_sector);
+	sector.data = out;
+	sector.size = size;
+	return sector;
+}
+
 /**
  * @brief Reserves memory for storing a copy of an entire LDB sector
  * (returns NULL if the source sector does not exist)
