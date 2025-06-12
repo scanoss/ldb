@@ -652,19 +652,21 @@ int ldb_collate_load_tuples_to_delete(job_delete_tuples_t * job, char * buffer, 
 
     while (line != NULL) 
 	{
-		tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
-		tuples[tuples_index] = calloc(1, sizeof(tuple_t));
-		ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
-
-		if (strchr(line, ','))
+		if (line && strlen(line) >= key_len * 2)
 		{
-			char * data = strdup(line + key_len * 2 + 1);
-			if (data && *data)
-				tuples[tuples_index]->data = data;
+			tuples = realloc(tuples, ((tuples_index+1) * sizeof(tuple_t*)));
+			tuples[tuples_index] = calloc(1, sizeof(tuple_t));
+			ldb_hex_to_bin(line, key_len * 2, tuples[tuples_index]->key);
+
+			if (strchr(line, ','))
+			{
+				char * data = strdup(line + key_len * 2 + 1);
+				if (data && *data)
+					tuples[tuples_index]->data = data;
+			}
+			tuples_index++;
 		}
-		
         line = strtok(NULL, delimiter);
-		tuples_index++;
     }
 	job->tuples = tuples;
 	job->tuples_number = tuples_index;
@@ -715,12 +717,12 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	}
 
 	/* Reserve space for collate data */
-	collate->data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
+	collate->data = (char *)calloc(LDB_MAX_RECORDS * (collate->rec_width+10), 1);
 	
 	if (!collate->data)
 		return false;
 
-	collate->tmp_data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
+	collate->tmp_data = (char *)calloc(LDB_MAX_RECORDS * (collate->rec_width+10), 1);
 
 	if (!collate->tmp_data)
 		return false;
@@ -736,12 +738,12 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	return true;
 }
 
-void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_t *sector_mem)
+void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 {
-	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector, sector_mem == NULL ? "On disk" : "On RAM");
+	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector->id, sector->data == NULL ? "On disk" : "On RAM");
 	/* Read each one of the (256 ^ 3) list pointers from the map */
 	uint8_t k[LDB_KEY_LN];
-	k[0] = sector;
+	k[0] = sector->id;
 	for (int k1 = 0; k1 < 256; k1++)
 		for (int k2 = 0; k2 < 256; k2++)
 			for (int k3 = 0; k3 < 256; k3++)
@@ -751,7 +753,7 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
 				k[3] = k3;
 				/* If there is a pointer, read the list */
 				/* Process records */
-				ldb_fetch_recordset(sector_mem, collate->in_table, k, true, ldb_collate_handler, collate);
+				ldb_fetch_recordset_v2(sector, collate->in_table, k, true, ldb_collate_handler, collate);
 			}
 
 	/* Process last record/s */
@@ -771,13 +773,13 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
 		ldb_sector_update(collate->out_table, k);
 
 	if (collate->del_count)
-		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector, collate->del_count);
+		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector->id, collate->del_count);
 	
-	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector, collate->rec_count);
+	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector->id, collate->rec_count);
 
 	free(collate->data);
-	free(collate->tmp_data);
-	free(sector_mem);
+	free(sector->data);
+	sector->data = NULL;
 }
 
 /**
@@ -812,12 +814,12 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			/* Load collate data structure */
 			collate.handler = handler;
 			collate.del_tuples = NULL;
-			uint8_t *sector  = ldb_load_sector(table, &k0);
+			ldb_sector_t sector  = ldb_load_sector_v2(table, &k0);
 			//skip unexistent sector.
-			if (!sector)
+			if (!sector.size)
 				continue;
 
-			ldb_collate_sector(&collate, k0, sector);
+			ldb_collate_sector(&collate, &sector);
 		}
 		
 		if (p_sector >=0)
@@ -867,7 +869,6 @@ void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_
 	{
 		k0 = *delete->tuples[i]->key;
 		struct ldb_collate_data collate;
-		
 		if (k0 != k0_last && ldb_collate_init(&collate, table, out_table, 2048, false, k0))
 		{
 			log_info("Removing keys from Table %s - Reading sector %02x\n", table.table, k0);
@@ -875,14 +876,16 @@ void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_
 			collate.handler = handler;
 			collate.del_tuples = delete;
 			collate.del_count = 0;
-			uint8_t * sector  = ldb_load_sector(table, &k0);
-			ldb_collate_sector(&collate, k0, sector);
+			ldb_sector_t sector = ldb_load_sector_v2(table, &k0);
+			ldb_collate_sector(&collate, &sector);
 			total_records += collate.del_count;
-			k0_last = k0;
 		}
+		k0_last = k0;
+		/* Exit here if it is a delete command, otherwise move to the next sector */
 	} 
 
 	/* Show processed totals */
 	log_info("Table %s: cleanup completed with %'ld records\n", table.table, total_records);
 	fflush(stdout);
+
 }

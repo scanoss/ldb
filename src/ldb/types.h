@@ -47,6 +47,14 @@ struct ldb_recordset
 	uint64_t last_node; // Location of last node of the list
     uint8_t ts_ln;      // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 };
+typedef struct ldb_sector_t
+{
+	uint8_t id;
+	size_t size;
+	uint8_t * data;
+	FILE * file;
+	bool failure;
+} ldb_sector_t;
 
 typedef bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *);
 
