@@ -490,7 +490,6 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 			if (collate->del_tuples->tuples[i]->data)
 			{
 				int char_to_skip = 0;
-				//printf("<<%s / %s - %d - %d>>\n", (char*)(data), collate->del_tuples->tuples[i]->data, collate->del_tuples->keys_number, collate->del_tuples->key_ln);
 				char * data_key_hex = collate->del_tuples->tuples[i]->data;
 				//compare secudary keys
 				for (int i =0; i < collate->del_tuples->keys_number-1; i++)
@@ -513,8 +512,6 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 					ldb_bin_to_hex(sec_key, collate->del_tuples->key_ln, key_hex1);
 					ldb_bin_to_hex(data + collate->del_tuples->key_ln * i, collate->del_tuples->key_ln, key_hex2);
-					//log_info(">>>comparing2: %s / %s\n", key_hex1, key_hex2);
-
 					result = !memcmp(data + collate->del_tuples->key_ln * i, sec_key, collate->del_tuples->key_ln);
 					if (result)
 						break;
