@@ -463,27 +463,26 @@ static bool data_compare(char * a, char * b)
  */
 bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t * data, uint32_t size)
 {
+	/* Position pointer to start of second byte in the sorted del_key array */
 	for (int i = 0; i < collate->del_tuples->tuples_number; i++)
-	{ 
-		/* Out if first byte doesnt match*/
+	{ 		
 		/*The keys are sorted, if I'm in another sector a must out*/
 		if (collate->del_tuples->tuples[i]->key[0] > key[0])
 			return false;
 		else if (collate->del_tuples->tuples[i]->key[0] != key[0])
 			continue;
 
-
-		/* First byte is always the same, second too inside this loop. Compare bytes 3 and 4 */
-		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 1, key + 1, LDB_KEY_LN - 1);
-		if (mainkey > 0) 
-			return false;
-
-		char key_hex1[MD5_LEN*2+1];
-		char key_hex2[MD5_LEN*2+1];
+		/* First byte is always the same, second too inside this loop. Compare bytes  2, 3 and 4 */
+		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 1, key + 1, LDB_KEY_LN -1);
+		if (mainkey != 0) 
+			continue; //return false;
+		
+		/*For fixed records there is no subkey, so key hex will be empty*/
+		char key_hex1[collate->in_table.key_ln * 2 + 1];
+		char key_hex2[collate->in_table.key_ln * 2 + 1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
 		
-		//printf("\ncomparing: %s / %s\n", key_hex1, key_hex2);
 		/*Math the rest of the key*/
 		if (!memcmp(subkey, &collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln))
 		{
@@ -514,16 +513,16 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 					ldb_bin_to_hex(sec_key, collate->del_tuples->key_ln, key_hex1);
 					ldb_bin_to_hex(data + collate->del_tuples->key_ln * i, collate->del_tuples->key_ln, key_hex2);
-					//printf("\n>>>comparing2: %s / %s\n", key_hex1, key_hex2);
+					//log_info(">>>comparing2: %s / %s\n", key_hex1, key_hex2);
 
 					result = !memcmp(data + collate->del_tuples->key_ln * i, sec_key, collate->del_tuples->key_ln);
-					if (!result)
+					if (result)
 						break;
 				}
 
 				if (result)
 				{
-					log_info("Key to remove found: %s\n", key_hex2);
+					log_debug("Match found: %s / %s\n", key_hex1, key_hex2);
 					if (collate->in_table.definitions & LDB_TABLE_DEFINITION_ENCRYPTED)
 					{
 						//if we are ignoring the data the record must be removed.
@@ -536,18 +535,46 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 								return false;
 
 							int r_size = decode(DECODE_BASE64, NULL, NULL, collate->del_tuples->tuples[i]->data + char_to_skip, strlen(collate->del_tuples->tuples[i]->data) - char_to_skip, tuple_bin);
-							if (r_size > 0)
+							if (r_size > 0) 
+							{
 								result = !memcmp(tuple_bin, data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, r_size);
+								log_info("Var record %s was found.\n", collate->del_tuples->tuples[i]->data);
+							}
 							else
 								result = false;
 						}
 					}
 					else
 					{
-						char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, 
-						size - (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln);
-						result = data_compare(collate->del_tuples->tuples[i]->data + char_to_skip, aux);
-						free(aux);
+						if (collate->in_table.rec_ln == 0) //variable record, string comparation
+						{ 
+							char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, 
+							size - (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln);
+							result = data_compare(collate->del_tuples->tuples[i]->data + char_to_skip, aux);
+							free(aux);
+						}
+						else //fixed record, hex comparation
+						{
+							int data_ln = strlen(collate->del_tuples->tuples[i]->data);
+							if (data_ln < LDB_KEY_LN * 2)
+								continue;
+
+							uint8_t * aux = calloc(1, collate->in_table.rec_ln);
+							ldb_hex_to_bin(collate->del_tuples->tuples[i]->data, data_ln, aux);
+							result = false; //we just want to remove a record inside data
+							for(int ptr = 0; ptr < size; ptr += collate->in_table.rec_ln)
+							{ 
+								char test[33];
+								ldb_bin_to_hex(data + ptr, 16, test);
+								if (memcmp(aux, data + ptr, data_ln/2) == 0)
+								{					
+									log_info("Fixed record %s was found at %d\n", collate->del_tuples->tuples[i]->data, ptr);
+									memset(data + ptr, 0, collate->in_table.rec_ln);
+									collate->del_count++;
+								}
+							}
+							free(aux);
+						}
 					}
 				}
 			}
