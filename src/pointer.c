@@ -136,7 +136,7 @@ void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uin
 			printf ("\nData corruption on list %lu for key %02x%02x%02x%02x with last node %lu < %u\n", list, key[0], key[1], key[2], key[3], last_node, LDB_MAP_SIZE);
 			ldb_error("E055 Data corruption");*/
 			log_info("\nLast node is missing in list %lu for key %02x%02x%02x%02x\n", list, key[0], key[1], key[2], key[3]);
-			last_node = last_node_recovery(ldb_sector, list);
+			//last_node = last_node_recovery(ldb_sector, list);
 			if (last_node == 0) //the list is empty, the first node must be re written
 			{
 				fseeko64(ldb_sector, list, SEEK_SET);

@@ -341,9 +341,21 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 		return false;
 	if (collate->data_ptr + LDB_KEY_LN + subkey_ln + collate->max_rec_ln + 4 >= collate->data_size)
 	{
+		size_t new_data_size = collate->data_size + LDB_MAX_RECORDS * collate->rec_width;
 		char key_hex[collate->in_table.key_ln * 2 + 1];
 		ldb_bin_to_hex(key, collate->in_table.key_ln, key_hex);
-		log_info("collate: No memory available to allocate the record. Key %s - size %d - key records count %d\n", key_hex, size, collate->key_rec_count);
+		void * data_realloc = realloc(collate->data, new_data_size);
+		if (data_realloc == NULL)
+		{
+			log_info("collate: No memory available to allocate the record. Key %s - size %d - key records count %d\n", key_hex, size, collate->key_rec_count);
+			return false;
+		}
+		else
+		{
+			log_info("Collate data memory reallocated: %ld to %ld - %ld", collate->data_ptr, collate->data_size, new_data_size);
+			collate->data_size = new_data_size;
+			collate->data = data_realloc;
+		}
 	}
 
 	/* Copy main key */
@@ -631,7 +643,7 @@ bool ldb_collate_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey
 	}
 
 	/* If we exceed LDB_MAX_RECORDS, skip it */
-	if (collate->key_rec_count > LDB_MAX_RECORDS)
+/*	if (collate->key_rec_count > LDB_MAX_RECORDS)
 	{
 		if (collate->key_rec_count == LDB_MAX_RECORDS + 1)
 		{
@@ -642,7 +654,7 @@ bool ldb_collate_handler(struct ldb_table * table, uint8_t *key, uint8_t *subkey
 			collate->key_rec_count++;
 		}
 		return false;
-	}
+	}*/
 
 	/* Skip key if found among del_keys (DELETE command only) */
 	if (collate->del_tuples)
