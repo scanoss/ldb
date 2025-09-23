@@ -94,7 +94,16 @@ void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uin
 	{
 		fseeko64(ldb_sector, ldb_map_pointer_pos(key), SEEK_SET);
 		ldb_uint40_write(ldb_sector, new_node);
-		if (new_node < LDB_MAP_SIZE) ldb_error("E054 Data corruption");
+		if (new_node < LDB_MAP_SIZE) {
+			fprintf(stderr, "\n=== DATA CORRUPTION ON MAP UPDATE ===\n");
+			fprintf(stderr, "Error: E054 - Invalid node pointer\n");
+			fprintf(stderr, "Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+			fprintf(stderr, "New node pointer: %lu (must be >= %u)\n", new_node, LDB_MAP_SIZE);
+			fprintf(stderr, "Map position: 0x%08lx\n", ldb_map_pointer_pos(key));
+			fprintf(stderr, "File: %s, Line: %d, Function: %s\n", __FILE__, __LINE__, __func__);
+			fprintf(stderr, "=====================================\n");
+			ldb_error("E054 Data corruption");
+		}
 	}
 
 	/* Otherwise we update the list */
@@ -106,9 +115,16 @@ void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uin
 		uint64_t last_node = ldb_uint40_read(ldb_sector);
 
 		if (last_node < LDB_MAP_SIZE) {
-			printf("\nMap size is %u\n", LDB_MAP_SIZE);
-			printf ("\nData corruption on list %lu for key %02x%02x%02x%02x with last node %lu < %u\n", list, key[0], key[1], key[2], key[3], last_node, LDB_MAP_SIZE);
-			ldb_error("E055 Data corruption");
+			fprintf(stderr, "\n=== DATA CORRUPTION ON LIST UPDATE ===\n");
+			fprintf(stderr, "Error: E055 - Invalid last node pointer\n");
+			fprintf(stderr, "Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+			fprintf(stderr, "List pointer: %lu\n", list);
+			fprintf(stderr, "Last node pointer read: %lu (must be >= %u)\n", last_node, LDB_MAP_SIZE);
+			fprintf(stderr, "New node being added: %lu\n", new_node);
+			fprintf(stderr, "Read position: 0x%08lx\n", list);
+			fprintf(stderr, "File: %s, Line: %d, Function: %s\n", __FILE__, __LINE__, __func__);
+			fprintf(stderr, "======================================\n");
+			ldb_error("E055 Data corruption on list");
 		}
 
 		/* Update the list pointer to the new last node */
