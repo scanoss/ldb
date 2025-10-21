@@ -850,7 +850,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 					else
 					{
-						log_debug("Writing CSV node: key=%02x%02x%02x%02x, ptr=%u, line=%d\n",
+						log_debug("From CSV %s writting node: key=%02x%02x%02x%02x, ptr=%u, line=%d\n", job->csv_path,
 							item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3], item_ptr, line_number);
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
