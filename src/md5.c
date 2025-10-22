@@ -1,11 +1,13 @@
 #include "ldb.h"
 #include <gcrypt.h>
+#include <pthread.h>
 
 /* Adapter function for compatibility with openssl*/
-void md5_string(const unsigned char *input, int len, unsigned char output[16]) 
+void md5_string(const unsigned char *input, int len, unsigned char output[16])
 {
     gcry_md_hd_t h;
-    gcry_md_open(&h, GCRY_MD_MD5, GCRY_MD_FLAG_SECURE);  // initialize the hash context
+    /* Don't use GCRY_MD_FLAG_SECURE to avoid secure memory issues */
+    gcry_md_open(&h, GCRY_MD_MD5, 0);  // initialize the hash context without secure flag
     gcry_md_write(h, input, len);  // hash the input data
     const unsigned char *hash_result = gcry_md_read(h, GCRY_MD_MD5);  // get the result
 
@@ -27,16 +29,51 @@ void md5_string(const unsigned char *input, int len, unsigned char output[16])
 #include <string.h>
 #include <gcrypt.h>
 
-static void __attribute__((constructor)) init_libgcrypt(void)
+static pthread_once_t gcrypt_init_once = PTHREAD_ONCE_INIT;
+static int gcrypt_initialized = 0;
+static pthread_mutex_t gcrypt_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void init_libgcrypt_internal(void)
 {
-    if (!gcry_check_version(GCRYPT_VERSION)) {
-        fprintf(stderr, "Libgcrypt version mismatch\n");
+    pthread_mutex_lock(&gcrypt_mutex);
+
+    /* Double-check if already initialized */
+    if (gcrypt_initialized) {
+        pthread_mutex_unlock(&gcrypt_mutex);
         return;
     }
-    
+
+    /* Check version */
+    if (!gcry_check_version(GCRYPT_VERSION)) {
+        fprintf(stderr, "Libgcrypt version mismatch\n");
+        pthread_mutex_unlock(&gcrypt_mutex);
+        return;
+    }
+
+    /* Check if already initialized at library level */
+    if (gcry_control(GCRYCTL_INITIALIZATION_FINISHED_P)) {
+        gcrypt_initialized = 1;
+        pthread_mutex_unlock(&gcrypt_mutex);
+        return;
+    }
+
+    /* Disable secure memory warnings completely */
     gcry_control(GCRYCTL_DISABLE_SECMEM_WARN);
-    gcry_control(GCRYCTL_INIT_SECMEM, 16384, 0);
+
+    /* Skip secure memory initialization - use standard malloc instead */
+    /* This avoids the "Oops" message when forking processes */
+    gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+
+    /* Mark as initialized */
     gcry_control(GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+    gcrypt_initialized = 1;
+    pthread_mutex_unlock(&gcrypt_mutex);
+}
+
+static void __attribute__((constructor)) init_libgcrypt(void)
+{
+    pthread_once(&gcrypt_init_once, init_libgcrypt_internal);
 }
 
 uint8_t * md5_file(char *path)
@@ -50,7 +87,7 @@ uint8_t * md5_file(char *path)
     }
     
     gcry_md_hd_t md5_hd;
-    gcry_md_open(&md5_hd, GCRY_MD_MD5, GCRY_MD_FLAG_SECURE);
+    gcry_md_open(&md5_hd, GCRY_MD_MD5, 0);  // Don't use secure flag to avoid issues
     uint8_t *buffer = malloc(BUFFER_SIZE);
     size_t bytes;
     

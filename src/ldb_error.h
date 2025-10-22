@@ -9,6 +9,7 @@
 #define LDB_ERROR_NODE_SIZE_INVALID -60 //E060 Unsupported node_length size (must be 2 or 4 bytes)
 #define LDB_ERROR_RECORD_LENGHT_INVAID -76 //E076 Max record length should equal fixed record length
 #define LDB_ERROR_CSV_WRONG_ENCODING -80 // E080 the csv file has an incorrect encoding
-
+#define LDB_ERROR_CSV_TOO_MANY_SKIPPED -81 // E081 too many lines skipped in the csv file
 #define LDB_ERROR_MEM_NOMEM -200 //no memory available
+#define LDB_ERROR_THREAD_ABORT -300 // Thread aborted due to error in another thread
 #endif

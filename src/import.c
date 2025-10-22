@@ -26,8 +26,9 @@
  * @brief Implement the functions used for import
  */
 #include <stdio.h>
+#include <stdarg.h>
 #include <sys/time.h>
-#include <sys/file.h> 
+#include <sys/file.h>
 #include <libgen.h>
 #include <dirent.h>
 #include <string.h>
@@ -52,6 +53,16 @@ int max_threads = 0;
 pthread_t * threads_list;
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 double progress_timer = 0;
+
+/* Thread error handling */
+volatile bool thread_error_flag = false;
+volatile int thread_error_code = 0;
+pthread_mutex_t error_lock = PTHREAD_MUTEX_INITIALIZER;
+char thread_error_msg[1024] = {0};
+
+/* Forward declarations for thread error functions */
+void set_thread_error(int error_code, const char *format, ...);
+bool check_thread_error(void);
 
 /**
  * @brief Sort a csv file invokinkg a new process and executing a sort command
@@ -275,6 +286,16 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	while ((bytes_read = fread(buffer, 1, buffer_ln, in)) > 0)
 	{
+		/* Check for thread error periodically */
+		if (check_thread_error()) {
+			log_info("Aborting WFP import due to thread error\n");
+			fclose(in);
+			free(record);
+			free(buffer);
+			free(bl);
+			return LDB_ERROR_THREAD_ABORT;
+		}
+
 		for (int i = 0; (i + raw_ln) <= bytes_read; i += raw_ln)
 		{
 			uint8_t *wfp = buffer + i;
@@ -297,10 +318,14 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 				/* If there is a buffer, write it */
 				if (record_ln)
 				{
+					log_debug("Writing WFP node: key=%02x%02x%02x%02x, record_ln=%u, records=%u\n",
+						last_wfp[0], last_wfp[1], last_wfp[2], last_wfp[3], record_ln, (uint16_t)(record_ln / rec_ln));
 					int error = ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
 					//abort in case of error
-					if (error < 0)
+					if (error < 0) {
+						log_info("ERROR: Failed writing WFP at line %d, file: %s\n", __LINE__, config->csv_path);
 						return error;
+					}
 				}
 				wfp_counter++;
 
@@ -339,10 +364,14 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	if (record_ln)
 	{
+		log_debug("Final WFP write: key=%02x%02x%02x%02x, record_ln=%u, records=%u\n",
+			last_wfp[0], last_wfp[1], last_wfp[2], last_wfp[3], record_ln, (uint16_t)(record_ln / rec_ln));
 		int error = ldb_node_write(oss_wfp, out, last_wfp, record, record_ln, (uint16_t)(record_ln / rec_ln));
 		//abort in case of error
-		if (error < 0)
+		if (error < 0) {
+			log_info("ERROR: Failed final WFP write at line %d, file: %s\n", __LINE__, config->csv_path);
 			return error;
+		}
 	}
 
 	if (out)
@@ -528,7 +557,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (strstr(job->csv_path, ".cmp"))
 			is_compressed = true;
 	}
-	
+
 	FILE *fp = fopen(job->csv_path, "r");
 	if (fp == NULL)
 	{
@@ -622,6 +651,36 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	ssize_t lineln;
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
+		/* Check for thread error every 1000 lines */
+		if (line_number % 1000 == 0)
+		{
+			if(check_thread_error())
+			{
+				log_info("Aborting CSV import at line %d due to thread error\n", line_number);
+				fclose(fp);
+				if (line) free(line);
+				free(itemid);
+				free(item_buf);
+				free(item_lastid);
+				free(field2);
+				if (item_sector) ldb_close_unlock(item_sector);
+				return LDB_ERROR_THREAD_ABORT;
+			}
+
+			if (skipped > line_number / 2)
+			{
+				log_info("Aborting CSV import at line %d due to excessive number of skipped lines\n", line_number);
+				fclose(fp);
+				if (line) free(line);
+				free(itemid);
+				free(item_buf);
+				free(item_lastid);
+				free(field2);
+				if (item_sector) ldb_close_unlock(item_sector);
+				return LDB_ERROR_CSV_TOO_MANY_SKIPPED;
+			}
+		}
+
 		bytecounter += lineln;
 		line_number++;
 
@@ -659,6 +718,18 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			log_debug("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
 			skipped++;
 			continue;
+		}
+
+		if (key_len == MD5_LEN_HEX && got_1st_byte) 
+		{
+			uint8_t first_line_byte = 0;
+			ldb_hex_to_bin(line, 2, &first_line_byte);	
+			if (first_line_byte != first_byte)
+			{
+				log_info("%s: Line %d -- Skipped, first byte in file name does not match key first byte %02x != %02x.\n", job->csv_path, line_number, first_byte, first_line_byte);
+				skipped++;
+				continue;
+			}
 		}
 
 		/* Trim trailing chr(10) */
@@ -779,11 +850,16 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					}
 					else
 					{
+						log_debug("From CSV %s writting node: key=%02x%02x%02x%02x, ptr=%u, line=%d\n", job->csv_path,
+							item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3], item_ptr, line_number);
 						int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 						//abort in case of error
 						if (error < 0)
 						{
-							log_info("failed to process file %s, last line %s\n", job->csv_path, line);
+							log_info("ERROR: Failed to process file %s at line %d\n", job->csv_path, line_number);
+							log_info("  Last processed line content: %s\n", line);
+							log_info("  Key: %02x%02x%02x%02x, Buffer ptr: %u\n",
+								item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3], item_ptr);
 							return error;
 						}
 					}
@@ -862,10 +938,21 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			sectors_modified[itemid[0]] = true;
 		}
 		
+		log_debug("Final CSV write: key=%02x%02x%02x%02x, ptr=%u\n",
+			item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3], item_ptr);
 		int error = ldb_node_write(oss_bulk, item_sector, item_lastid, item_buf, item_ptr, 0);
 		//abort in case of error
-		if (error < 0)
+		if (error < 0) {
+			fprintf(stderr, "\n=== ERROR WRITING FINAL NODE ===\n");
+			fprintf(stderr, "CSV File: %s\n", job->csv_path);
+			fprintf(stderr, "Total lines processed: %d\n", line_number);
+			fprintf(stderr, "Key: %02x%02x%02x%02x\n",
+				item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3]);
+			fprintf(stderr, "Buffer size: %u bytes\n", item_ptr);
+			fprintf(stderr, "Error code: %d\n", error);
+			fprintf(stderr, "=================================\n");
 			return error;
+		}
 	}
 	
 	if (item_sector)
@@ -873,8 +960,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	log_info("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
 
+	int fd = fileno(fp);
 	if (fclose(fp))
-		fprintf(stderr,"error closing %d\n", fileno(fp));
+		fprintf(stderr,"error closing %d\n", fd);
 	
 	if (job->opt.params.delete_after_import)
 		unlink(job->csv_path);
@@ -1507,7 +1595,7 @@ int ldb_import(ldb_importation_config_t * job)
 		pthread_mutex_unlock(&lock);
 	}
 
-	if (!config.opt.params.tmp_path)
+	if (config.opt.params.tmp_path[0] == '\0')
 	{
 		sprintf(config.opt.params.tmp_path, DEFAULT_TMP_PATH);
 	}
@@ -1655,10 +1743,46 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 
 volatile int num_threads = 0;
 
+/* Set thread error flag and message */
+void set_thread_error(int error_code, const char *format, ...) {
+	pthread_mutex_lock(&error_lock);
+	if (!thread_error_flag) {
+		thread_error_flag = true;
+		thread_error_code = error_code;
+
+		va_list args;
+		va_start(args, format);
+		vsnprintf(thread_error_msg, sizeof(thread_error_msg), format, args);
+		va_end(args);
+
+		log_info("\n=== THREAD ERROR DETECTED ===\n");
+		log_info("Error code: %d\n", error_code);
+		log_info("Error message: %s\n", thread_error_msg);
+		log_info("Initiating safe shutdown of all threads...\n");
+		log_info("==============================\n");
+	}
+	pthread_mutex_unlock(&error_lock);
+}
+
+/* Check if any thread has reported an error */
+bool check_thread_error(void) {
+	bool error;
+	pthread_mutex_lock(&error_lock);
+	error = thread_error_flag;
+	pthread_mutex_unlock(&error_lock);
+	return error;
+}
+
 void * thread_process_sector(void * arg)
 {
 	ldb_importation_config_t * job = arg;
-	ldb_import(job);
+	int result = ldb_import(job);
+
+	if (result != LDB_ERROR_NOERROR && result != 0) {
+		set_thread_error(result, "Import failed for %s/%s: %s",
+			job->dbname, job->table, job->csv_path);
+	}
+
 	free(job);
 	pthread_exit(NULL);
 }
@@ -1724,7 +1848,19 @@ pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 {
 	pthread_t tid;
 
+	/* Check if we should abort before starting new thread */
+	if (check_thread_error()) {
+		log_info("Skipping new thread start due to previous error\n");
+		return 0;
+	}
+
 	int t = thread_request_or_wait(tlist);
+
+	/* Check again after waiting */
+	if (check_thread_error()) {
+		return 0;
+	}
+
 	pthread_mutex_lock(&lock);
 	ldb_importation_config_t * job_cpy = malloc(sizeof(ldb_importation_config_t));
 	memcpy(job_cpy,job,sizeof(ldb_importation_config_t));
@@ -1751,14 +1887,27 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
     DIR *dir;
     struct dirent *ent;
 
+	/* Check for errors before processing */
+	if (check_thread_error()) {
+		log_info("Skipping sector processing due to thread error\n");
+		return false;
+	}
+
 	/*Process one file with multiples sectors inside*/
 	if (*job->csv_path)
 	{
 		if (ldb_file_exists(job->csv_path))
 		{
 			pthread_t pid = thread_start(job, tlist);
-			if (pid == 0)
-				return ldb_import(job);
+			if (pid == 0) {
+				int result = ldb_import(job);
+				if (result != LDB_ERROR_NOERROR && result != 0) {
+					set_thread_error(result, "Import failed for %s/%s: %s",
+						job->dbname, job->table, job->csv_path);
+					return false;
+				}
+				return true;
+			}
 			else
 				return true;
 		}
@@ -1768,32 +1917,44 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 			return false;
 		}
 	}
-	
+
 	/*Process a directory with one sector per file*/
-    if ((dir = opendir(job->path)) != NULL) 
+    if ((dir = opendir(job->path)) != NULL)
 	{
-		while ((ent = readdir(dir)) != NULL) 
+		while ((ent = readdir(dir)) != NULL)
 		{
-            if (!strcmp(ent->d_name,".") || !strcmp(ent->d_name,"..")) 
+			/* Check for errors in loop */
+			if (check_thread_error()) {
+				log_info("Stopping directory processing due to thread error\n");
+				break;
+			}
+
+            if (!strcmp(ent->d_name,".") || !strcmp(ent->d_name,".."))
 				continue;
 
-			if (ent->d_type == DT_REG) 
+			if (ent->d_type == DT_REG)
 			{
 				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
 				pthread_t tid = thread_start(job, tlist);
-				if (tid == 0)
-					ldb_import(job);
-            } 
+				if (tid == 0) {
+					int result = ldb_import(job);
+					if (result != LDB_ERROR_NOERROR && result != 0) {
+						set_thread_error(result, "Import failed for %s/%s: %s",
+							job->dbname, job->table, job->csv_path);
+						break;
+					}
+				}
+            }
         }
 
         closedir(dir);
-    } 
-	else 
+    }
+	else
 	{
        	log_info("Cannot open directory: %s\n", job->path);
 		return false;
     }
-	return true;
+	return !check_thread_error();
 }
 
 void print_jobs(struct ldb_importation_jobs_s * jobs)
@@ -1896,8 +2057,14 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		logger_init(job.dbname, max_threads, threads_list);
 		log_table_config("GLOBAL", jobs.user_opt);
 		/* Process jobs*/
+		/* Process sorted tables */
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
+			if (check_thread_error()) {
+				log_info("\nAborting import process due to thread error\n");
+				break;
+			}
+
 			int lines_to_add = 0;
 			if (jobs.sorted[i] != -1)
 			{
@@ -1905,19 +2072,27 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = 1;
 				else
 					lines_to_add = max_threads;
-				
+
 				log_table_config(jobs.job[jobs.sorted[i]]->table, &jobs.job[jobs.sorted[i]]->opt);
 				logger_basic("%s",jobs.job[jobs.sorted[i]]->table);
-				process_sectors(jobs.job[jobs.sorted[i]], threads_list);
+				if (!process_sectors(jobs.job[jobs.sorted[i]], threads_list)) {
+					log_info("Error processing sectors for table %s\n", jobs.job[jobs.sorted[i]]->table);
+				}
 				free(jobs.job[jobs.sorted[i]]);
 				//wait for each table to finish
 				threads_end(threads_list);
 				logger_offset_increase(lines_to_add);
 			}
 		}
-	
+
+		/* Process unsorted tables */
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
+			if (check_thread_error()) {
+				log_info("\nAborting import process due to thread error\n");
+				break;
+			}
+
 			int lines_to_add = 0;
 			if (jobs.unsorted[i] != -1)
 			{
@@ -1925,10 +2100,12 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = 1;
 				else
 					lines_to_add = max_threads;
-				
+
 				log_table_config(jobs.job[jobs.unsorted[i]]->table, &jobs.job[jobs.unsorted[i]]->opt);
 				logger_basic("%s",jobs.job[jobs.unsorted[i]]->table);
-				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
+				if (!process_sectors(jobs.job[jobs.unsorted[i]], threads_list)) {
+					log_info("Error processing sectors for table %s\n", jobs.job[jobs.unsorted[i]]->table);
+				}
 				free(jobs.job[jobs.unsorted[i]]);
 				//wait for each table to finish
 				threads_end(threads_list);
@@ -1970,16 +2147,32 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		threads_list = calloc(max_threads, sizeof(pthread_t));
 		logger_init(job.dbname, max_threads, threads_list);
 		log_table_config(job.table, &job.opt);
-		process_sectors(&job, threads_list);
+
+		if (!process_sectors(&job, threads_list)) {
+			log_info("Error processing sectors for table %s\n", job.table);
+		}
+
+		/* Wait for all threads to complete */
+		threads_end(threads_list);
+		free(threads_list);
+		pthread_mutex_destroy(&lock);
+		pthread_mutex_destroy(&error_lock);
+
+		/* Check if there was any error */
+		if (check_thread_error()) {
+			fprintf(stderr, "\n=== IMPORT FAILED ===\n");
+			fprintf(stderr, "Error Code: %d\n", thread_error_code);
+			fprintf(stderr, "Error: %s\n", thread_error_msg);
+			fprintf(stderr, "=====================\n\n");
+			return false;
+		}
+		return true;
 	}
 	else
 	{
 		ldb_error("Command error\n");
 	}
 
-	threads_end(threads_list);
-	free(threads_list);
-	pthread_mutex_destroy(&lock);
-
-	return true;
+	/* This point should not be reached if else if (table) handles cleanup */
+	return false;
 }

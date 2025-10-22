@@ -21,6 +21,23 @@
  */
 #include "ldb.h"
 #include "logger.h"
+
+/* Debug function to validate sector file integrity */
+static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
+	if (!sector) return;
+	long current_pos = ftell(sector);
+	fseek(sector, 0, SEEK_END);
+	long file_size = ftell(sector);
+	fseek(sector, current_pos, SEEK_SET);
+
+	log_debug("Sector Debug Info (%s):\n", context);
+	log_debug("  Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+	log_debug("  File size: %ld bytes\n", file_size);
+	log_debug("  Current position: %ld\n", current_pos);
+	log_debug("  Map size constant: %u\n", LDB_MAP_SIZE);
+	log_debug("  File valid: %s\n", file_size >= LDB_MAP_SIZE ? "yes" : "NO - CORRUPTED");
+}
+#include "logger.h"
 #include "ldb_error.h"
 /**
   * @file node.c
@@ -107,11 +124,22 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
 	}
 
 	/* Obtain the pointer to the last node of the list */
+	debug_sector_info(ldb_sector, key, "Before ldb_list_pointer");
 	uint64_t list = ldb_list_pointer(ldb_sector, key);
+	log_debug("List pointer obtained: %lu (0x%lx)\n", list, list);
 
 	if ((list > 0 && list < LDB_MAP_SIZE) || ldb_read_failure) {
-		log_info("\nFatal data corruption on list %lu for key %02x%02x%02x%02x from table %s/%s\n", list, key[0], key[1], key[2], key[3], table.db, table.table);
-		log_info("E057 Map location %08lx\n", ldb_map_pointer_pos(key));
+		log_info("\n=== FATAL DATA CORRUPTION DETECTED ===\n");
+		log_info("Error: E057 - Map corrupted\n");
+		log_info("Table: %s/%s\n", table.db, table.table);
+		log_info("Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+		log_info("List pointer value: %lu (expected >= %u)\n", list, LDB_MAP_SIZE);
+		log_info("Map location: 0x%08lx\n", ldb_map_pointer_pos(key));
+		log_info("Data length attempting to write: %u bytes\n", dataln);
+		log_info("Records count: %u\n", records);
+		log_info("Read failure flag: %s\n", ldb_read_failure ? "true" : "false");
+		log_info("File: %s, Line: %d, Function: %s\n", __FILE__, __LINE__, __func__);
+		log_info("=====================================\n");
 		ldb_read_failure = false;
 		return LDB_ERROR_MAP_CORRUPTED;
 	}
@@ -119,10 +147,20 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
 	/* Seek end of file, and save the pointer to the new node */
 	fseeko64(ldb_sector, 0, SEEK_END);
 	uint64_t new_node = ftello64(ldb_sector);
+	log_debug("New node will be at position: %lu (0x%lx)\n", new_node, new_node);
 
 	if (new_node < LDB_MAP_SIZE) {
-		log_info("E056 Data sector %02x corrupted, with %lu below map_size\n", *key, new_node);
-		return LDB_ERROR_DATA_SECTOR_CORRUPTED;//exit(EXIT_FAILURE);
+		log_info("\n=== DATA SECTOR CORRUPTION DETECTED ===\n");
+		log_info("Error: E056 - Data sector corrupted\n");
+		log_info("Table: %s/%s\n", table.db, table.table);
+		log_info("Sector: %02x\n", *key);
+		log_info("New node position: %lu (must be >= %u)\n", new_node, LDB_MAP_SIZE);
+		log_info("Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+		log_info("Data length: %u bytes\n", dataln);
+		log_info("Records: %u\n", records);
+		log_info("File: %s, Line: %d, Function: %s\n", __FILE__, __LINE__, __func__);
+		log_info("======================================\n");
+		return LDB_ERROR_DATA_SECTOR_CORRUPTED;
 	}
 
 	/* Allocate memory for new node, plus LN(5), NN(5) and TS(4 max)*/

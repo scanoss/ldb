@@ -182,7 +182,8 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 	do
 	{
 		/* Read node */
-		next = ldb_node_read_v2(sector, table, next, key, &node_size, &node, 0);
+		uint64_t current = next;
+		next = ldb_node_read_v2(sector, table, current, key, &node_size, &node, 0);
 
 		if (ldb_read_failure || sector->failure)
 		{
@@ -191,7 +192,7 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 			sector->failure = false;
 			break;
 		}
-		if (!node_size && !next) 
+		if ((!node_size && !next) || next == current) 
 			break; // reached end of list
 
 		/* Pass entire node (fixed record length) to handler */
