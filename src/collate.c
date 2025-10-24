@@ -742,14 +742,17 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 
 	/* Reserve space for collate data */
 	collate->data = (char *)calloc(LDB_MAX_RECORDS * (collate->rec_width+10), 1);
-	
+
 	if (!collate->data)
 		return false;
 
 	collate->tmp_data = (char *)calloc(LDB_MAX_RECORDS * (collate->rec_width+10), 1);
 
 	if (!collate->tmp_data)
+	{
+		free(collate->data);
 		return false;
+	}
 
 	/* Set global cmp width (for qsort) */
 	ldb_cmp_width = max_rec_ln;
@@ -757,8 +760,12 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	/* Open (out) sector */
 	collate->out_sector = ldb_open(out_table, &sector, "w+");
 	if (!collate->out_sector)
+	{
+		free(collate->data);
+		free(collate->tmp_data);
 		return false;
-	
+	}
+
 	return true;
 }
 
@@ -798,10 +805,18 @@ void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 
 	if (collate->del_count)
 		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector->id, collate->del_count);
-	
+
 	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector->id, collate->rec_count);
 
+	/* Close sector file if it was opened during processing */
+	if (sector->file)
+	{
+		fclose(sector->file);
+		sector->file = NULL;
+	}
+
 	free(collate->data);
+	free(collate->tmp_data);
 	free(sector->data);
 	sector->data = NULL;
 }

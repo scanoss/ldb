@@ -19,31 +19,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "ldb.h"
-#include "logger.h"
 
-/* Debug function to validate sector file integrity */
-static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
-	if (!sector) return;
-	long current_pos = ftell(sector);
-	fseek(sector, 0, SEEK_END);
-	long file_size = ftell(sector);
-	fseek(sector, current_pos, SEEK_SET);
-
-	log_debug("Sector Debug Info (%s):\n", context);
-	log_debug("  Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
-	log_debug("  File size: %ld bytes\n", file_size);
-	log_debug("  Current position: %ld\n", current_pos);
-	log_debug("  Map size constant: %u\n", LDB_MAP_SIZE);
-	log_debug("  File valid: %s\n", file_size >= LDB_MAP_SIZE ? "yes" : "NO - CORRUPTED");
-}
+ #include "ldb.h"
 #include "logger.h"
 #include "ldb_error.h"
+
 /**
-  * @file node.c
-  * @date 12 Jul 2020
-  * @brief Contains functions to handle LDB nodes
- 
   * NODE STRUCTURE
   * Every data list starts with a pointer to the last node in the list, followed by the first node:
  
@@ -63,6 +44,22 @@ static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
   * d = is the data record
   * @see https://github.com/scanoss/ldb/blob/master/src/node.c
   */
+
+/* Debug function to validate sector file integrity */
+static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
+	if (!sector) return;
+	long current_pos = ftell(sector);
+	fseek(sector, 0, SEEK_END);
+	long file_size = ftell(sector);
+	fseek(sector, current_pos, SEEK_SET);
+
+	log_debug("Sector Debug Info (%s):\n", context);
+	log_debug("  Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+	log_debug("  File size: %ld bytes\n", file_size);
+	log_debug("  Current position: %ld\n", current_pos);
+	log_debug("  Map size constant: %u\n", LDB_MAP_SIZE);
+	log_debug("  File valid: %s\n", file_size >= LDB_MAP_SIZE ? "yes" : "NO - CORRUPTED");
+}
 
 /**
  * @brief Gets a next node addr from the header provided and loads it into the rs list. 
@@ -564,10 +561,11 @@ uint64_t ldb_node_read_v2(ldb_sector_t *sector, struct ldb_table table, uint64_t
 		*bytes_read = actual_size;
 	}
 
-	if (!sector->data)
+	/* Free buffer if it was allocated (only when reading from disk) */
+	if (!sector->data && buffer)
 	{
 		free(buffer);
-		//fclose(sector_file);
+		buffer = NULL;
 	}
 	return next_node;
 }

@@ -45,6 +45,7 @@
 #include "logger.h"
 #include "ldb_error.h"
 #include "decode.h"
+#include <stdatomic.h>
 #define REC_SIZE_LEN 2
 
 pthread_mutex_t lock;
@@ -54,9 +55,9 @@ pthread_t * threads_list;
 static long IGNORED_WFP_LN = sizeof(IGNORED_WFP);
 double progress_timer = 0;
 
-/* Thread error handling */
-volatile bool thread_error_flag = false;
-volatile int thread_error_code = 0;
+/* Thread error handling - using atomic for lock-free reads */
+atomic_bool thread_error_flag = ATOMIC_VAR_INIT(false);
+atomic_int thread_error_code = ATOMIC_VAR_INIT(0);
 pthread_mutex_t error_lock = PTHREAD_MUTEX_INITIALIZER;
 char thread_error_msg[1024] = {0};
 
@@ -249,7 +250,10 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	in = fopen(config->csv_path, "rb");
 	if (in == NULL)
+	{
+		free(bl);
 		return -1;
+	}
 
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
@@ -283,16 +287,18 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 
 	bool first_read = true;
 	uint32_t bytes_read = 0;
+	int buffer_count = 0;
 
 	while ((bytes_read = fread(buffer, 1, buffer_ln, in)) > 0)
 	{
-		/* Check for thread error periodically */
-		if (check_thread_error()) {
+		/* Check for thread error every 10 buffers (~10GB of data) - lock-free atomic read */
+		if (++buffer_count % 10 == 0 && check_thread_error()) {
 			log_info("Aborting WFP import due to thread error\n");
 			fclose(in);
 			free(record);
 			free(buffer);
 			free(bl);
+			if (out) ldb_close_unlock(out);
 			return LDB_ERROR_THREAD_ABORT;
 		}
 
@@ -324,6 +330,11 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 					//abort in case of error
 					if (error < 0) {
 						log_info("ERROR: Failed writing WFP at line %d, file: %s\n", __LINE__, config->csv_path);
+						fclose(in);
+						if (out) ldb_close_unlock(out);
+						free(record);
+						free(buffer);
+						free(bl);
 						return error;
 					}
 				}
@@ -370,6 +381,11 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 		//abort in case of error
 		if (error < 0) {
 			log_info("ERROR: Failed final WFP write at line %d, file: %s\n", __LINE__, config->csv_path);
+			fclose(in);
+			if (out) ldb_close_unlock(out);
+			free(record);
+			free(buffer);
+			free(bl);
 			return error;
 		}
 	}
@@ -626,6 +642,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	{
 		log_info("The existent table definitions do not match with the table being imported, the file %s will be skipped.\nVerify %s.cfg file and try again\n",
 		job->csv_path, job->table);
+		fclose(fp);
 		return LDB_ERROR_CSV_WRONG_ENCODING;
 	}
 /* NOTE: the ldb table MUST BE written with key_ln = 4, and read with key_ln=16. ODO: IMPROVE IT, is this a bug?*/
@@ -651,10 +668,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	ssize_t lineln;
 	while ((lineln = getline(&line, &len, fp)) != -1)
 	{
-		/* Check for thread error every 1000 lines */
-		if (line_number % 1000 == 0)
+		/* Check for thread error and excessive skipped lines every 10000 lines - lock-free atomic read */
+		if (line_number % 10000 == 0)
 		{
-			if(check_thread_error())
+			if (check_thread_error())
 			{
 				log_info("Aborting CSV import at line %d due to thread error\n", line_number);
 				fclose(fp);
@@ -667,9 +684,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				return LDB_ERROR_THREAD_ABORT;
 			}
 
-			if (skipped > line_number / 2)
+			if (skipped > (line_number * 4) / 5)
 			{
-				log_info("Aborting CSV import at line %d due to excessive number of skipped lines\n", line_number);
+				log_info("Aborting %s import at line %d due to excessive number of skipped lines\n", job->csv_path,line_number);
 				fclose(fp);
 				if (line) free(line);
 				free(itemid);
@@ -860,6 +877,13 @@ int ldb_import_csv(ldb_importation_config_t * job)
 							log_info("  Last processed line content: %s\n", line);
 							log_info("  Key: %02x%02x%02x%02x, Buffer ptr: %u\n",
 								item_lastid[0], item_lastid[1], item_lastid[2], item_lastid[3], item_ptr);
+							fclose(fp);
+							if (line) free(line);
+							free(itemid);
+							free(item_buf);
+							free(item_lastid);
+							free(field2);
+							if (item_sector) ldb_close_unlock(item_sector);
 							return error;
 						}
 					}
@@ -951,6 +975,15 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			fprintf(stderr, "Buffer size: %u bytes\n", item_ptr);
 			fprintf(stderr, "Error code: %d\n", error);
 			fprintf(stderr, "=================================\n");
+			int fd = fileno(fp);
+			if (fclose(fp))
+				fprintf(stderr,"error closing %d\n", fd);
+			if (line) free(line);
+			free(itemid);
+			free(item_buf);
+			free(item_lastid);
+			free(field2);
+			if (item_sector) ldb_close_unlock(item_sector);
 			return error;
 		}
 	}
@@ -1296,14 +1329,16 @@ static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
 	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
 	for (int i = 0; i < IMPORT_PARAMS_NUMBER; i++)
 	{
-		if (i == IMPORT_PARAMS_NUMBER -1 && strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
-		{
-			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
-		}
-		else if (cmd_in->params_arr[i] > -1)
+		if (cmd_in->params_arr[i] > -1)
 		{
 			cfg->params_arr[i] = cmd_in->params_arr[i];
 		}
+	}
+
+	// Handle tmp_path separately since it's not an int in params_arr
+	if (strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
+	{
+		strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
 	}
 }
 
@@ -1427,61 +1462,132 @@ static int load_import_config(ldb_importation_config_t * config, import_params_t
 		return -1;
 }
 
-static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int collate_max_ram_percent)
+/* Helper function to get memory stats from /proc/meminfo */
+static bool get_memory_stats(unsigned long *total_kb, unsigned long *available_kb, unsigned long *free_kb)
 {
-    FILE* file = fopen("/proc/meminfo", "r");
-    if (file == NULL) {
-        perror("Error opening /proc/meminfo");
-        return false;
-    }
+	FILE* file = fopen("/proc/meminfo", "r");
+	if (file == NULL) {
+		perror("Error opening /proc/meminfo");
+		return false;
+	}
 
-    char line[256];
-	unsigned long totalMemory = 0;
-    unsigned long availableMemory = 0;
-	unsigned long freeMemory = 0;
-    
+	char line[256];
+	*total_kb = 0;
+	*available_kb = 0;
+	*free_kb = 0;
+
 	while (fgets(line, sizeof(line), file)) {
+		if (sscanf(line, "MemTotal: %lu", total_kb) == 1)
+			continue;
+		if (sscanf(line, "MemFree: %lu", free_kb) == 1)
+			continue;
+		if (sscanf(line, "MemAvailable: %lu", available_kb) == 1)
+			break;
+	}
+	fclose(file);
 
-		if (sscanf(line, "MemTotal: %lu", &totalMemory) == 1)
-            continue;
-		if (sscanf(line, "MemFree: %lu", &freeMemory) == 1) 
-            continue;
-        if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1) 
-            break;
-    }
+	return (*total_kb > 0 && *available_kb > 0);
+}
 
-	if (collate_max_ram_percent <= 0)
+/* Check if there's enough RAM available for launching new threads */
+static bool check_memory_for_threading(int collate_max_ram_percent)
+{
+	unsigned long totalMemory, availableMemory, freeMemory;
+
+	if (!get_memory_stats(&totalMemory, &availableMemory, &freeMemory))
+		return true; // Cannot read, proceed anyway
+
+	if (collate_max_ram_percent <= 0 || collate_max_ram_percent > 100)
 		collate_max_ram_percent = 50;
 
-	int max_collate_ram = (totalMemory * (100 - collate_max_ram_percent)) / 100;
+	/* Calculate minimum threshold based on policy */
+	unsigned long min_available_kb = (totalMemory * (100 - collate_max_ram_percent)) / 100;
 
-    fclose(file);
-	
+	/* Add safety buffer: require 500 MB more than threshold before launching threads */
+	unsigned long safety_buffer_kb = 500 * 1024; // 500 MB
+	unsigned long required_available_kb = min_available_kb + safety_buffer_kb;
+
+	if (availableMemory < required_available_kb) {
+		log_info("Memory throttling: Available RAM (%lu MB) below safe threshold (%lu MB + 500 MB buffer). Pausing thread creation...\n",
+		         availableMemory / 1024, min_available_kb / 1024);
+		return false;
+	}
+
+	return true;
+}
+
+static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int collate_max_ram_percent)
+{
+	unsigned long totalMemory, availableMemory, freeMemory;
+
+	if (!get_memory_stats(&totalMemory, &availableMemory, &freeMemory))
+		return false;
+
+	if (collate_max_ram_percent <= 0 || collate_max_ram_percent > 100)
+		collate_max_ram_percent = 50;
+
+	/* Get sector size on disk */
 	char * path = ldb_sector_path(kb, &sector, "r");
-
 	if (!path)
 	{
-		log_info("Failed to load sector %02x\n", sector);
+		log_info("Failed to get path for sector %02x\n", sector);
 		return false;
 	}
-	uint64_t sector_size = ldb_file_size(path) / 1024;
-	
+	uint64_t sector_size_kb = ldb_file_size(path) / 1024;
 	free(path);
-	log_info("max collate ram : %d", max_collate_ram);
 
-    log_debug("Collate sector: %02x - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024, freeMemory / 1024, availableMemory / 1024);
-	if ((availableMemory < (sector_size * 2)  && freeMemory < sector_size * 1.5))
+	/* Calculate memory requirements:
+	 * - sector_size_kb: the actual sector data
+	 * - collate_buffers: data + tmp_data buffers (~110 MB each thread)
+	 * - safety_margin: 20% overhead for OS and other allocations
+	 */
+	const unsigned long collate_buffers_kb = 120 * 1024; // ~120 MB buffers
+	unsigned long required_memory_kb = sector_size_kb + collate_buffers_kb;
+	unsigned long required_with_margin_kb = (required_memory_kb * 120) / 100; // 20% safety margin
+
+	/* Calculate thresholds based on RAM percentage policy:
+	 * We use availableMemory (not free) as it includes reclaimable cache
+	 */
+	unsigned long min_available_threshold_kb = (totalMemory * (100 - collate_max_ram_percent)) / 100;
+
+	log_info("RAM Check - Sector %02x: size=%lu MB, required=%lu MB (with margin), available=%lu MB, threshold=%lu MB\n",
+	         sector, sector_size_kb / 1024, required_with_margin_kb / 1024,
+	         availableMemory / 1024, min_available_threshold_kb / 1024);
+
+	/* Decision logic:
+	 * 1. Must have enough available memory for the sector + buffers + margin
+	 * 2. Must maintain minimum available RAM threshold after allocation
+	 * 3. Sector size should be reasonable (< 90% of available memory)
+	 */
+
+	/* Check 1: Is there enough memory for this sector? */
+	if (availableMemory < required_with_margin_kb)
 	{
-		log_info("Not enough memory to allocate the sector %02x. Requested %ld - Free RAM %ld\n", sector, sector_size * 2, freeMemory);
+		log_info("Sector %02x too large for available RAM (%lu MB required > %lu MB available). Using disk mode.\n",
+		         sector, required_with_margin_kb / 1024, availableMemory / 1024);
 		return false;
 	}
 
-	if (availableMemory < max_collate_ram)
+	/* Check 2: Would loading this sector violate our RAM policy threshold? */
+	unsigned long remaining_after_load_kb = availableMemory - required_memory_kb;
+	if (remaining_after_load_kb < min_available_threshold_kb)
 	{
-		log_info("Not enough memory to allocate the sector %02x. Available RAM (%ld) is lower than max collate ram (%ld)\n", sector, availableMemory, max_collate_ram);
+		log_info("Sector %02x would exceed RAM policy (%lu%% limit). Remaining after load: %lu MB < threshold: %lu MB. Using disk mode.\n",
+		         sector, collate_max_ram_percent, remaining_after_load_kb / 1024, min_available_threshold_kb / 1024);
 		return false;
 	}
 
+	/* Check 3: Sanity check - sector shouldn't consume > 90% of available RAM */
+	unsigned long max_sector_size_kb = (availableMemory * 90) / 100;
+	if (sector_size_kb > max_sector_size_kb)
+	{
+		log_info("Sector %02x extremely large (%lu MB > 90%% of available %lu MB). Using disk mode for safety.\n",
+		         sector, sector_size_kb / 1024, availableMemory / 1024);
+		return false;
+	}
+
+	log_info("Sector %02x will be loaded in RAM (%lu MB). Available after load: ~%lu MB\n",
+	         sector, sector_size_kb / 1024, remaining_after_load_kb / 1024);
 	return true;
 }
 
@@ -1746,9 +1852,10 @@ volatile int num_threads = 0;
 /* Set thread error flag and message */
 void set_thread_error(int error_code, const char *format, ...) {
 	pthread_mutex_lock(&error_lock);
-	if (!thread_error_flag) {
-		thread_error_flag = true;
-		thread_error_code = error_code;
+	bool expected = false;
+	/* Only set error if not already set - using atomic compare-exchange */
+	if (atomic_compare_exchange_strong(&thread_error_flag, &expected, true)) {
+		atomic_store(&thread_error_code, error_code);
 
 		va_list args;
 		va_start(args, format);
@@ -1764,13 +1871,9 @@ void set_thread_error(int error_code, const char *format, ...) {
 	pthread_mutex_unlock(&error_lock);
 }
 
-/* Check if any thread has reported an error */
+/* Check if any thread has reported an error - lock-free read */
 bool check_thread_error(void) {
-	bool error;
-	pthread_mutex_lock(&error_lock);
-	error = thread_error_flag;
-	pthread_mutex_unlock(&error_lock);
-	return error;
+	return atomic_load(&thread_error_flag);
 }
 
 void * thread_process_sector(void * arg)
@@ -1804,13 +1907,50 @@ void threads_end(pthread_t * tlist)
 	}
 }
 
-int thread_request_or_wait(pthread_t * tlist)
+int thread_request_or_wait(pthread_t * tlist, int collate_max_ram_percent)
 {
+	/* Check for thread error before allocating new threads - lock-free atomic read */
+	if (check_thread_error())
+		return -1;
+
+	/* Memory-aware throttling: check if we have enough RAM before launching threads */
+	int memory_check_count = 0;
+	const int MAX_MEMORY_CHECKS = 60; // Wait up to 60 seconds (60 × 1 second)
+
+	while (!check_memory_for_threading(collate_max_ram_percent)) {
+		if (check_thread_error())
+			return -1;
+
+		memory_check_count++;
+		if (memory_check_count >= MAX_MEMORY_CHECKS) {
+			log_info("Memory throttling: Waited %d seconds, but RAM still insufficient. Proceeding anyway.\n", MAX_MEMORY_CHECKS);
+			break;
+		}
+
+		/* Wait 1 second and check again */
+		sleep(1);
+
+		/* Meanwhile, try to join finished threads to free up resources */
+		for (int j = 0; j < max_threads; j++) {
+			if (tlist[j] && pthread_tryjoin_np(tlist[j], NULL) == 0) {
+				pthread_mutex_lock(&lock);
+				num_threads--;
+				pthread_mutex_unlock(&lock);
+				tlist[j] = 0;
+				log_info("Thread completed during memory wait. Active threads: %d\n", num_threads);
+			}
+		}
+	}
+
 	if (num_threads < max_threads)
 		return num_threads;
 
 	while(num_threads >= max_threads)
 	{
+		/* Check for errors while waiting - lock-free atomic read */
+		if (check_thread_error())
+			return -1;
+
 		for (int j =0; j < max_threads; j++)
 		{
 			if (!tlist[j])
@@ -1848,16 +1988,11 @@ pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 {
 	pthread_t tid;
 
-	/* Check if we should abort before starting new thread */
-	if (check_thread_error()) {
-		log_info("Skipping new thread start due to previous error\n");
-		return 0;
-	}
+	int t = thread_request_or_wait(tlist, job->opt.params.collate_max_ram_percent);
 
-	int t = thread_request_or_wait(tlist);
-
-	/* Check again after waiting */
-	if (check_thread_error()) {
+	/* If error detected, abort thread creation */
+	if (t < 0) {
+		log_info("Aborting thread creation due to error flag\n");
 		return 0;
 	}
 
@@ -1887,12 +2022,6 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
     DIR *dir;
     struct dirent *ent;
 
-	/* Check for errors before processing */
-	if (check_thread_error()) {
-		log_info("Skipping sector processing due to thread error\n");
-		return false;
-	}
-
 	/*Process one file with multiples sectors inside*/
 	if (*job->csv_path)
 	{
@@ -1900,6 +2029,12 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 		{
 			pthread_t pid = thread_start(job, tlist);
 			if (pid == 0) {
+				/* Check if we failed due to error flag or just thread limit */
+				if (check_thread_error()) {
+					log_info("Aborting sector processing due to thread error\n");
+					return false;
+				}
+				/* Execute in main thread if we couldn't start a worker thread */
 				int result = ldb_import(job);
 				if (result != LDB_ERROR_NOERROR && result != 0) {
 					set_thread_error(result, "Import failed for %s/%s: %s",
@@ -1923,12 +2058,6 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 	{
 		while ((ent = readdir(dir)) != NULL)
 		{
-			/* Check for errors in loop */
-			if (check_thread_error()) {
-				log_info("Stopping directory processing due to thread error\n");
-				break;
-			}
-
             if (!strcmp(ent->d_name,".") || !strcmp(ent->d_name,".."))
 				continue;
 
@@ -1937,6 +2066,12 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
 				pthread_t tid = thread_start(job, tlist);
 				if (tid == 0) {
+					/* Check if we failed due to error flag or just thread limit */
+					if (check_thread_error()) {
+						log_info("Aborting directory processing due to thread error\n");
+						break;
+					}
+					/* Execute in main thread if we couldn't start a worker thread */
 					int result = ldb_import(job);
 					if (result != LDB_ERROR_NOERROR && result != 0) {
 						set_thread_error(result, "Import failed for %s/%s: %s",
@@ -2161,7 +2296,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		/* Check if there was any error */
 		if (check_thread_error()) {
 			fprintf(stderr, "\n=== IMPORT FAILED ===\n");
-			fprintf(stderr, "Error Code: %d\n", thread_error_code);
+			fprintf(stderr, "Error Code: %d\n", atomic_load(&thread_error_code));
 			fprintf(stderr, "Error: %s\n", thread_error_msg);
 			fprintf(stderr, "=====================\n\n");
 			return false;

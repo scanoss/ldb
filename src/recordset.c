@@ -251,12 +251,10 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 
 	} while (next && !done);
 
-	if (sector->file)
-	{
-		fclose(sector->file);
-		sector->file = NULL;
-	}
-	
+	/* Do not close sector->file here to allow reuse across multiple calls.
+	 * The caller (e.g., ldb_collate_sector) is responsible for closing it
+	 * when the entire sector processing is complete. */
+
 	return records;
 }
 
