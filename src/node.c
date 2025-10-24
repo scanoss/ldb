@@ -537,21 +537,30 @@ uint64_t ldb_node_read_v2(ldb_sector_t *sector, struct ldb_table table, uint64_t
 		if (table.rec_ln)
 			if (actual_size > 64800)
 				actual_size = 64800; // TODO: EXPAND?
-		
-		if (out)
-			*out = calloc(actual_size + 1, 1);
 
 		/* Return the entire node */
 		if (sector->data)
 		{
-			//*out = buffer + LDB_PTR_LN + table.ts_ln;
-			if ((buffer - sector->data + actual_size) < sector->size) 
-				memcpy(*out, buffer + LDB_PTR_LN + table.ts_ln, actual_size);
+			/* When reading from RAM, return direct pointer to avoid memory allocation */
+			if ((buffer - sector->data + LDB_PTR_LN + table.ts_ln + actual_size) <= sector->size)
+			{
+				if (out)
+					*out = buffer + LDB_PTR_LN + table.ts_ln;
+			}
 			else
+			{
 				log_info("warning on sector %02x node size overflow\n", sector->id);
+				if (out)
+					*out = NULL;
+				actual_size = 0;
+			}
 		}
 		else
 		{
+			/* When reading from disk, allocate memory for the node */
+			if (out)
+				*out = calloc(actual_size + 1, 1);
+
 			if (!fread(*out, 1, actual_size, sector->file))
 			{
 				log_debug("Warning: cannot read entire LDB node\n");

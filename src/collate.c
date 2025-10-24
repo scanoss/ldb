@@ -808,13 +808,6 @@ void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 
 	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector->id, collate->rec_count);
 
-	/* Close sector file if it was opened during processing */
-	if (sector->file)
-	{
-		fclose(sector->file);
-		sector->file = NULL;
-	}
-
 	free(collate->data);
 	free(collate->tmp_data);
 	free(sector->data);

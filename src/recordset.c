@@ -192,18 +192,23 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 			sector->failure = false;
 			break;
 		}
-		if ((!node_size && !next) || next == current) 
+		if ((!node_size && !next) || next == current)
 			break; // reached end of list
 
 		/* Pass entire node (fixed record length) to handler */
-		if (table.rec_ln) 
+		if (table.rec_ln)
 			done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
 
 		/* Extract and pass variable-size records to handler */
 		else
 		{
-			if (!ldb_validate_node(node, node_size, subkey_ln)) 
+			if (!ldb_validate_node(node, node_size, subkey_ln))
+			{
+				/* Free node if it was allocated before continuing */
+				if (!sector->data && node)
+					free(node);
 				continue;
+			}
 
 			/* Extract datasets from node */
 			node_ptr = 0;
@@ -247,13 +252,19 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 				node_ptr += dataset_size;
 			}
 		}
-		free(node);
+
+		/* Only free node if it was allocated (when reading from disk, not from RAM) */
+		if (!sector->data && node)
+			free(node);
 
 	} while (next && !done);
 
-	/* Do not close sector->file here to allow reuse across multiple calls.
-	 * The caller (e.g., ldb_collate_sector) is responsible for closing it
-	 * when the entire sector processing is complete. */
+	/* Close sector file if it was opened during processing */
+	if (sector->file)
+	{
+		fclose(sector->file);
+		sector->file = NULL;
+	}
 
 	return records;
 }
