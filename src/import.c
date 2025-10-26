@@ -2214,6 +2214,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					log_info("Error processing sectors for table %s\n", jobs.job[jobs.sorted[i]]->table);
 				}
 				free(jobs.job[jobs.sorted[i]]);
+				jobs.job[jobs.sorted[i]] = NULL;
 				//wait for each table to finish
 				threads_end(threads_list);
 				logger_offset_increase(lines_to_add);
@@ -2242,12 +2243,19 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					log_info("Error processing sectors for table %s\n", jobs.job[jobs.unsorted[i]]->table);
 				}
 				free(jobs.job[jobs.unsorted[i]]);
+				jobs.job[jobs.unsorted[i]] = NULL;
 				//wait for each table to finish
 				threads_end(threads_list);
 				logger_offset_increase(lines_to_add);
 			}
 		}
 
+		/* Cleanup: free any remaining jobs that weren't processed */
+		for (int i = 0; i < jobs.number; i++)
+		{
+			if (jobs.job[i])
+				free(jobs.job[i]);
+		}
 		free(jobs.job);
 	}
 	else if (table)

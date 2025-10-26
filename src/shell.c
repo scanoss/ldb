@@ -428,7 +428,9 @@ int main(int argc, char **argv)
 					ldb_import_command("oss", path, cmd);
 				else
 					ldb_import_command(dbname, path, cmd);
-				fprintf(stderr, "\r\nImport process end\n\n");			
+				fprintf(stderr, "\r\nImport process end\n\n");
+				free(path);
+				free(dbname);
 				return EXIT_SUCCESS;
 			}
 			break;

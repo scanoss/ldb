@@ -769,6 +769,30 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	return true;
 }
 
+/**
+ * @brief Cleanup collate data structures (frees allocated memory)
+ *
+ * @param collate Collate data structure
+ */
+void ldb_collate_cleanup(struct ldb_collate_data *collate)
+{
+	if (collate->data)
+	{
+		free(collate->data);
+		collate->data = NULL;
+	}
+	if (collate->tmp_data)
+	{
+		free(collate->tmp_data);
+		collate->tmp_data = NULL;
+	}
+	if (collate->out_sector)
+	{
+		fclose(collate->out_sector);
+		collate->out_sector = NULL;
+	}
+}
+
 void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 {
 	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector->id, sector->data == NULL ? "On disk" : "On RAM");
@@ -794,9 +818,6 @@ void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 		ldb_import_list(collate);
 	}
 
-	/* Close .out sector */
-	fclose(collate->out_sector);
-
 	/* Move or erase sector */
 	if (collate->merge)
 		ldb_sector_erase(collate->in_table, k);
@@ -808,8 +829,9 @@ void ldb_collate_sector(struct ldb_collate_data *collate, ldb_sector_t * sector)
 
 	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector->id, collate->rec_count);
 
-	free(collate->data);
-	free(collate->tmp_data);
+	/* Cleanup collate data structures */
+	ldb_collate_cleanup(collate);
+
 	free(sector->data);
 	sector->data = NULL;
 }
@@ -849,11 +871,16 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			ldb_sector_t sector  = ldb_load_sector_v2(table, &k0);
 			//skip unexistent sector.
 			if (!sector.size)
+			{
+				ldb_collate_cleanup(&collate);
+				if (p_sector >= 0)
+					break;
 				continue;
+			}
 
 			ldb_collate_sector(&collate, &sector);
 		}
-		
+
 		if (p_sector >=0)
 			break;
 
