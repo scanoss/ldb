@@ -192,7 +192,8 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 			sector->failure = false;
 			break;
 		}
-		if ((!node_size && !next) || next == current)
+		
+		if (!node_size && !next)
 			break; // reached end of list
 
 		/* Pass entire node (fixed record length) to handler */
@@ -256,6 +257,9 @@ uint32_t ldb_fetch_recordset_v2(ldb_sector_t * sector, struct ldb_table table, u
 		/* Only free node if it was allocated (when reading from disk, not from RAM) */
 		if (!sector->data && node)
 			free(node);
+		
+		if (next == current)
+			done = true;
 
 	} while (next && !done);
 

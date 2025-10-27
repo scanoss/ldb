@@ -414,14 +414,25 @@ int main(int argc, char **argv)
 	{
 		case LDB_UPDATE:
 		{
-			char cmd [LDB_MAX_PATH] = "(VALIDATE_VERSION=1";
+			char cmd [LDB_MAX_PATH] = "(";
+			bool first = true;
 			if (*path)
 			{
 				if (collate)
-					strcat(cmd, ",COLLATE=1");
+				{
+					if (!first)
+						strcat(cmd, ",");
+					strcat(cmd, "COLLATE=1");
+					first = false;
+				}
 
 				if (verbose)
-					strcat(cmd, ",VERBOSE=1");
+				{
+					if (!first)
+						strcat(cmd, ",");
+					strcat(cmd, "VERBOSE=1");
+					first = false;
+				}
 
 				strcat(cmd, ")");
 				if (!dbname || !*dbname)

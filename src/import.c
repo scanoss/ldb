@@ -1915,9 +1915,9 @@ int thread_request_or_wait(pthread_t * tlist, int collate_max_ram_percent)
 
 	/* Memory-aware throttling: check if we have enough RAM before launching threads */
 	int memory_check_count = 0;
-	const int MAX_MEMORY_CHECKS = 60; // Wait up to 60 seconds (60 × 1 second)
+	const int MAX_MEMORY_CHECKS = 12; // Wait up to 60 seconds (60 × 1 second)
 
-	while (!check_memory_for_threading(collate_max_ram_percent)) {
+	while (!check_memory_for_threading(collate_max_ram_percent * 1.2)) {
 		if (check_thread_error())
 			return -1;
 
@@ -1928,7 +1928,7 @@ int thread_request_or_wait(pthread_t * tlist, int collate_max_ram_percent)
 		}
 
 		/* Wait 1 second and check again */
-		sleep(1);
+		sleep(5);
 
 		/* Meanwhile, try to join finished threads to free up resources */
 		for (int j = 0; j < max_threads; j++) {
@@ -2176,14 +2176,6 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		opt_add(jobs.user_opt, jobs.global_opt);
 		opt_add(jobs.global_opt, jobs.user_opt);
 
-		//abort the job if VERSION_VALIDATION is active and the json file is not present
-		if (job.opt.params.version_validation && !version_present)
-		{
-			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
-			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
-			exit(EXIT_FAILURE);
-		}
-
 		print_jobs(&jobs);
 		max_threads = jobs.user_opt->params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);
@@ -2191,6 +2183,13 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		threads_list = calloc(max_threads, sizeof(pthread_t));
 		logger_init(job.dbname, max_threads, threads_list);
 		log_table_config("GLOBAL", jobs.user_opt);
+				//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (jobs.user_opt->params.version_validation && !version_present)
+		{
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
+			exit(EXIT_FAILURE);
+		}
 		/* Process jobs*/
 		/* Process sorted tables */
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
@@ -2276,13 +2275,6 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		opt_add(&user_opt, &job.opt);
 
 		bool version_present = version_import(&job);
-		//abort the job if VERSION_VALIDATION is active and the json file is not present
-		if (job.opt.params.version_validation && !version_present)
-		{
-			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
-			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
-			exit(EXIT_FAILURE);
-		}
 
 		max_threads = job.opt.params.threads;
 		fprintf(stderr, "Max threads set to: %d\n", max_threads);
@@ -2290,6 +2282,14 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		threads_list = calloc(max_threads, sizeof(pthread_t));
 		logger_init(job.dbname, max_threads, threads_list);
 		log_table_config(job.table, &job.opt);
+
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (job.opt.params.version_validation && !version_present)
+		{
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
+			exit(EXIT_FAILURE);
+		}
 
 		if (!process_sectors(&job, threads_list)) {
 			log_info("Error processing sectors for table %s\n", job.table);
