@@ -49,6 +49,7 @@ test_05_kb_delete_keys() {
 #import again, but with the collate option, so the duplicated will be removed. Then test again the content.
 test_06_kb_collate() {
     ../ldb -q -u source/mined -n test_kb -c
+    sleep 10
     test_02_kb_content
 }
 

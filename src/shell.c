@@ -414,21 +414,34 @@ int main(int argc, char **argv)
 	{
 		case LDB_UPDATE:
 		{
-			char cmd [LDB_MAX_PATH] = "(VALIDATE_VERSION=1";
+			char cmd [LDB_MAX_PATH] = "(";
+			bool first = true;
 			if (*path)
 			{
 				if (collate)
-					strcat(cmd, ",COLLATE=1");
+				{
+					if (!first)
+						strcat(cmd, ",");
+					strcat(cmd, "COLLATE=1");
+					first = false;
+				}
 
 				if (verbose)
-					strcat(cmd, ",VERBOSE=1");
+				{
+					if (!first)
+						strcat(cmd, ",");
+					strcat(cmd, "VERBOSE=1");
+					first = false;
+				}
 
 				strcat(cmd, ")");
 				if (!dbname || !*dbname)
 					ldb_import_command("oss", path, cmd);
 				else
 					ldb_import_command(dbname, path, cmd);
-				fprintf(stderr, "\r\nImport process end\n\n");			
+				fprintf(stderr, "\r\nImport process end\n\n");
+				free(path);
+				free(dbname);
 				return EXIT_SUCCESS;
 			}
 			break;

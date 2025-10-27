@@ -110,7 +110,7 @@ void log_info(const char * fmt, ...)
         }
         if (!found)
             i = 0;
-       
+
         if (threads_number > 1)
         {
             if (i+logger_offset+threads_number/2 > logger_window.ws_row)
@@ -125,6 +125,10 @@ void log_info(const char * fmt, ...)
         }
         fprintf(stderr, "%s\r", string);
     }
+
+    /* Free the allocated string from vasprintf */
+    free(string);
+
 	pthread_mutex_unlock(&logger_lock);
 }
 

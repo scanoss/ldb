@@ -19,31 +19,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#include "ldb.h"
-#include "logger.h"
 
-/* Debug function to validate sector file integrity */
-static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
-	if (!sector) return;
-	long current_pos = ftell(sector);
-	fseek(sector, 0, SEEK_END);
-	long file_size = ftell(sector);
-	fseek(sector, current_pos, SEEK_SET);
-
-	log_debug("Sector Debug Info (%s):\n", context);
-	log_debug("  Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
-	log_debug("  File size: %ld bytes\n", file_size);
-	log_debug("  Current position: %ld\n", current_pos);
-	log_debug("  Map size constant: %u\n", LDB_MAP_SIZE);
-	log_debug("  File valid: %s\n", file_size >= LDB_MAP_SIZE ? "yes" : "NO - CORRUPTED");
-}
+ #include "ldb.h"
 #include "logger.h"
 #include "ldb_error.h"
+
 /**
-  * @file node.c
-  * @date 12 Jul 2020
-  * @brief Contains functions to handle LDB nodes
- 
   * NODE STRUCTURE
   * Every data list starts with a pointer to the last node in the list, followed by the first node:
  
@@ -63,6 +44,22 @@ static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
   * d = is the data record
   * @see https://github.com/scanoss/ldb/blob/master/src/node.c
   */
+
+/* Debug function to validate sector file integrity */
+static void debug_sector_info(FILE *sector, uint8_t *key, const char *context) {
+	if (!sector) return;
+	long current_pos = ftell(sector);
+	fseek(sector, 0, SEEK_END);
+	long file_size = ftell(sector);
+	fseek(sector, current_pos, SEEK_SET);
+
+	log_debug("Sector Debug Info (%s):\n", context);
+	log_debug("  Key: %02x%02x%02x%02x\n", key[0], key[1], key[2], key[3]);
+	log_debug("  File size: %ld bytes\n", file_size);
+	log_debug("  Current position: %ld\n", current_pos);
+	log_debug("  Map size constant: %u\n", LDB_MAP_SIZE);
+	log_debug("  File valid: %s\n", file_size >= LDB_MAP_SIZE ? "yes" : "NO - CORRUPTED");
+}
 
 /**
  * @brief Gets a next node addr from the header provided and loads it into the rs list. 
@@ -540,21 +537,30 @@ uint64_t ldb_node_read_v2(ldb_sector_t *sector, struct ldb_table table, uint64_t
 		if (table.rec_ln)
 			if (actual_size > 64800)
 				actual_size = 64800; // TODO: EXPAND?
-		
-		if (out)
-			*out = calloc(actual_size + 1, 1);
 
 		/* Return the entire node */
 		if (sector->data)
 		{
-			//*out = buffer + LDB_PTR_LN + table.ts_ln;
-			if ((buffer - sector->data + actual_size) < sector->size) 
-				memcpy(*out, buffer + LDB_PTR_LN + table.ts_ln, actual_size);
+			/* When reading from RAM, return direct pointer to avoid memory allocation */
+			if ((buffer - sector->data + LDB_PTR_LN + table.ts_ln + actual_size) <= sector->size)
+			{
+				if (out)
+					*out = buffer + LDB_PTR_LN + table.ts_ln;
+			}
 			else
+			{
 				log_info("warning on sector %02x node size overflow\n", sector->id);
+				if (out)
+					*out = NULL;
+				actual_size = 0;
+			}
 		}
 		else
 		{
+			/* When reading from disk, allocate memory for the node */
+			if (out)
+				*out = calloc(actual_size + 1, 1);
+
 			if (!fread(*out, 1, actual_size, sector->file))
 			{
 				log_debug("Warning: cannot read entire LDB node\n");
@@ -564,10 +570,11 @@ uint64_t ldb_node_read_v2(ldb_sector_t *sector, struct ldb_table table, uint64_t
 		*bytes_read = actual_size;
 	}
 
-	if (!sector->data)
+	/* Free buffer if it was allocated (only when reading from disk) */
+	if (!sector->data && buffer)
 	{
 		free(buffer);
-		//fclose(sector_file);
+		buffer = NULL;
 	}
 	return next_node;
 }
