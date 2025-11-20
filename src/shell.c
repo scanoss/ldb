@@ -430,7 +430,7 @@ int main(int argc, char **argv)
 				{
 					if (!first)
 						strcat(cmd, ",");
-					strcat(cmd, "VERBOSE=1");
+					strcat(cmd, "VERBOSE=2");
 					first = false;
 				}
 
