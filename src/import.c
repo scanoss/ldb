@@ -601,6 +601,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	/* Counters */
 	uint32_t imported = 0;
 	uint32_t skipped = 0;
+	uint32_t skipped_invalid = 0;
 
 	uint64_t totalbytes = ldb_file_size(job->csv_path);
 	size_t bytecounter = 0;
@@ -684,7 +685,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				return LDB_ERROR_THREAD_ABORT;
 			}
 
-			if (skipped > (line_number * 4) / 5)
+			if (skipped_invalid > line_number / 2)
 			{
 				log_info("Aborting %s import at line %d due to excessive number of skipped lines\n", job->csv_path,line_number);
 				fclose(fp);
@@ -704,14 +705,14 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (lineln < job->opt.params.csv_fields)
 		{
 			log_debug("%s: Line %d -- Skipped, the line %s is too short (size %d)\n", job->csv_path, line_number, line, lineln);
-			skipped++;
+			skipped_invalid++;
 			continue;			
 		}
 		//skip lines starting with non alphanumeric char
 		if (!isalnum(line[0]))
 		{
 			log_debug("%s: Line %d -- Skipped, Non alphanumeric char %d on line %s\n", job->csv_path, line_number, line[0], line);
-			skipped++;
+			skipped_invalid++;
 			continue;			
 		}
 		//skip keys with the incorrect lenght.
@@ -719,21 +720,21 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (!first_comma)
 		{
 			log_debug("%s: Line %d -- Skipped, wrong csv format on line %s .\n", job->csv_path, line_number, line);
-			skipped++;
+			skipped_invalid++;
 			continue;
 		}
 		int key_len = first_comma - line;
 		if (key_len != MD5_LEN_HEX && key_len != MD5_LEN_HEX - 2)
 		{
 			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght.\n", job->csv_path, line_number, key_len);
-			skipped++;
+			skipped_invalid++;
 			continue;
 		}
 		/* Skip records with sizes out of range */
 		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
 		{
 			log_debug("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
-			skipped++;
+			skipped_invalid++;
 			continue;
 		}
 
@@ -744,7 +745,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			if (first_line_byte != first_byte)
 			{
 				log_info("%s: Line %d -- Skipped, first byte in file name does not match key first byte %02x != %02x.\n", job->csv_path, line_number, first_byte, first_line_byte);
-				skipped++;
+				skipped_invalid++;
 				continue;
 			}
 		}
@@ -763,12 +764,11 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		/* First CSV field is the data key. Data starts with the second CSV field */
 		char *data = field_n(2, line);
-		bool skip = false;
 
 		if (!data)
 		{
 			log_debug("%s: Line %d -- Skipped, data is missed %d.\n", job->csv_path, line_number);
-			skipped++;
+			skipped_invalid++;
 			continue;
 		}
 
@@ -781,7 +781,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
 			{
 				log_debug("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
-				skip = true;
+				skipped++;
+				continue;
 			}
 			else
 				memcpy(last_url_id, data, MD5_LEN * 2);
@@ -792,7 +793,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				if (!data)
 				{
 					log_debug("%s: Error in line: %d, data is missing -- %s Skipped\n", job->csv_path, line_number, line);
-					skipped++;
+					skipped_invalid++;
+					continue;
 				}
 			}
 			else
@@ -812,8 +814,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 					if (r_size <= 0)
 					{
 						log_debug("Error: failed to decode line %s. Skipping\n", line);
-						skip = true;
-					}
+						skipped_invalid++;
+						continue;					}
 				}
 				else
 					ldb_error("libscanoss_encoder.so it is not available, \".enc\" files cannot be processed\n");
@@ -827,14 +829,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			if (!skip_csv_check && (csv_fields(line) != job->opt.params.csv_fields))
 			{
 				log_debug("%s: Line %d -- Skipped, Missing CSV fields. Expected: %d.\n",job->csv_path, line_number, job->opt.params.csv_fields);
-				skip = true;
-			}
-
-			if (skip)
-			{
-				skipped++;
+				skipped_invalid++;
 				continue;
 			}
+
 		}
 
 		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
@@ -843,7 +841,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
 			{
 				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
-				skipped++;
+				skipped_invalid++;
 				continue;
 			}
 
@@ -991,7 +989,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (item_sector)
 		ldb_close_unlock(item_sector);
 
-	log_info("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
+	log_info("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped+skipped_invalid);
 
 	int fd = fileno(fp);
 	if (fclose(fp))
@@ -2208,6 +2206,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = max_threads;
 
 				log_table_config(jobs.job[jobs.sorted[i]]->table, &jobs.job[jobs.sorted[i]]->opt);
+				logger_set_level(jobs.job[jobs.sorted[i]]->opt.params.verbose);
 				logger_basic("%s",jobs.job[jobs.sorted[i]]->table);
 				if (!process_sectors(jobs.job[jobs.sorted[i]], threads_list)) {
 					log_info("Error processing sectors for table %s\n", jobs.job[jobs.sorted[i]]->table);
@@ -2237,6 +2236,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = max_threads;
 
 				log_table_config(jobs.job[jobs.unsorted[i]]->table, &jobs.job[jobs.unsorted[i]]->opt);
+				logger_set_level(jobs.job[jobs.unsorted[i]]->opt.params.verbose);
 				logger_basic("%s",jobs.job[jobs.unsorted[i]]->table);
 				if (!process_sectors(jobs.job[jobs.unsorted[i]], threads_list)) {
 					log_info("Error processing sectors for table %s\n", jobs.job[jobs.unsorted[i]]->table);
