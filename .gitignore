@@ -5,3 +5,5 @@ doc
 dist/
 *.deb
 /ldb
+
+.idea/
