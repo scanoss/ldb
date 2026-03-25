@@ -188,17 +188,17 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		if (collate->table_rec_ln) rec_size = collate->table_rec_ln;
 		else rec_size = uint32_read(rec_key + collate->rec_width - LDB_KEY_LN);
 
-		/* If record is duplicated, skip it */
-		if (rec_size == last_rec_size) if (!memcmp(data, last_data, rec_size)) continue;
+		/* Check if key is different than the last one */
+		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+
+		/* If record is duplicated (same subkey and same data), skip it */
+		if (!new_subkey && rec_size == last_rec_size && !memcmp(data, last_data, rec_size)) continue;
 
 		/* Update last record */
 		memcpy(last_data, data, rec_size);
 		last_rec_size = rec_size;
 
 		uint32_t projected_size = buffer_ptr + rec_size  + collate->table_key_ln + (2 * LDB_PTR_LN) + out_table.ts_ln;
-
-		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
 		/* If node size is exceeded, initialize buffer */
 		if (projected_size >= LDB_MAX_REC_LN)
 		{
