@@ -442,6 +442,8 @@ static bool data_compare(char * a, char * b)
 		log_debug("<<<comparing: %s / %s : %d >>\n", buffer_a, buffer_b, r);
 		if (!skip_field && r)
 			return false;
+		if (!*a || !*b)
+			break;
 		a++;
 		b++;
 		memset(buffer_a, 0, LDB_MAX_REC_LN);
@@ -465,7 +467,7 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 {
 	/* Position pointer to start of second byte in the sorted del_key array */
 	for (int i = 0; i < collate->del_tuples->tuples_number; i++)
-	{ 		
+	{
 		/*The keys are sorted, if I'm in another sector a must out*/
 		if (collate->del_tuples->tuples[i]->key[0] > key[0])
 			return false;
@@ -474,16 +476,16 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 		/* First byte is always the same, second too inside this loop. Compare bytes  2, 3 and 4 */
 		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 1, key + 1, LDB_KEY_LN -1);
-		if (mainkey != 0) 
+		if (mainkey != 0)
 			continue; //return false;
-		
+
 		/*For fixed records there is no subkey, so key hex will be empty*/
 		char key_hex1[collate->in_table.key_ln * 2 + 1];
 		char key_hex2[collate->in_table.key_ln * 2 + 1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
-		
-		/*Math the rest of the key*/
+
+		/*Match the rest of the key*/
 		if (!memcmp(subkey, &collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln))
 		{
 			bool result = true;
