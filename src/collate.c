@@ -179,6 +179,15 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	uint8_t *last_data = calloc(collate->rec_width, 1);
 	uint16_t last_rec_size = 0;
 
+	if (!buffer || !last_key || !last_data)
+	{
+		free(buffer);
+		free(last_key);
+		free(last_data);
+		fprintf(stderr, "Memory allocation failed in ldb_import_list_variable_records\n");
+		return false;
+	}
+
 	for (long data_ptr = 0; data_ptr < collate->data_ptr; data_ptr += collate->rec_width)
 	{
 		rec_key = collate->data + data_ptr;
@@ -188,17 +197,17 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		if (collate->table_rec_ln) rec_size = collate->table_rec_ln;
 		else rec_size = uint32_read(rec_key + collate->rec_width - LDB_KEY_LN);
 
-		/* If record is duplicated, skip it */
-		if (rec_size == last_rec_size) if (!memcmp(data, last_data, rec_size)) continue;
+		/* Check if key is different than the last one */
+		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+
+		/* If record is duplicated (same subkey and same data), skip it */
+		if (!new_subkey && rec_size == last_rec_size && !memcmp(data, last_data, rec_size)) continue;
 
 		/* Update last record */
 		memcpy(last_data, data, rec_size);
 		last_rec_size = rec_size;
 
 		uint32_t projected_size = buffer_ptr + rec_size  + collate->table_key_ln + (2 * LDB_PTR_LN) + out_table.ts_ln;
-
-		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
 		/* If node size is exceeded, initialize buffer */
 		if (projected_size >= LDB_MAX_REC_LN)
 		{
@@ -442,6 +451,8 @@ static bool data_compare(char * a, char * b)
 		log_debug("<<<comparing: %s / %s : %d >>\n", buffer_a, buffer_b, r);
 		if (!skip_field && r)
 			return false;
+		if (!*a || !*b)
+			return (*a == *b);
 		a++;
 		b++;
 		memset(buffer_a, 0, LDB_MAX_REC_LN);
@@ -465,7 +476,7 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 {
 	/* Position pointer to start of second byte in the sorted del_key array */
 	for (int i = 0; i < collate->del_tuples->tuples_number; i++)
-	{ 		
+	{
 		/*The keys are sorted, if I'm in another sector a must out*/
 		if (collate->del_tuples->tuples[i]->key[0] > key[0])
 			return false;
@@ -474,16 +485,16 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 		/* First byte is always the same, second too inside this loop. Compare bytes  2, 3 and 4 */
 		int mainkey = memcmp(collate->del_tuples->tuples[i]->key + 1, key + 1, LDB_KEY_LN -1);
-		if (mainkey != 0) 
+		if (mainkey != 0)
 			continue; //return false;
-		
+
 		/*For fixed records there is no subkey, so key hex will be empty*/
 		char key_hex1[collate->in_table.key_ln * 2 + 1];
 		char key_hex2[collate->in_table.key_ln * 2 + 1];
 		ldb_bin_to_hex(subkey, subkey_ln, key_hex1);
 		ldb_bin_to_hex(&collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln, key_hex2);
-		
-		/*Math the rest of the key*/
+
+		/*Match the rest of the key*/
 		if (!memcmp(subkey, &collate->del_tuples->tuples[i]->key[LDB_KEY_LN], subkey_ln))
 		{
 			bool result = true;
