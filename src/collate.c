@@ -184,7 +184,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		free(buffer);
 		free(last_key);
 		free(last_data);
-		log_error("Memory allocation failed in ldb_import_list_variable_records\n");
+		fprintf(stderr, "Memory allocation failed in ldb_import_list_variable_records\n");
 		return false;
 	}
 
