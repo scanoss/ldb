@@ -452,7 +452,7 @@ static bool data_compare(char * a, char * b)
 		if (!skip_field && r)
 			return false;
 		if (!*a || !*b)
-			break;
+			return (*a == *b);
 		a++;
 		b++;
 		memset(buffer_a, 0, LDB_MAX_REC_LN);
