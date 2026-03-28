@@ -179,6 +179,15 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	uint8_t *last_data = calloc(collate->rec_width, 1);
 	uint16_t last_rec_size = 0;
 
+	if (!buffer || !last_key || !last_data)
+	{
+		free(buffer);
+		free(last_key);
+		free(last_data);
+		log_error("Memory allocation failed in ldb_import_list_variable_records\n");
+		return false;
+	}
+
 	for (long data_ptr = 0; data_ptr < collate->data_ptr; data_ptr += collate->rec_width)
 	{
 		rec_key = collate->data + data_ptr;
