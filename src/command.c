@@ -729,6 +729,8 @@ void ldb_command_select(char *command, select_format format)
 				job.md5[MD5_LEN] = 0;
 				job.key = NULL;
 				job.decrypt = NULL;
+				job.key_ln = ldbtable.key_ln - 2;
+				job.hash_calc = ldbtable.hash_calc;
 
 				mz_cat(&job, key);
 			}
@@ -912,7 +914,11 @@ void ldb_command_dump_keys(char *command)
 	{
 			/* Assembly ldb table structure */
 			struct ldb_table ldbtable = ldb_read_cfg(dbtable);
-			ldb_dump_keys(ldbtable);
+			if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
+				(!strcmp(ldbtable.table, "sources") || !strcmp(ldbtable.table, "notices")))
+				mz_list_keys(ldbtable, -1);
+			else
+				ldb_dump_keys(ldbtable);
 	}
 
 	/* Free memory */

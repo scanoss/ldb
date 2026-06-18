@@ -73,7 +73,7 @@ int mz_key_cmp(const void * a, const void * b)
 bool mz_dump_keys_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, MZ_ID_LN(job));
 
 	ldb_hex_to_bin(job->md5, MD5_LEN * 2, job->ptr + job->ptr_ln);
 	job->ptr_ln += MD5_LEN;
@@ -120,7 +120,7 @@ void mz_dump_keys(struct mz_job *job)
 bool mz_list_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, MZ_ID_LN(job));
 
 	/* Decompress */
 	mz_deflate(job);
@@ -168,6 +168,55 @@ void mz_list(struct mz_job *job)
 }
 
 /**
+ * @brief Handler that prints each mz record key (hex) to stdout, one per line
+ *
+ * @param job pointer to mz input struct
+ * @return true Always true
+ */
+bool mz_list_keys_handler(struct mz_job *job)
+{
+	/* Assemble full key hex: file id (first 2 bytes) + record id */
+	mz_id_fill(job->md5, job->id, MZ_ID_LN(job));
+	printf("%s\n", job->md5);
+	return true;
+}
+
+/**
+ * @brief List unique keys of a whole MZ table (all sectors) to stdout
+ *
+ * @param table input table (uses db/table/key_ln/hash_calc)
+ * @param sector sector to list, or -1 for all sectors
+ */
+void mz_list_keys(struct ldb_table table, int sector)
+{
+	char sector_path[LDB_MAX_PATH] = "\0";
+
+	for (int k = sector >= 0 ? sector : 0; k <= 0xffff; k++)
+	{
+		sprintf(sector_path, "%s/%s/%s/%04x.mz", ldb_root, table.db, table.table, k);
+		if (ldb_file_exists(sector_path))
+		{
+			struct mz_job job;
+			memset(&job, 0, sizeof(job));
+			job.key_ln = table.key_ln - 2;
+			job.hash_calc = table.hash_calc;
+			strcpy(job.path, sector_path);
+
+			/* Extract first two key bytes from the file name */
+			memcpy(job.md5, basename(job.path), 4);
+
+			/* Read source mz file into memory */
+			job.mz = file_read(job.path, &job.mz_ln);
+			mz_parse(&job, mz_list_keys_handler);
+			free(job.mz);
+		}
+
+		if (sector >= 0)
+			break;
+	}
+}
+
+/**
  * @brief Handler to find if a key exist in the mz_job struct, in that case job.key will be true.
  * 
  * @param job pointer to input mz job struct
@@ -175,7 +224,7 @@ void mz_list(struct mz_job *job)
  */
 bool mz_key_exists_handler(struct mz_job *job)
 {
-	if (!memcmp(job->id, job->key + 2, MZ_MD5))
+	if (!memcmp(job->id, job->key + 2, MZ_ID_LN(job)))
 	{
 		job->key_found = true;
 		return false;
@@ -192,7 +241,7 @@ bool mz_key_exists_handler(struct mz_job *job)
  */
 bool mz_cat_handler(struct mz_job *job)
 {
-	if (!memcmp(job->id, job->key + 2, MZ_MD5))
+	if (!memcmp(job->id, job->key + 2, MZ_ID_LN(job)))
 	{
 		/* Decrypt (if encrypted) */
 		if (job->decrypt)
@@ -253,9 +302,10 @@ void mz_cat(struct mz_job *job, char *key)
 
 	sprintf(mz_path, "%s/%s.mz", job->path, mz_file_id);
 
-	/* Save path and key on job */
-	job->key = calloc(MD5_LEN, 1);
-	ldb_hex_to_bin(key, MD5_LEN * 2, job->key);	
+	/* Save path and key on job (full key = file id (2 bytes) + record id) */
+	int total_key_ln = job->key_ln > 0 ? job->key_ln + 2 : MD5_LEN;
+	job->key = calloc(total_key_ln, 1);
+	ldb_hex_to_bin(key, total_key_ln * 2, job->key);
 
 	/* Read source mz file into memory */
 	job->mz = file_read(mz_path, &job->mz_ln);
@@ -277,7 +327,7 @@ void mz_cat(struct mz_job *job, char *key)
 bool mz_extract_handler(struct mz_job *job)
 {
 	/* Fill MD5 with item id */
-	mz_id_fill(job->md5, job->id);
+	mz_id_fill(job->md5, job->id, MZ_ID_LN(job));
 
 	/* Decompress */
 	mz_deflate(job);
@@ -379,25 +429,26 @@ void file_write(char *filename, uint8_t *src, uint64_t src_ln)
  * @param id id to be found
  * @return true if the id exist
  */
-bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id)
+bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id, int id_ln)
 {
+	if (id_ln <= 0) id_ln = MZ_MD5;
 	/* Recurse mz contents */
 	uint64_t ptr = 0;
 	while (ptr < size)
 	{
 		/* Position pointers */
 		uint8_t *file_id = mz + ptr;
-		uint8_t *file_ln = file_id + MZ_MD5;
+		uint8_t *file_ln = file_id + id_ln;
 
 		/* Compare id */
-		if (!memcmp(file_id, id, MZ_MD5)) return true;
+		if (!memcmp(file_id, id, id_ln)) return true;
 
 		/* Get compressed data size */
 		uint32_t tmpln;
 		memcpy((uint8_t*)&tmpln, file_ln, MZ_SIZE);
 
 		/* Increment pointer */
-		ptr += tmpln + MZ_MD5 + MZ_SIZE;
+		ptr += tmpln + id_ln + MZ_SIZE;
 	}
 	return false;
 }
@@ -412,11 +463,12 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 {
 	/* Recurse mz contents */
 	uint64_t ptr = 0;
+	int id_ln = MZ_ID_LN(job);
 	while (ptr < job->mz_ln)
 	{
 		/* Position pointers */
 		job->id = job->mz + ptr;
-		uint8_t *file_ln = job->id + MZ_MD5;
+		uint8_t *file_ln = job->id + id_ln;
 		job->zdata = file_ln + MZ_SIZE;
 
 		/* Get compressed data size */
@@ -425,7 +477,7 @@ void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ())
 		job->zdata_ln = tmpln;
 
 		/* Get total mz record length */
-		job->ln = MZ_MD5 + MZ_SIZE + job->zdata_ln;
+		job->ln = id_ln + MZ_SIZE + job->zdata_ln;
 
 		/* Pass job to handler */
 		if (!mz_parse_handler(job)) return;
@@ -711,9 +763,10 @@ bool mz_check(char *path)
  * @param md5[out] md5 output
  * @param mz_id mz ID
  */
-void mz_id_fill(char *md5, uint8_t *mz_id)
+void mz_id_fill(char *md5, uint8_t *mz_id, int key_ln)
 {
-	for (int i = 0; i < 14; i++)
+	if (key_ln <= 0) key_ln = MZ_MD5;
+	for (int i = 0; i < key_ln; i++)
 	{
 		sprintf(md5 + 4 + 2 * i, "%02x", mz_id[i]);
 	}

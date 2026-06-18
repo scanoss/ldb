@@ -95,12 +95,12 @@ bool ldb_import_decoder_lib_load(void)
  */
 bool csv_sort(ldb_importation_config_t * config)
 {
-	if (config->opt.params.skip_sort || !ldb_file_size(config->csv_path)  )
+	if (!config->opt.params.sort || !ldb_file_size(config->csv_path)  )
 		return false;
 
 	/* Assemble command */
 	char *command = malloc(5 * LDB_MAX_PATH);
-	snprintf(command, 5 * LDB_MAX_PATH,"sort -T %s -u -o %s.tmp %s && mv %s.tmp %s", config->tmp_path, config->csv_path, config->csv_path,
+	snprintf(command, 5 * LDB_MAX_PATH,"sort -T %s -u -o %s.tmp %s && mv %s.tmp %s", config->opt.params.tmp_path, config->csv_path, config->csv_path,
 																					config->csv_path, config->csv_path);
 	
 	log_info("Sorting %s\n", config->csv_path);
@@ -395,7 +395,8 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	/* Lock DB */
 	//ldb_unlock(lock_file);
 
-	return true;
+	/* Return NOERROR so the caller (ldb_import) runs the post-import collation */
+	return LDB_ERROR_NOERROR;
 }
 
 /**
@@ -442,11 +443,12 @@ char *field_n(int n, char *data)
  * @param is_file_table true for processing a file table
  * @return true if succed
  */
-bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *itemid, uint8_t *field2, bool is_file_table)
+bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *itemid, uint8_t *field2, bool is_file_table, int hash_len)
 {
+	int hash_len_hex = hash_len * 2;
 
-	/* File ID is only the last 15 bytes (first byte should be in the file name) */
-	if (line[30] == ',')
+	/* File ID is only the last (hash_len-1) bytes (first byte should be in the file name) */
+	if (line[hash_len_hex - 2] == ',')
 	{
 		if (!got_1st_byte)
 		{
@@ -454,18 +456,18 @@ bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *
 			return false;
 		}
 
-		/* Concatenate first_byte and 15 remaining bytres into itemid */
+		/* Concatenate first_byte and remaining bytes into itemid */
 		else
 		{
 			/* Add 1st byte */
 			*itemid = first_byte;
 
-			/* Convert remaining 15 bytes */
-			ldb_hex_to_bin(line, MD5_LEN_HEX - 2, itemid + 1);
+			/* Convert remaining bytes */
+			ldb_hex_to_bin(line, hash_len_hex - 2, itemid + 1);
 
 			/* Convert urlid if needed (file table) */
 			if (is_file_table)
-				ldb_hex_to_bin(line + (MD5_LEN_HEX - 2 + 1), MD5_LEN_HEX, field2);
+				ldb_hex_to_bin(line + (hash_len_hex - 2 + 1), hash_len_hex, field2);
 		}
 	}
 
@@ -473,21 +475,21 @@ bool file_id_to_bin(char *line, uint8_t first_byte, bool got_1st_byte, uint8_t *
 	else
 	{
 		/* Convert item id */
-		ldb_hex_to_bin(line, MD5_LEN_HEX, itemid);
+		ldb_hex_to_bin(line, hash_len_hex, itemid);
 
 		/* Convert url id if needed (file table) */
 		if (is_file_table)
-			ldb_hex_to_bin(field_n(2, line), MD5_LEN_HEX, field2);
+			ldb_hex_to_bin(field_n(2, line), hash_len_hex, field2);
 	}
 
 	uint8_t zero_md5[MD5_LEN] = {0xd4,0x1d,0x8c,0xd9,0x8f,0x00,0xb2,0x04,0xe9,0x80,0x09,0x98,0xec,0xf8,0x42,0x7e}; //empty string md5
 
-	if (!memcmp(itemid,zero_md5, MD5_LEN)) //the md5 key of an empty string must be skipped.
+	if (hash_len == MD5_LEN && !memcmp(itemid,zero_md5, MD5_LEN)) //the md5 key of an empty string must be skipped.
 		return false;
-	
-	memset(zero_md5, 0, MD5_LEN); // al zeros md5 must be skippets
 
-	if (!memcmp(itemid,zero_md5, MD5_LEN))
+	memset(zero_md5, 0, MD5_LEN); // all zeros key must be skipped
+
+	if (!memcmp(itemid,zero_md5, hash_len))
 		return false;
 
 
@@ -519,9 +521,9 @@ int ldb_import_mz(ldb_importation_config_t * job)
 	sprintf(dest_path, "%s/%s/%s/%s", ldb_root, job->dbname, job->table, basename(job->csv_path));
 	
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
+		ldb_create_table_new(job->dbname, job->table, job->opt.params.key_size, 0, job->opt.params.keys_number, LDB_TABLE_DEFINITION_MZ |
 						(job->opt.params.binary_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD));
-	
+
 	return (ldb_bin_join(job->csv_path, dest_path, job->opt.params.overwrite, false, job->opt.params.delete_after_import));
 }
 
@@ -537,8 +539,10 @@ int ldb_import_mz(ldb_importation_config_t * job)
 int ldb_import_csv(ldb_importation_config_t * job)
 {
 	bool bin_mode = false;
-	bool skip_csv_check = job->opt.params.skip_fields_check;
+	bool skip_csv_check = !job->opt.params.validate_fields;
 	bool sectors_modified[256] = {false};
+	int hash_len = job->opt.params.key_size;
+	int hash_len_hex = hash_len * 2;
 	if (job->opt.params.binary_mode || strstr(job->csv_path, ".enc"))
 	{
 		bin_mode = true;
@@ -559,20 +563,20 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	ssize_t lineln;
 
 	/* A CSV line should contain at least an MD5, a comma separator per field and a LF */
-	int min_line_size = 2 * MD5_LEN + expected_fields;
+	int min_line_size = 2 * hash_len + expected_fields;
 
 	/* Node size is a 16-bit int */
 	int node_limit = 65536;
 
-	uint8_t *itemid = calloc(MD5_LEN, 1);
-	uint8_t *field2 = calloc(MD5_LEN, 1);
+	uint8_t *itemid = calloc(hash_len, 1);
+	uint8_t *field2 = calloc(hash_len, 1);
 	uint8_t *item_buf = malloc(LDB_MAX_NODE_LN);
-	uint8_t *item_lastid = calloc(MD5_LEN * 2 + 1, 1);
+	uint8_t *item_lastid = calloc(hash_len * 2 + 1, 1);
 	uint16_t item_ptr = 0;
 	FILE *item_sector = NULL;
 	uint16_t item_rg_start = 0; // record group size
 	uint16_t item_rg_size = 0;	// record group size
-	char last_id[MD5_LEN * 2 + 1 -2]; //save last 30th chars from the last md5.
+	char last_id[hash_len * 2 + 1 -2]; //save last 30th chars from the last md5.
 	memset(last_id, 0, sizeof(last_id));
 
 	/* Counters */
@@ -595,7 +599,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		ldb_create_database(job->dbname);
 
 	if (!ldb_table_exists(job->dbname, job->table))
-		ldb_create_table_new(job->dbname, job->table, 16, 0, job->opt.params.keys_number, 
+		ldb_create_table_new(job->dbname, job->table, hash_len, 0, job->opt.params.keys_number, 
 							bin_mode ? LDB_TABLE_DEFINITION_ENCRYPTED : LDB_TABLE_DEFINITION_STANDARD);
 	pthread_mutex_unlock(&lock);
 
@@ -617,8 +621,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	if (job->opt.params.overwrite)
 		oss_bulk.tmp = true;
 
-	int field2_ln = (oss_bulk.keys - 1) * MD5_LEN;
-	char last_url_id[MD5_LEN_HEX+1] = "\0";
+	int field2_ln = (oss_bulk.keys - 1) * hash_len;
+	char last_url_id[hash_len_hex+1];
+	last_url_id[0] = 0;
 
 	/* Lock DB */
 	char lock_file[LDB_MAX_PATH];
@@ -641,7 +646,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		}
 		//skip keys with the incorrect lenght.
 		int key_len = strchr(line, ',') - line;
-		if (key_len != MD5_LEN_HEX && key_len != MD5_LEN_HEX - 2)
+		if (key_len != hash_len_hex && key_len != hash_len_hex - 2)
 		{
 			log_debug("%s: Line %d -- Skipped, %d Incorrect key lenght.\n", job->csv_path, line_number, key_len);
 			skipped++;
@@ -662,10 +667,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		/* Check if this ID is the same as last */
 		bool dup_id = false;
-		if (!memcmp(last_id, line, MD5_LEN * 2 - 2)) //compare 30 chars of the md5
+		if (!memcmp(last_id, line, hash_len * 2 - 2)) //compare 30 chars of the md5
 			dup_id = true;
 		else
-			memcpy(last_id, line, MD5_LEN * 2 - 2); //copy 30 chars of the md5
+			memcpy(last_id, line, hash_len * 2 - 2); //copy 30 chars of the md5
 
 		/* First CSV field is the data key. Data starts with the second CSV field */
 		char *data = field_n(2, line);
@@ -683,13 +688,13 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (oss_bulk.keys > 1)
 		{
 			/* Skip line if the URL is the same as last, importing unique files per url */
-			if (dup_id && *last_url_id && !memcmp(data, last_url_id, MD5_LEN * 2))
+			if (dup_id && *last_url_id && !memcmp(data, last_url_id, hash_len * 2))
 			{
 				log_debug("%s: Line %d -- Skipped, repeated URL ID.\n", job->csv_path, line_number);
 				skip = true;
 			}
 			else
-				memcpy(last_url_id, data, MD5_LEN * 2);
+				memcpy(last_url_id, data, hash_len * 2);
 			
 			if (job->opt.params.csv_fields > 2)
 			{
@@ -745,7 +750,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
 		{
 			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false))
+			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false, hash_len))
 			{
 				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
 				skipped++;
@@ -755,13 +760,13 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			/* Check if we have a whole new key (first 4 bytes), or just a new subkey (last 12 bytes) */
 			bool new_key = first_record ? true : (memcmp(itemid, item_lastid, 4) != 0);
 			first_record = false;
-			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, MD5_LEN) != 0);
+			bool new_subkey = new_key ? true : (memcmp(itemid, item_lastid, hash_len) != 0);
 			/* If we have a new main key, or we exceed node size, we must flush and and initialize buffer */
-			if (new_key || (item_ptr + 5 * LDB_PTR_LN + MD5_LEN + 2 * REC_SIZE_LEN + r_size) >= node_limit)
+			if (new_key || (item_ptr + 5 * LDB_PTR_LN + hash_len + 2 * REC_SIZE_LEN + r_size) >= node_limit)
 			{
 				/* Write buffer to disk and initialize buffer */
 				if (item_rg_size > 0)
-					uint16_write(item_buf + item_rg_start + 12, item_rg_size);
+					uint16_write(item_buf + item_rg_start + (hash_len - LDB_KEY_LN), item_rg_size);
 				
 				if (item_ptr)
 				{
@@ -798,12 +803,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			{
 				/* Write size of previous record group */
 				if (item_rg_size > 0)
-					uint16_write(item_buf + item_rg_start + 12, item_rg_size);
+					uint16_write(item_buf + item_rg_start + (hash_len - LDB_KEY_LN), item_rg_size);
 				item_rg_start = item_ptr;
 
 				/* K: Add remaining part of key to buffer */
-				memcpy(item_buf + item_ptr, itemid + 4, MD5_LEN - LDB_KEY_LN);
-				item_ptr += MD5_LEN - LDB_KEY_LN;
+				memcpy(item_buf + item_ptr, itemid + 4, hash_len - LDB_KEY_LN);
+				item_ptr += hash_len - LDB_KEY_LN;
 
 				/* GS: Add record group size (zeroed) */
 				uint16_t zero = 0;
@@ -811,7 +816,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				item_ptr += REC_SIZE_LEN;
 
 				/* Update item_lastid */
-				memcpy(item_lastid, itemid, MD5_LEN);
+				memcpy(item_lastid, itemid, hash_len);
 
 				/* Update variables */
 				item_rg_size = 0;
@@ -842,7 +847,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	/* Flush buffer */
 	if (item_rg_size > 0)
-		uint16_write(item_buf + item_rg_start + MD5_LEN - LDB_KEY_LN, item_rg_size);
+		uint16_write(item_buf + item_rg_start + hash_len - LDB_KEY_LN, item_rg_size);
 	
 	if (item_ptr)
 	{
@@ -1085,17 +1090,19 @@ bool version_import(ldb_importation_config_t *job)
 }
 
 const char * config_parameters[] = {
-									"CSV_DEL",
+									"FILE_DEL",
 									"KEYS",
+									"KEY_SIZE",
 									"OVERWRITE",
-									"SKIP_SORT",
+									"SORT",
 									"VALIDATE_VERSION",
 									"VERBOSE",
 									"MZ",
 									"BIN",
 									"WFP",
 									"FIELDS",
-									"SKIP_FIELDS_CHECK",
+									"VALIDATE_FIELDS",
+									"THREADS",
 									"COLLATE",
 									"MAX_RECORD",
 									"MAX_RAM_PERCENT",
@@ -1105,92 +1112,146 @@ const char * config_parameters[] = {
 #define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
 #define LDB_IMPORTATION_CONFIG_DEFAULT {.delete_after_import = 0,\
 										.keys_number = 1,\
+										.key_size = 16,\
 										.overwrite = 0,\
-										.skip_sort = 0,\
-										.version_validation = 0,\
+										.sort = 1,\
+										.version_validation = 1,\
 										.verbose = 0,\
 										.is_mz_table = 0,\
 										.binary_mode = 0,\
 										.is_wfp_table = 0,\
 										.csv_fields = 1,\
-										.skip_fields_check = 0,\
+										.validate_fields = 1,\
+										.threads = get_nprocs() / 2,\
 										.collate = 0,\
 										.collate_max_rec = 1024,\
 										.collate_max_ram_percent = 50}
 
-bool ldb_importation_config_parse(ldb_importation_config_t * config, char * line)
+#define LDB_IMPORTATION_CONFIG_UNDEFINED {.delete_after_import = -1,\
+										.keys_number = -1,\
+										.key_size = -1,\
+										.overwrite = -1,\
+										.sort = -1,\
+										.version_validation = -1,\
+										.verbose = -1,\
+										.is_mz_table = -1,\
+										.binary_mode = -1,\
+										.is_wfp_table = -1,\
+										.csv_fields = -1,\
+										.validate_fields = -1,\
+										.threads = -1,\
+										.collate = -1,\
+										.collate_max_rec = -1,\
+										.collate_max_ram_percent = 50}
+
+
+bool ldb_importation_config_parse(import_params_t * opt, char * line)
 {
-	if (!config)
-		return false;
-//first normalize the line
-	char normalized[LDB_MAX_COMMAND_SIZE];
-	char no_spaces[LDB_MAX_COMMAND_SIZE];
-	char * line_c = line;
-	int i = 0;
+    if (!opt)
+        return false;
 
-	do
+    // Normalize the line
+    char normalized[LDB_MAX_COMMAND_SIZE];
+    char no_spaces[LDB_MAX_COMMAND_SIZE];
+    char *line_c = line;
+    int i = 0;
+    do
+    {
+        // Skip spaces and unwanted characters
+        if (*line_c == ' ' || *line_c == '(' || *line_c == ')' || *line_c == ':' || *line_c == '\n')
+            continue;
+
+        // Remove casing and normalize
+        no_spaces[i] = *line_c;
+        normalized[i] = toupper(*line_c);
+        i++;
+    } while (*(line_c++) && i < LDB_MAX_COMMAND_SIZE);
+
+    normalized[i] = 0;
+
+    // Use strtok_r instead of strtok
+    char *saveptr;  // Pointer for strtok_r state
+    char *key_value = strtok_r(normalized, ",", &saveptr);
+
+    while (key_value != NULL) 
+    {
+        for (int i = 0; i < CONFIG_PARAMETERS_NUMBER; i++)
+        {
+            int val = 0;
+            char *param = key_value;
+
+            // Compare with known parameters
+            if (strncmp(config_parameters[i], param, strlen(config_parameters[i])))
+                continue;
+
+            // Find '=' sign to get the value
+            param = strchr(param, '=');
+
+            if (!strcmp(config_parameters[i], "TMP_PATH"))
+            {
+                // Copy TMP_PATH value
+                strncpy(opt->params.tmp_path, no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
+
+                // Remove unwanted characters like ')' or ','
+                char *c = strchr(opt->params.tmp_path, ',');
+                if (c)
+                    *c = 0;
+                else
+                {
+                    c = strrchr(opt->params.tmp_path, ')');
+                    if (c)
+                        *c = 0;
+                }
+            }
+            else if (sscanf(param, "=%d", &val))
+            {
+                // Assign the value to the appropriate parameter
+                opt->params_arr[i] = val;
+            }
+
+            // Uncomment the line below for debugging
+            // printf("%d - found %s = %d\n", i, config_parameters[i], val);
+        }
+        key_value = strtok_r(NULL, ",", &saveptr);  // Use strtok_r to get the next token
+    }
+    return true;
+}
+
+//cmd_in take precedency of the global cfg
+static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
+{
+	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	for (int i = 0; i < IMPORT_PARAMS_NUMBER; i++)
 	{
-		//skip spaces
-		if (*line_c == ' ')
-			continue;
-		// remove casing
-		no_spaces[i] = *line_c;
-		normalized[i] = toupper(*line_c);
-		i++;
-	} while (*(line_c++) && i < LDB_MAX_COMMAND_SIZE);
-	
-	normalized[i] = 0;
-
-	for (int i = 0; i < CONFIG_PARAMETERS_NUMBER; i++)
-	{
-		char * param = strstr(normalized, config_parameters[i]);
-		int val = 0;
-		if (!param)
-			continue;
-		param = strchr(param,'=');
-		
-		if (sscanf(param,"=%d", &val))
+		if (i == IMPORT_PARAMS_NUMBER -1 && strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
 		{
-				config->opt.params_arr[i] = val;
+			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
 		}
-		
-		else if (!strcmp(config_parameters[i], "TMP_PATH"))
+		else if (cmd_in->params_arr[i] > -1)
 		{
-			strncpy(config->tmp_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
-			//remove spurius ")" or "," from path TODO: improve
-			char * c = strchr(config->tmp_path,',');
-			if (c)
-				*c = 0;
-			else
-			{
-				 c = strrchr(config->tmp_path,')');	
-				 if (c)
-				 	*c = 0;
-			} 
+			cfg->params_arr[i] = cmd_in->params_arr[i];
 		}
-
-		//printf("%d - found %s = %d\n", i, config_parameters[i], val);
 	}
-	return true;
 }
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	char config[] = "GLOBAL: (MAX_RECORD=2048, TMP_PATH=/tmp)\n"
-					"sources: (MZ=1)\n"
-					"notices: (MZ=1)\n"
-					"attribution: (FIELDS=2)\n"
-					"purl: (SKIP_FIELDS_CHECK=1, OVERWRITE=1)\n"
-					"dependency: (FIELDS=5, OVERWRITE=1)\n"
-					"license: (FIELDS=3)\n"
-					"copyright: (FIELDS=3)\n"
-					"vulnerability: (FIELDS=10, OVERWRITE=1)\n"
-					"quality: (FIELDS=3)\n"
-					"cryptography: (FIELDS=3)\n"
-					"url: (FIELDS=8)\n"
-					"file: (KEYS=2, FIELDS=3)\n"
-					"pivot: (KEYS=2, FIELDS=2, SKIP_FIELDS_CHECK=1)\n"
-					"wfp: (WFP=1)\n";
+	#define DEFAULT_CONFIG_STRING "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=%d, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"\
+					"sources: (MZ=1, KEYS=1)\n"\
+					"notices: (MZ=1, KEYS=1)\n"\
+					"attribution: (KEYS=1, FIELDS=2)\n"\
+					"purl: (KEYS=1, OVERWRITE=1, VALIDATE_FIELDS=0)\n"\
+					"dependency: (KEYS=1, FIELDS=5, OVERWRITE=1)\n"\
+					"license: (KEYS=1, FIELDS=3)\n"\
+					"copyright: (KEYS=1, FIELDS=3)\n"\
+					"vulnerability: (KEYS=1, FIELDS=10, OVERWRITE=1)\n"\
+					"quality: (KEYS=1, FIELDS=3)\n"\
+					"cryptography: (KEYS=1, FIELDS=3)\n"\
+					"url: (KEYS=1, FIELDS=8)\n"\
+					"file: (KEYS=2, FIELDS=3)\n"\
+					"pivot: (KEYS=2, FIELDS=2, VALIDATE_FIELDS=0)\n"\
+					"semgrep: (KEYS=1, FIELDS=5)\n"\
+					"wfp: (WFP=1, KEYS=1)\n"
 	
 	char config_path[LDB_MAX_PATH] = "";
 	
@@ -1198,21 +1259,39 @@ bool ldb_create_db_config_default(char * dbname)
 	
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, dbname);
 	FILE *cfg = fopen(config_path, "w+");
+	char * config = NULL;
+	int threads = get_nprocs() / 2;
+	asprintf(&config, DEFAULT_CONFIG_STRING, threads > 0 ? threads : 1);
 	if (cfg)
 	{
 		fputs(config, cfg);
+		free(config);
 		fclose(cfg);
 		return true;
 	}
+	free(config);
 	return false;
 }
 
-static int load_import_config(ldb_importation_config_t * config)
+void log_table_config(char * name, import_params_t * opt)
+{
+	if (!(name && opt) || !*name)
+		return;
+	
+	log_info("%s configuration: (KEYS=%d, KEY_SIZE=%d, VALIDATE_FIELDS=%d, FIELDS=%d, VALIDATE_VERSION=%d, SORT=%d, FILE_DEL=%d, OVERWRITE=%d, WFP=%d, MZ=%d, VERBOSE=%d, THREADS=%d, COLLATE=%d, MAX_RECORD=%d, MAX_RAM_PERCENT=%d, TMP_PATH=%s)\n",
+	name, opt->params.keys_number, opt->params.key_size, opt->params.validate_fields, opt->params.csv_fields, opt->params.version_validation, opt->params.sort, opt->params.delete_after_import, opt->params.overwrite, opt->params.is_wfp_table, opt->params.is_mz_table, opt->params.verbose,
+	opt->params.threads, opt->params.collate, opt->params.collate_max_rec, opt->params.collate_max_ram_percent, opt->params.tmp_path);
+}
+
+static int load_import_config(ldb_importation_config_t * config, import_params_t * common)
 {
 	char config_path[LDB_MAX_PATH] = "";
 	sprintf(config_path,"%s%s.conf", LDB_CFG_PATH, config->dbname);
 	int result = -1;
 	bool found = false;
+	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	config->opt = def;
+	common->params = def.params;
 	
 	if (ldb_file_exists(config_path))
 	{
@@ -1233,12 +1312,13 @@ static int load_import_config(ldb_importation_config_t * config)
 				strncpy(table_test, line, separator - line);
 
 				const char global_def[]= "GLOBAL";			
-				if (!strcmp(table_test, global_def))
+				if (!strcmp(table_test, global_def) && result < 0) // force global config on the top of the file
 				{
 				//	if (config->opt.params.verbose)
 				//		fprintf(stderr, "The table %s is defined at %s as GLOBAL, some parameter may be overwritten\n", config->table, config_path);
 					
-					ldb_importation_config_parse(config, line + strlen(global_def));
+					ldb_importation_config_parse(common, line + strlen(global_def));
+					opt_add(common, &config->opt);
 				}
 				else
 				{
@@ -1249,9 +1329,18 @@ static int load_import_config(ldb_importation_config_t * config)
 				{
 				//	if (config->opt.params.verbose)
 				//		fprintf(stderr, "The table %s is defined at %s, some parameter may be overwritten\n", config->table, config_path);
-					ldb_importation_config_parse(config, line + strlen(config->table));
+					//KEYS parameter MUST BE defined
+					if (strstr(line, "KEYS"))
+					{
+						ldb_importation_config_parse(&config->opt, line + strlen(config->table));
+					}
+					else
+					{
+						fprintf(stderr, "Error in table %s definitions from %s\n", table_test, config_path);
+						ldb_error("\"KEYS\" field must be defined. Please solve the error and retry the importation\n");
+					}
 					found = true;
-					free(line);
+					free(line);	
 					break;
 				}
 
@@ -1404,12 +1493,8 @@ int ldb_import(ldb_importation_config_t * job)
 	ldb_importation_config_t config = *job;
 
 	logger_set_level(config.opt.params.verbose);
-	if (config.opt.params.version_validation && !version_import(&config))
-	{
-		logger_basic("Failed to validate version.json, check if it is present in %s and it has the correct format\n", config.path);
-		exit(EXIT_FAILURE);
-	}
-	
+	/* version.json validation is handled once per import command in ldb_import_command */
+
 	if (strstr(config.csv_path, ".mz"))
 		config.opt.params.is_mz_table = true;
 	else
@@ -1433,18 +1518,18 @@ int ldb_import(ldb_importation_config_t * job)
 		pthread_mutex_unlock(&lock);
 	}
 
-	if (!config.tmp_path)
+	if (!*config.opt.params.tmp_path)
 	{
-		sprintf(config.tmp_path, DEFAULT_TMP_PATH);
+		sprintf(config.opt.params.tmp_path, DEFAULT_TMP_PATH);
 	}
-	
+
 	if (config.opt.params.is_mz_table)
 	{
 		result = ldb_import_mz(&config);
 	}
 	else if (config.opt.params.is_wfp_table)
 	{
-		if (bin_sort(config.csv_path, config.opt.params.skip_sort))
+		if (bin_sort(config.csv_path, !config.opt.params.sort))
 			result = ldb_import_snippets(&config);
 	}
 	else
@@ -1496,7 +1581,8 @@ struct ldb_importation_jobs_s
 	int sorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted[LDB_DEFAULT_TABLES_NUMBER];
 	int unsorted_index;
-	import_params_t common_opt;
+	import_params_t * user_opt;
+	import_params_t * global_opt;
 };
 
 static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, char * father)
@@ -1538,8 +1624,8 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				jobs->job = realloc(jobs->job, ((jobs->number+1) * sizeof(ldb_importation_config_t*)));
 				jobs->job[jobs->number] = calloc(1, sizeof(ldb_importation_config_t));
 				/* load default config*/
-				import_params_t opt = jobs->common_opt;
-				jobs->job[jobs->number]->opt = opt;
+				import_params_t opt_def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+				jobs->job[jobs->number]->opt = opt_def;
 				strcpy(jobs->job[jobs->number]->dbname, jobs->dbname);
 				strncpy(jobs->job[jobs->number]->table, table_name, LDB_MAX_NAME);
 				
@@ -1552,7 +1638,11 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 				/*dir of the job*/
 				snprintf(jobs->job[jobs->number]->path, LDB_MAX_PATH, "%s", dirname(path));
 				
-				int sort = load_import_config(jobs->job[jobs->number]);
+				//load of the configuration of the table (if it is defined).
+				int sort = load_import_config(jobs->job[jobs->number], jobs->global_opt);
+				//force stdin command priority
+				opt_add(jobs->user_opt, &jobs->job[jobs->number]->opt);
+				
 				if (sort >= 0)
 					jobs->sorted[sort] = jobs->number;
 				else
@@ -1560,6 +1650,7 @@ static void recurse_directory(struct ldb_importation_jobs_s * jobs, char *name, 
 					jobs->unsorted[jobs->unsorted_index] = jobs->number;
 					jobs->unsorted_index++;
 				}
+				
 				jobs->number++;
 			}
 			free(table_name);
@@ -1749,21 +1840,17 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 
 	signal(SIGINT, signalHandler);
 	srand(time(NULL));
-
+	import_params_t user_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
+	import_params_t global_opt = {.params = LDB_IMPORTATION_CONFIG_UNDEFINED};
 	ldb_importation_config_t job = {.opt.params = LDB_IMPORTATION_CONFIG_DEFAULT, .csv_path = "\0", .path = "\0"};
-	
-	char *table = strchr(dbtable, '/');
 
+	char *table = strrchr(dbtable, '/');
 	if (table)
 		strncpy(job.dbname, dbtable, table - dbtable);
 	else
 		strcpy(job.dbname, dbtable);
-	
-	ldb_importation_config_parse(&job, config);
-	if (job.opt.params.verbose)
-		logger_set_level(LOG_INFO);
-
-	if (!table || !*config) 
+	//look for the configuration on the KB config file
+	//if (!table || !*config) 
 	{
 		char config_path[LDB_MAX_PATH] = "";
 		sprintf(config_path,"%s%s.conf", LDB_CFG_PATH,job.dbname);
@@ -1774,11 +1861,18 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 				ldb_error("Error creating ldb default config\n");
 		}
 	}
+	//Parse the stdin configuration
+	if (*config)
+	{
+		ldb_importation_config_parse(&user_opt, config);
+		if (user_opt.params.verbose > 0)
+			logger_set_level(user_opt.params.verbose);
+	}
 
 	if (!ldb_database_exists(job.dbname))
 		ldb_create_database(job.dbname);
-
-	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .common_opt = job.opt};
+	
+	struct ldb_importation_jobs_s jobs = {.job = NULL, .number = 0, .user_opt = &user_opt, .global_opt = &global_opt};
 	strcpy(jobs.dbname, job.dbname);
 	jobs.unsorted_index = 0;
 	for (int i = 0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
@@ -1787,19 +1881,31 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		jobs.unsorted[i] = -1;
 	}
 
-	max_threads = get_nprocs() / 2;
-	fprintf(stderr, "Max threads set to: %d\n", max_threads);
-	pthread_mutex_init(&lock, NULL);
-
-	threads_list = calloc(max_threads, sizeof(pthread_t));
-	
-	logger_init(job.dbname, max_threads, threads_list);
-
 	if (!table && ldb_dir_exists(path))
 	{
 		strcpy(job.path, path);
-		recurse_directory(&jobs, path, NULL);		
+			//check if the version file is present and update the kb version.
+		bool version_present = version_import(&job);
+
+		recurse_directory(&jobs, path, NULL);
+		opt_add(jobs.user_opt, jobs.global_opt);
+		opt_add(jobs.global_opt, jobs.user_opt);
+
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (jobs.user_opt->params.version_validation && !version_present)
+		{
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
+			exit(EXIT_FAILURE);
+		}
+
 		print_jobs(&jobs);
+		max_threads = jobs.user_opt->params.threads;
+		fprintf(stderr, "Max threads set to: %d\n", max_threads);
+		pthread_mutex_init(&lock, NULL);
+		threads_list = calloc(max_threads, sizeof(pthread_t));
+		logger_init(job.dbname, max_threads, threads_list);
+		log_table_config("GLOBAL", jobs.user_opt);
 		/* Process jobs*/
 		for (int i=0; i < LDB_DEFAULT_TABLES_NUMBER; i++)
 		{
@@ -1811,6 +1917,7 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 				else
 					lines_to_add = max_threads;
 				
+				log_table_config(jobs.job[jobs.sorted[i]]->table, &jobs.job[jobs.sorted[i]]->opt);
 				logger_basic("%s",jobs.job[jobs.sorted[i]]->table);
 				process_sectors(jobs.job[jobs.sorted[i]], threads_list);
 				free(jobs.job[jobs.sorted[i]]);
@@ -1829,6 +1936,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 					lines_to_add = 1;
 				else
 					lines_to_add = max_threads;
+				
+				log_table_config(jobs.job[jobs.unsorted[i]]->table, &jobs.job[jobs.unsorted[i]]->opt);
 				logger_basic("%s",jobs.job[jobs.unsorted[i]]->table);
 				process_sectors(jobs.job[jobs.unsorted[i]], threads_list);
 				free(jobs.job[jobs.unsorted[i]]);
@@ -1852,7 +1961,27 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		{
 			strcpy(job.path,path);
 		}
-		load_import_config(&job);
+
+		load_import_config(&job, &global_opt);
+		opt_add(&user_opt, &global_opt);
+		opt_add(&user_opt, &job.opt);
+
+		bool version_present = version_import(&job);
+		//abort the job if VERSION_VALIDATION is active and the json file is not present
+		if (job.opt.params.version_validation && !version_present)
+		{
+			fprintf(stderr, "Failed to validate version.json, check if it is present in %s and it has the correct format\n", job.path);
+			fprintf(stderr, "You can avoid this error by setting \"VALIDATE_VERSION = 0\" in the import configuration options\n");
+			exit(EXIT_FAILURE);
+		}
+
+		max_threads = job.opt.params.threads;
+		fprintf(stderr, "Max threads set to: %d\n", max_threads);
+		pthread_mutex_init(&lock, NULL);
+		threads_list = calloc(max_threads, sizeof(pthread_t));
+		logger_init(job.dbname, max_threads, threads_list);
+		log_table_config(job.table, &job.opt);
+		//exit(1);
 		process_sectors(&job, threads_list);
 	}
 	else

@@ -17,6 +17,11 @@
 #include <unistd.h>
 
 #include "definitions.h"
+
+/* Key/hash calculation primitive (shared via libldb).
+ * Lets a table compute its keys with MD5 (ldb_md5/md5_string) or CRC64 (ldb_crc64). */
+typedef void (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
+
 struct ldb_table
 {
 	char db[LDB_MAX_NAME];
@@ -28,7 +33,8 @@ struct ldb_table
 	int keys;
 	uint8_t *current_key;
 	uint8_t *last_key;
-	int definitions;	// Table definitions: is MZ? is encrypted? 
+	int definitions;	// Table definitions: is MZ? is encrypted?
+	hash_calc_t hash_calc;	// Hash primitive used to compute this table's keys (NULL = MD5)
 };
 
 struct ldb_recordset

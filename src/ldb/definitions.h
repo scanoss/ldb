@@ -16,11 +16,19 @@
 #define MD5_LEN 16
 #define MD5_LEN_HEX 32
 #define BUFFER_SIZE 1048576
+#define MAX_CSV_LINE_LEN 1024
 
 extern char ldb_root[];
 extern char ldb_lock_path[];
 extern char *ldb_commands[];
 extern int ldb_commands_count;
 extern int ldb_cmp_width;
+
+/* Global key/hash size selector (exposed via libldb for third-party consumers).
+ * Defaults to MD5_LEN (16). Set to 8 to operate with CRC64 keys. */
+extern int hash_len;
+#define HASH_LEN hash_len
+#define HASH_LEN_HEX (hash_len * 2)
+void hash_set_size(int size);
 
 #endif

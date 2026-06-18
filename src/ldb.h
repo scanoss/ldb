@@ -101,4 +101,6 @@ uint8_t * md5_file(char *path);
 
 #define MD5(a, b, c)  md5_string(a, b, c)
 
+void ldb_crc64(const unsigned char * data, int len, uint8_t * output);
+
 #endif

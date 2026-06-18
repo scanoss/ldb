@@ -177,6 +177,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	/* Last record checksum to skip duplicates */
 	uint8_t *last_data = calloc(collate->rec_width, 1);
 	uint16_t last_rec_size = 0;
+	bool first_record = true;
 
 	for (long data_ptr = 0; data_ptr < collate->data_ptr; data_ptr += collate->rec_width)
 	{
@@ -196,8 +197,11 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 
 		uint32_t projected_size = buffer_ptr + rec_size  + collate->table_key_ln + (2 * LDB_PTR_LN) + out_table.ts_ln;
 
-		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+		/* Check if key is different than the last one (always start a group on the
+		   first record: an all-zero subkey would otherwise collide with the zeroed
+		   last_key and the record group header would never be written) */
+		new_subkey = first_record || (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+		first_record = false;
 		/* If node size is exceeded, initialize buffer */
 		if (projected_size >= LDB_MAX_REC_LN)
 		{
@@ -441,8 +445,10 @@ static bool data_compare(char * a, char * b)
 		log_debug("<<<comparing: %s / %s : %d >>\n", buffer_a, buffer_b, r);
 		if (!skip_field && r)
 			return false;
-		a++;
-		b++;
+		/* Advance past the field separator only; never read past the end of the
+		   string (doing so was undefined behaviour that depended on heap layout) */
+		if (*a == ',') a++;
+		if (*b == ',') b++;
 		memset(buffer_a, 0, LDB_MAX_REC_LN);
 		memset(buffer_b, 0, LDB_MAX_REC_LN);
 	}
@@ -524,7 +530,7 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 
 				if (result)
 				{
-					char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln, 
+					char * aux = strndup((char*)data + (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln,
 										size - (collate->del_tuples->keys_number - 1) * collate->del_tuples->key_ln);
 
 					result = data_compare(collate->del_tuples->tuples[i]->data + char_to_skip, aux);

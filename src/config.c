@@ -87,7 +87,7 @@ bool ldb_load_cfg(char *db, char *table, struct ldb_recordset *rs)
  */
 struct ldb_table ldb_read_cfg(char *db_table)
 {
-	struct ldb_table tablecfg = {.db = "\0", .table = "\0", .key_ln = 16, .rec_ln = 0, .keys = 1, .tmp = false, .ts_ln = 2, .definitions = LDB_TABLE_DEFINITION_UNDEFINED}; // default config
+	struct ldb_table tablecfg = {.db = "\0", .table = "\0", .key_ln = 16, .rec_ln = 0, .keys = 1, .tmp = false, .ts_ln = 2, .definitions = LDB_TABLE_DEFINITION_UNDEFINED, .hash_calc = md5_string}; // default config
 
 	char tmp[LDB_MAX_PATH] = "\0";
 	strcpy(tmp, db_table);
@@ -121,6 +121,10 @@ struct ldb_table ldb_read_cfg(char *db_table)
 
 	tablecfg.key_ln = key_ln;
 	tablecfg.rec_ln = rec_ln;
+
+	/* Select the key/hash primitive for this table based on its key length
+	   (exposed via libldb for third-party consumers). 8-byte keys => CRC64, otherwise MD5. */
+	tablecfg.hash_calc = (key_ln == 8) ? ldb_crc64 : md5_string;
 
 	// backward compatibility with cfg files
 	if (result < 4)

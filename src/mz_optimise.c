@@ -45,10 +45,13 @@ bool mz_id_excluded(struct mz_job *job)
 {
 	if (!job->xkeys_ln) return false;
 
-	for (uint64_t i = 0; i < job->xkeys_ln; i += MD5_LEN)
+	int id_ln = MZ_ID_LN(job);   /* id bytes stored per record */
+	int full_key_ln = id_ln + 2; /* xkeys hold the full key (file id + record id) */
+
+	for (uint64_t i = 0; i < job->xkeys_ln; i += full_key_ln)
 	{
-		/* Compare job id (bytes 3-16) */
-		if (!memcmp(job->xkeys + i + 2, job->id, MD5_LEN - 2))
+		/* Compare job id (record id bytes, skipping the 2-byte file id) */
+		if (!memcmp(job->xkeys + i + 2, job->id, id_ln))
 		{
 			/* Compare mz id (bytes 1-2) */
 			if (!memcmp(job->xkeys + i, job->mz_id, 2)) return true;
@@ -65,7 +68,7 @@ bool mz_optimise_dup_handler(struct mz_job *job)
 	{
 		job->exc_c++;
 	}
-	else if (mz_id_exists(job->ptr, job->ptr_ln, job->id))
+	else if (mz_id_exists(job->ptr, job->ptr_ln, job->id, MZ_ID_LN(job)))
 	{
 		job->dup_c++;
 	}
@@ -166,6 +169,8 @@ void ldb_mz_collate(struct ldb_table table, int p_sector)
 			job.license_count = 0;
 			job.exc_c = 0;
 			job.dup_c = 0;
+			job.key_ln = table.key_ln - 2;
+			job.hash_calc = table.hash_calc;
 			strcpy(job.path, sector_path);
 			mz_collate(&job);
 			free(job.xkeys);
@@ -238,13 +243,16 @@ void ldb_mz_collate_delete(struct ldb_table table, job_delete_tuples_t * delete)
 			job.license_count = 0;
 			job.exc_c = 0;
 			job.dup_c = 0;
+			job.key_ln = table.key_ln - 2;
+			job.hash_calc = table.hash_calc;
 			strcpy(job.path, sector_path);
 
-			job.xkeys = calloc(delete->tuples_number, MD5_LEN);
-			job.xkeys_ln = delete->tuples_number * MD5_LEN;
+			int full_key_ln = table.key_ln; /* file id (2 bytes) + record id */
+			job.xkeys = calloc(delete->tuples_number, full_key_ln);
+			job.xkeys_ln = delete->tuples_number * full_key_ln;
 			for (; i < delete->tuples_number; i++)
 			{
-				memcpy(job.xkeys + i * MD5_LEN, delete->tuples[i]->key, MD5_LEN);
+				memcpy(job.xkeys + i * full_key_ln, delete->tuples[i]->key, full_key_ln);
 				if (i + 1 < delete->tuples_number)
 					if (memcmp(delete->tuples[i + 1]->key, delete->tuples[i]->key, 2))
 						break;

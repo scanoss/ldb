@@ -48,25 +48,31 @@ struct mz_job
 	int license_count;            // Number of known license identifiers
 	bool key_found;			// Used with mz_key_exists
 	void  (*decrypt) (uint8_t *data, uint32_t len);
+	hash_calc_t hash_calc;	// Hash primitive used to compute MZ ids (NULL = MD5)
+	int key_ln;				// Bytes of the id stored in each record (= table key_ln - 2; 0 => MD5 default)
 };
+
+/* Number of id bytes stored in each mz record (the first 2 bytes are the file name). */
+#define MZ_ID_LN(job) ((job)->key_ln > 0 ? (job)->key_ln : MZ_MD5)
+#define MZ_REC_HEAD(job) (MZ_ID_LN(job) + MZ_SIZE)
 
 
 bool mz_key_exists(struct mz_job *job, uint8_t *key);
-bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id);
+bool mz_id_exists(uint8_t *mz, uint64_t size, uint8_t *id, int id_ln);
 uint8_t *file_read(char *filename, uint64_t *size);
 
 void mz_deflate(struct mz_job *job);
 #define MZ_DEFLATE(job) mz_deflate(job)
 
-void mz_id_fill(char *md5, uint8_t *mz_id);
+void mz_id_fill(char *md5, uint8_t *mz_id, int key_ln);
 void mz_parse(struct mz_job *job, bool (*mz_parse_handler) ());
 void file_write(char *filename, uint8_t *src, uint64_t src_ln);
-void mz_id_fill(char *md5, uint8_t *mz_id);
 void mz_corrupted();
 void mz_add(char *mined_path, uint8_t *md5, char *src, int src_ln, bool check, uint8_t *zsrc, struct mz_cache_item *mz_cache);
 bool mz_check(char *path);
 void mz_flush(char *mined_path, struct mz_cache_item *mz_cache);
 void mz_list(struct mz_job *job);
+void mz_list_keys(struct ldb_table table, int sector);
 void mz_extract(struct mz_job *job);
 void mz_cat(struct mz_job *job, char *key);
 void ldb_mz_collate(struct ldb_table table, int p_sector);
