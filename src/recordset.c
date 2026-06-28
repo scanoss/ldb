@@ -60,6 +60,12 @@ uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8
 	uint8_t *node;
 	bool from_disk = false;
 
+	/* The sector argument is optional: if NULL, fall back to a local sector
+	   (same init as ldb_get_first_record / ldb_key_exists) so the function
+	   opens the ldb from the table struct and key. */
+	ldb_sector_t sector_local = {.data = NULL, .id = (key ? *key : 0), .size = 0, .file = NULL, .failure = false};
+	if (!sector) sector = &sector_local;
+
 	/* Use the in-memory sector if provided, otherwise open it from disk */
 	if (sector->data) node = sector->data;
 	else
