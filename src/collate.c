@@ -793,7 +793,7 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 
 	if (collate->del_count)
 		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector, collate->del_count);
-	
+
 	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector, collate->rec_count);
 
 	free(collate->data);

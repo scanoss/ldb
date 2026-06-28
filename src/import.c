@@ -1378,32 +1378,66 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
             break;
     }
 
-	if (collate_max_ram_percent <= 0)
+	if (collate_max_ram_percent <= 0 || collate_max_ram_percent > 100)
 		collate_max_ram_percent = 50;
 
-	int max_collate_ram = (totalMemory * (100 - collate_max_ram_percent)) / 100;
-
     fclose(file);
-	
-	char * path = ldb_sector_path(kb, &sector, "r");
 
+	/* Get sector size on disk */
+	char * path = ldb_sector_path(kb, &sector, "r");
 	if (!path)
 	{
 		log_info("Failed to load sector %02x\n", sector);
 		return false;
 	}
-	uint64_t sector_size = ldb_file_size(path) / 1024;
-	
+	uint64_t sector_size_kb = ldb_file_size(path) / 1024;
 	free(path);
-	log_info("max collate ram : %d", max_collate_ram);
 
-    log_debug("Collate sector: %02x - sector size: %lu - Free memory: %lu - Available Memory: %lu \n", sector, sector_size  / 1024, freeMemory/1024, availableMemory / 1024);
-	if ( (availableMemory < (sector_size * 2)  && freeMemory < sector_size * 1.5) || availableMemory < max_collate_ram)// || freeMemory < (1024*1024))
+	/* Memory requirements:
+	 * - sector_size_kb: the sector data loaded in RAM
+	 * - collate_buffers_kb: data + tmp_data collate buffers (~120 MB)
+	 * - 20% safety margin for the OS and other allocations */
+	const unsigned long collate_buffers_kb = 120 * 1024; // ~120 MB buffers
+	unsigned long required_memory_kb = sector_size_kb + collate_buffers_kb;
+	unsigned long required_with_margin_kb = (required_memory_kb * 120) / 100;
+
+	/* Collate may use up to collate_max_ram_percent% of the AVAILABLE memory.
+	 * availableMemory is used (not free) as it includes reclaimable cache. This
+	 * keeps the decision sensible on big shared servers, where available memory
+	 * is naturally a small fraction of the total. */
+	unsigned long budget_kb = (availableMemory * collate_max_ram_percent) / 100;
+
+	log_debug("RAM check - sector %02x: size=%lu MB, required=%lu MB (with margin), available=%lu MB, budget=%lu MB\n",
+	          sector, sector_size_kb / 1024, required_with_margin_kb / 1024,
+	          availableMemory / 1024, budget_kb / 1024);
+
+	/* 1. Enough available memory for the sector + buffers + margin? */
+	if (availableMemory < required_with_margin_kb)
 	{
-		log_info("Not enough memory to alocate the sector %02x. Resquested: %ld - available: %ld - min free %%: %d\n", sector, sector_size * 2, availableMemory, collate_max_ram_percent);
+		log_debug("Sector %02x too large for available RAM (%lu MB required > %lu MB available). Using disk mode.\n",
+		          sector, required_with_margin_kb / 1024, availableMemory / 1024);
 		return false;
 	}
 
+	/* 2. Does the requirement fit within the RAM budget (% of available)? */
+	if (required_with_margin_kb > budget_kb)
+	{
+		log_debug("Sector %02x would exceed RAM policy (%d%% of available). Required: %lu MB > budget: %lu MB. Using disk mode.\n",
+		          sector, collate_max_ram_percent, required_with_margin_kb / 1024, budget_kb / 1024);
+		return false;
+	}
+
+	/* 3. Sanity check: a single sector should not consume > 90% of available RAM */
+	unsigned long max_sector_size_kb = (availableMemory * 90) / 100;
+	if (sector_size_kb > max_sector_size_kb)
+	{
+		log_debug("Sector %02x extremely large (%lu MB > 90%% of available %lu MB). Using disk mode for safety.\n",
+		          sector, sector_size_kb / 1024, availableMemory / 1024);
+		return false;
+	}
+
+	log_debug("Sector %02x will be loaded in RAM (%lu MB, budget %lu MB)\n",
+	          sector, sector_size_kb / 1024, budget_kb / 1024);
 	return true;
 }
 
@@ -1448,11 +1482,11 @@ int import_collate_sector(ldb_importation_config_t *config)
 
 		if (sector < 0)
 		{
-			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, sector, max_rec_len);
+			log_info("Collating table %s - all sectors, Max record size: %d\n", dbtable, max_rec_len);
 			ldb_collate(ldbtable, tmptable, max_rec_len, false, sector, NULL);
 			return 0;
 		}
-		
+
 		log_info("Collating table %s - sector %02x, Max record size: %d\n", dbtable, sector, max_rec_len);
 		if ((ldbtable.definitions > 0 && ldbtable.definitions & LDB_TABLE_DEFINITION_MZ) ||
 			 (ldbtable.definitions == LDB_TABLE_DEFINITION_UNDEFINED && config->opt.params.is_mz_table))
