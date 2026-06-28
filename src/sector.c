@@ -239,12 +239,11 @@ bool ldb_create_database(char *database)
 
 
 /**
- * @brief Loads an entire LDB sector into memory and returns a pointer
-   (NULL if the sector does not exist)
- * 
+ * @brief Loads an entire LDB sector into memory
+ *
  * @param table  Instance of the table struct.
  * @param key   Key of the sector to load.
- * @return uint8_t* Pointer to the block of memory with the sector loaded.
+ * @return ldb_sector_t Sector handle; its .data is NULL (and .size 0) if the sector does not exist.
  */
 ldb_sector_t ldb_load_sector(struct ldb_table table, uint8_t *key) {
 

@@ -190,9 +190,8 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
  * obtained from the sector map. The function returns a pointer to the next node, which is zero if it 
  * is the last node in the list.
  * 
- * @param sector Optional: Pointer to a LDB sector allocated in memory. If NULL the function will use the table struct and key to open the ldb
+ * @param sector LDB sector handle. If sector->data is set the node is read from that in-memory copy; otherwise it is read from sector->file (opened lazily from the table struct and key).
  * @param table  table struct config
- * @param ldb_sector A file descriptor to the LDB sector. If sector is not NULL, this parameter is ignored.
  * @param ptr If ptr is set to zero, the location is obtained from the sector map
  * @param key key of the associated table
  * @param bytes_read Number of bytes readed from the node (output)

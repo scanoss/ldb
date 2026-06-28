@@ -104,9 +104,9 @@ bool ldb_valid_name(char *str)
  * Prints the key and subkey in hex format and then prints the data in ascii format.
  * If the data contains non printable characters a dot will be printed instead.
  * 
+ * @param table table struct config (handler derives subkey_ln = table->key_ln - LDB_KEY_LN)
  * @param key key to print
  * @param subkey 	subkey to print
- * @param subkey_ln length of the subkey
  * @param data data to print
  * @param size size of the data
  * @param iteration not used
@@ -137,9 +137,9 @@ bool ldb_asciiprint(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint
  * Prints the key and subkey in hex format and then prints the data in ascii format.
  * If the data contains non printable characters a dot will be printed instead.
  * 
+ * @param table table struct config (handler derives subkey_ln = table->key_ln - LDB_KEY_LN)
  * @param key key to print
  * @param subkey 	subkey to print
- * @param subkey_ln length of the subkey
  * @param data data to print
  * @param size size of the data
  * @param iteration not used

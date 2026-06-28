@@ -96,14 +96,14 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
  * 
  * For Example: See in function ldb_hexprint();
  * 
+ * @param table table struct config (handler derives subkey_ln = table->key_ln - LDB_KEY_LN)
  * @param key block key
  * @param subkey block subkey
- * @param subkey_ln block subkey lenght
  * @param data Buffer to print
  * @param len Length of buffer
  * @param iteration Not used
  * @param ptr Pointer to integer. Stores the number of columns to be printed.
- * @return false Always return false. It 
+ * @return false Always return false. It
  */
 bool ldb_hexprint_width(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {

@@ -101,10 +101,20 @@ test_10_configuration() {
     assert_equals "$config" "$result"
 }
 
+#ldb_fetch_recordset documents sector as optional (NULL => open from table+key).
+#The CLI always passes a stack sector, so this C client covers the NULL path.
+test_11_null_sector_contract() {
+    gcc -o /tmp/null_sector_test null_sector_test.c -lldb -lm -lpthread -ldl -lz -lgcrypt 2>/tmp/null_sector_build.log
+    assert "test -x /tmp/null_sector_test" "failed to build null_sector_test: $(cat /tmp/null_sector_build.log)"
+    records=$(/tmp/null_sector_test test_kb/file 0000000000000001 | grep -oE 'records=[0-9]+' | cut -d= -f2)
+    assert "[ \"${records:-0}\" -ge 1 ]" "NULL sector contract failed for CRC64 table (records=$records)"
+}
+
 setup_suite () {
     echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8)' | ../ldb
 }
 teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
     rm -rf /usr/local/etc/scanoss/ldb/test_kb.conf
+    rm -f /tmp/null_sector_test /tmp/null_sector_build.log
 }

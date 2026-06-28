@@ -56,9 +56,19 @@ test_8_unicode_chars() {
     assert_equals "b337487d67c0307bb9d009e2b5e248c8,e7bc2c903379c1eda3ec7a12e88b933d,系列1-MyBatis源码解析/第10节课/mybatis-3-master/src/test/java/org/apache/ibatis/submitted/language/VelocitySqlSourceBuilder.java" $result
 }
 
+#ldb_fetch_recordset documents sector as optional (NULL => open from table+key).
+#The CLI always passes a stack sector, so this C client covers the NULL path.
+test_9_null_sector_contract() {
+    gcc -o /tmp/null_sector_test null_sector_test.c -lldb -lm -lpthread -ldl -lz -lgcrypt 2>/tmp/null_sector_build.log
+    assert "test -x /tmp/null_sector_test" "failed to build null_sector_test: $(cat /tmp/null_sector_build.log)"
+    records=$(/tmp/null_sector_test test_kb/file b337487d67c0307bb9d009e2b5e248c8 | grep -oE 'records=[0-9]+' | cut -d= -f2)
+    assert "[ \"${records:-0}\" -ge 1 ]" "NULL sector contract failed for MD5 table (records=$records)"
+}
+
 setup_suite () {
     ../ldb -u source/mined -n test_kb
 }
 teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
+    rm -f /tmp/null_sector_test /tmp/null_sector_build.log
 }

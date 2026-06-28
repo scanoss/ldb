@@ -552,12 +552,13 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 /**
  * @brief LDB collate handler. Will be called for ldb_fetch_recordset in each iteration.
  * Execute the collate job, adding the new registers or deleting the keys from the delete list.
- * @param collate pointer to collate data structure 
+ * @param table table struct config (handler derives subkey_ln = table->key_ln - LDB_KEY_LN)
  * @param key block key
  * @param subkey block subkey
- * @param subkey_ln block subkey lenght
  * @param data uint8_t pointer to data to be added
  * @param size data size
+ * @param iteration iteration number
+ * @param ptr pointer to the collate data structure
  * @return true
  */
 bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)

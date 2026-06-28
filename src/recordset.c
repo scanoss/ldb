@@ -44,10 +44,10 @@ extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset
 
 /**
  * @brief Recurses all records in *table* for *key* and calls the provided handler funcion in each iteration, passing
- * subkey, subkey length, fetched data, length and iteration number. This function acts on the .ldb for the
- * provided *key*, but can also work from memory, if a pointer to a *sector* is provided (not NULL)
- * 
- * @param sector Optional: Pointer to a LDB sector allocated in memory. If NULL the function will use tha table struct and key to open the ldb
+ * the table, subkey, fetched data, length and iteration number (the handler derives subkey_ln as table->key_ln - LDB_KEY_LN).
+ * This function acts on the .ldb for the provided *key*, but can also work from memory, if a sector with data is provided.
+ *
+ * @param sector Optional: Pointer to a LDB sector. If NULL (or sector->data is NULL) the function uses the table struct and key to open the ldb from disk
  * @param table table struct config
  * @param key key of the associated table
  * @param skip_subkey true for skip the subkey
@@ -161,10 +161,10 @@ uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8
 
 /**
  * @brief Handler function for ldb_get_first_record
- * 
+ *
+ * @param table Not used
  * @param key Not used
  * @param subkey Not used
- * @param subkey_ln Not used
  * @param data Source for the record
  * @param datalen Length of the record
  * @param iteration Not used
@@ -198,10 +198,10 @@ void ldb_get_first_record(struct ldb_table table, uint8_t* key, void *void_ptr)
 
 /**
  * @brief Handler function for ldb_key_exists
- * 
+ *
+ * @param table Not used
  * @param key Not used
  * @param subkey Not used
- * @param subkey_ln Not used
  * @param data Not used
  * @param datalen Not used
  * @param iteration Not used

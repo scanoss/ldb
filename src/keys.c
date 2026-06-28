@@ -32,9 +32,9 @@
 /**
  * @brief Handle the dump keys record: Write in stdout unique keys
  * 
+ * @param table table struct config (handler derives subkey_ln = table->key_ln - LDB_KEY_LN)
  * @param key block key
  * @param subkey block subkey
- * @param subkey_ln block subkey lenght
  * @param data uint8_t pointer to data to be added
  * @param size data size
  * @param iteration number of iterations
