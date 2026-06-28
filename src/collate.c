@@ -560,8 +560,9 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
  * @param size data size
  * @return true
  */
-bool ldb_collate_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
+	int subkey_ln = subkey ? (table->key_ln - LDB_KEY_LN) : 0;
 
 	struct ldb_collate_data *collate = ptr;
 	if (!collate->rec_width)
@@ -756,9 +757,9 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	return true;
 }
 
-void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_t *sector_mem)
+void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_sector_t *sector_mem)
 {
-	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector, sector_mem == NULL ? "On disk" : "On RAM");
+	log_info("Collating %s/%s - sector %02x - %s\n", collate->in_table.db, collate->in_table.table, sector, sector_mem->data == NULL ? "On disk" : "On RAM");
 	/* Read each one of the (256 ^ 3) list pointers from the map */
 	uint8_t k[LDB_KEY_LN];
 	k[0] = sector;
@@ -797,7 +798,7 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, uint8_
 
 	free(collate->data);
 	free(collate->tmp_data);
-	free(sector_mem);
+	free(sector_mem->data);
 }
 
 /**
@@ -833,12 +834,12 @@ void ldb_collate(struct ldb_table table, struct ldb_table out_table, int max_rec
 			/* Load collate data structure */
 			collate.handler = handler;
 			collate.del_tuples = NULL;
-			uint8_t *sector  = ldb_load_sector(table, &k0);
+			ldb_sector_t sector = ldb_load_sector(table, &k0);
 			//skip unexistent sector.
-			if (!sector)
+			if (!sector.data)
 				continue;
 
-			ldb_collate_sector(&collate, k0, sector);
+			ldb_collate_sector(&collate, k0, &sector);
 		}
 		
 		if (p_sector >=0)
@@ -897,8 +898,8 @@ void ldb_collate_delete(struct ldb_table table, struct ldb_table out_table, job_
 			collate.handler = handler;
 			collate.del_tuples = delete;
 			collate.del_count = 0;
-			uint8_t * sector  = ldb_load_sector(table, &k0);
-			ldb_collate_sector(&collate, k0, sector);
+			ldb_sector_t sector = ldb_load_sector(table, &k0);
+			ldb_collate_sector(&collate, k0, &sector);
 			total_records += collate.del_count;
 		}
 		/* Exit here if it is a delete command, otherwise move to the next sector */

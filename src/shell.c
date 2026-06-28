@@ -250,7 +250,7 @@ bool execute(char *raw_command)
 			break;
 
 		case VERSION:
-			ldb_version();
+			ldb_version(NULL);
 			break;
 
 		case DUMP:
@@ -372,7 +372,7 @@ int main(int argc, char **argv)
 		switch (opt)
 		{
 			case 'v':
-				ldb_version();
+				ldb_version(NULL);
 				return EXIT_SUCCESS;
 			case 'h':
 				help();

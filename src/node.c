@@ -201,18 +201,18 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
  * @return uint64_t The addr of the next node
  * 
  */
-uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size)
+uint64_t ldb_node_read(ldb_sector_t *sector, struct ldb_table table, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size)
 {
 	*bytes_read = 0;
 
 	/* If pointer is zero, get the list location from the map */
 	if (ptr == 0)
 	{
-		/* Read sector pointer either from disk (ldb_sector) or memory (sector) */
-		if (sector)
-			ptr = uint40_read(sector + ldb_map_pointer_pos(key));
+		/* Read sector pointer either from memory (sector->data) or disk (sector->file) */
+		if (sector->data)
+			ptr = uint40_read(sector->data + ldb_map_pointer_pos(key));
 		else
-			ptr = ldb_list_pointer(ldb_sector, key);
+			ptr = ldb_list_pointer(sector->file, key);
 
 		/* If pointer is zero, then there are no records for the key */
 		if (ptr == 0) { return 0; }
@@ -224,12 +224,28 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 	uint8_t *buffer;
 
 	/* Read node information into buffer: NN(5) and TS(2/4) */
-	if (sector) buffer = sector + ptr;
+	if (sector->data)
+	{
+		/* Bounds-check the node header against the in-memory sector */
+		if (ptr + LDB_PTR_LN + table.ts_ln > sector->size)
+		{
+			log_info("Warning: cannot read LDB node from sector %02x. The node pointer is out of range %ld / %ld\n", sector->id, (long) ptr, (long) sector->size);
+			sector->failure = true;
+			return 0;
+		}
+		buffer = sector->data + ptr;
+	}
 	else
 	{
-		fseeko64(ldb_sector, ptr, SEEK_SET);
+		fseeko64(sector->file, ptr, SEEK_SET);
 		buffer = calloc(LDB_PTR_LN + table.ts_ln + LDB_KEY_LN, 1);
-		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, ldb_sector)) printf("Warning: cannot read LDB node\n");
+		if (!fread(buffer, 1, LDB_PTR_LN + table.ts_ln, sector->file))
+		{
+			log_debug("Warning: cannot read LDB node\n");
+			free(buffer);
+			ldb_read_failure = true;
+			return 0;
+		}
 	}
 
 	/* NN: Obtain the next node */
@@ -255,21 +271,32 @@ uint64_t ldb_node_read(uint8_t *sector, struct ldb_table table, FILE *ldb_sector
 		if (table.rec_ln) if (actual_size > 64800) actual_size = 64800; //TODO: EXPAND?
 
 		/* Return the entire node */
-		if (sector)
+		if (sector->data)
 		{
+			/* Bounds-check the node body against the in-memory sector */
+			if (ptr + LDB_PTR_LN + table.ts_ln + actual_size > sector->size)
+			{
+				log_info("Warning: node size overflow on sector %02x\n", sector->id);
+				sector->failure = true;
+				return 0;
+			}
 			*out = buffer + LDB_PTR_LN + table.ts_ln;
 		}
 		else
 		{
-			if (!fread(*out, 1, actual_size, ldb_sector)) printf("Warning: cannot read entire LDB node\n");
+			if (!fread(*out, 1, actual_size, sector->file))
+			{
+				log_debug("Warning: cannot read entire LDB node\n");
+				ldb_read_failure = true;
+			}
 		}
 		*bytes_read = actual_size;
 
 		/* Gracefully terminate non-fixed records (strings) with a chr(0) */
-		if (!sector) if (table.rec_ln == 0) *(*out+actual_size) = 0;
+		if (!sector->data) if (table.rec_ln == 0) *(*out+actual_size) = 0;
 	}
 
-	if (!sector) free(buffer);
+	if (!sector->data) free(buffer);
 	return next_node;
 }
 

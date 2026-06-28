@@ -48,6 +48,9 @@ char ldb_root[] = "/var/lib/ldb";
 char ldb_lock_path[] = "/dev/shm/ldb.lock";
 int ldb_cmp_width = 0;
 
+/* Raised by ldb_node_read on a disk read failure; checked by ldb_fetch_recordset */
+bool ldb_read_failure = false;
+
 /**
  * @brief Display LDB error and exit program
  * 
@@ -63,8 +66,11 @@ void ldb_error (char *txt)
  * @brief Print ldb version
  * 
  */
-void ldb_version()
+void ldb_version(char **version)
 {
-	printf("ldb-%s\n", LDB_VERSION);
+	if (!version)
+		printf("ldb-%s\n", LDB_VERSION);
+	else
+		*version = strdup(LDB_VERSION);
 }
 

@@ -47,8 +47,8 @@ void ldb_dump(struct ldb_table table, int hex_bytes, int sectorn)
 	if (sectorn >= 0) k0 = (uint8_t) sectorn;
 
 	do {
-		uint8_t *sector = ldb_load_sector(table, &k0);
-		if (sector)
+		ldb_sector_t sector = ldb_load_sector(table, &k0);
+		if (sector.data)
 		{
 			/* Read each one of the (256 ^ 3) list pointers from the map */
 			uint8_t k[LDB_KEY_LN];
@@ -61,9 +61,9 @@ void ldb_dump(struct ldb_table table, int hex_bytes, int sectorn)
 						k[2] = k2;
 						k[3] = k3;
 						/* Process records */
-						ldb_fetch_recordset(sector, table, k, true, ldb_csvprint, &hex_bytes);
+						ldb_fetch_recordset(&sector, table, k, true, ldb_csvprint, &hex_bytes);
 					}
-			free(sector);
+			free(sector.data);
 		}
 		if (sectorn >= 0) break;
 	} while (k0++ < 255);

@@ -55,18 +55,19 @@ extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset
  * @param void_ptr This pointer is passed to the handler function
  * @return uint32_t The number of records found
  */
-uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr)
+uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t ldb_record_handler, void *void_ptr)
 {
-	FILE *ldb_sector = NULL;
 	uint8_t *node;
+	bool from_disk = false;
 
-	/* Open sector from disk (if *sector is not provided) */
-	if (sector) node = sector;
+	/* Use the in-memory sector if provided, otherwise open it from disk */
+	if (sector->data) node = sector->data;
 	else
 	{
-		ldb_sector = ldb_open(table, key, "r");
-		if (!ldb_sector) return 0;
+		sector->file = ldb_open(table, key, "r");
+		if (!sector->file) return 0;
 		node = calloc(LDB_MAX_REC_LN + 1, 1);
+		from_disk = true;
 	}
 
 	uint64_t next = 0;
@@ -80,11 +81,20 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 	do
 	{
 		/* Read node */
-		next = ldb_node_read(sector, table, ldb_sector, next, key, &node_size, &node, 0);
+		next = ldb_node_read(sector, table, next, key, &node_size, &node, 0);
+
+		/* Stop reading on a read failure or an out-of-range node */
+		if (ldb_read_failure || sector->failure)
+		{
+			ldb_read_failure = false;
+			sector->failure = false;
+			break;
+		}
+
 		if (!node_size && !next) break; // reached end of list
 
 		/* Pass entire node (fixed record length) to handler */
-		if (table.rec_ln) done = ldb_record_handler(key, NULL, 0 , node, node_size, records++, void_ptr);
+		if (table.rec_ln) done = ldb_record_handler(&table, key, NULL, node, node_size, records++, void_ptr);
 
 		/* Extract and pass variable-size records to handler */
 		else
@@ -122,7 +132,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 
 						/* We drop records longer than the desired limit */
 						if (record_size + 32 < LDB_MAX_REC_LN)
-							done = ldb_record_handler(key, subkey, subkey_ln, dataset + dataset_ptr, record_size, records++, void_ptr);
+							done = ldb_record_handler(&table, key, subkey, dataset + dataset_ptr, record_size, records++, void_ptr);
 						/* Move pointer to end of record */
 						dataset_ptr += record_size;
 					}
@@ -133,10 +143,11 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
 		}
 	} while (next && !done);
 
-	if (!sector)
+	if (from_disk)
 	{
 		free(node);
-		fclose(ldb_sector);
+		fclose(sector->file);
+		sector->file = NULL;
 	}
 
 	return records;
@@ -154,7 +165,7 @@ uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* k
  * @param ptr Buffer where the record is written
  * @return true if datalen is > 0. False otherwise
  */
-bool ldb_get_first_record_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
+bool ldb_get_first_record_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	uint8_t *record = (uint8_t *) ptr;
 	if (datalen)
@@ -175,7 +186,8 @@ bool ldb_get_first_record_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, 
  */
 void ldb_get_first_record(struct ldb_table table, uint8_t* key, void *void_ptr)
 {
-	ldb_fetch_recordset(NULL, table, key, false, ldb_get_first_record_handler, void_ptr);
+	ldb_sector_t sector = {.data = NULL, .id = *key, .size = 0};
+	ldb_fetch_recordset(&sector, table, key, false, ldb_get_first_record_handler, void_ptr);
 }
 
 /**
@@ -190,7 +202,7 @@ void ldb_get_first_record(struct ldb_table table, uint8_t* key, void *void_ptr)
  * @param ptr Not used
  * @return true always (the key exists) 
  */
-bool ldb_key_exists_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
+bool ldb_key_exists_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t datalen, int iteration, void *ptr)
 {
 	return true;
 }
@@ -204,6 +216,7 @@ bool ldb_key_exists_handler(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_
  */
 bool ldb_key_exists(struct ldb_table table, uint8_t *key)
 {
-	return (ldb_fetch_recordset(NULL, table, key, false, ldb_key_exists_handler, NULL) > 0);
+	ldb_sector_t sector = {.data = NULL, .id = *key, .size = 0};
+	return (ldb_fetch_recordset(&sector, table, key, false, ldb_key_exists_handler, NULL) > 0);
 }
 

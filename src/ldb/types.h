@@ -22,7 +22,7 @@
  * Lets a table compute its keys with MD5 (ldb_md5/md5_string) or CRC64 (ldb_crc64). */
 typedef void (*hash_calc_t) (const unsigned char *input, int len, unsigned char * output);
 
-struct ldb_table
+typedef struct ldb_table
 {
 	char db[LDB_MAX_NAME];
 	char table[LDB_MAX_NAME];
@@ -35,7 +35,24 @@ struct ldb_table
 	uint8_t *last_key;
 	int definitions;	// Table definitions: is MZ? is encrypted?
 	hash_calc_t hash_calc;	// Hash primitive used to compute this table's keys (NULL = MD5)
-};
+} ldb_table_t;
+
+/* In-memory/on-disk LDB sector handle.
+ * If data is NULL the sector is read from disk through file (opened lazily);
+ * otherwise data points to the whole sector loaded in RAM (size bytes).
+ * failure is raised when a node read goes out of range. */
+typedef struct ldb_sector_t
+{
+	uint8_t id;       // Sector id (first byte of the key)
+	size_t size;      // Size of the in-memory sector (data), 0 when read from disk
+	uint8_t *data;    // Whole sector loaded in RAM, NULL when read from disk
+	FILE *file;       // Open file descriptor when reading from disk
+	bool failure;     // Raised when a node pointer/size goes out of range
+} ldb_sector_t;
+
+/* Record handler: invoked for every record found by ldb_fetch_recordset.
+ * Receives the table (so it can derive subkey_ln = table->key_ln - LDB_KEY_LN). */
+typedef bool (*ldb_record_handler_t) (struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t data_len, int record_number, void *ptr);
 
 struct ldb_recordset
 {
@@ -53,9 +70,5 @@ struct ldb_recordset
 	uint64_t last_node; // Location of last node of the list
     uint8_t ts_ln;      // 2 or 4 (16-bit or 32-bit reserved for total sector size)
 };
-
-typedef bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *);
-
-
 
 #endif

@@ -113,10 +113,11 @@ bool ldb_valid_name(char *str)
  * @param ptr not used
  * @return false always. not used
  */
-bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_asciiprint(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
+	int subkey_ln = subkey ? (table->key_ln - LDB_KEY_LN) : 0;
 	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	if (subkey) for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
 
 	printf(": ");
 
@@ -145,11 +146,12 @@ bool ldb_asciiprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
  * @param ptr not used
  * @return false always. not used
  */
-bool ldb_csvprint(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr)
+bool ldb_csvprint(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr)
 {
+	int subkey_ln = subkey ? (table->key_ln - LDB_KEY_LN) : 0;
 	/* Print key in hex (first CSV field) */
 	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
-	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
+	if (subkey) for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);
 
 	/* Print remaining hex bytes (if any, as a second CSV field) */
 	int *hex_bytes = ptr;

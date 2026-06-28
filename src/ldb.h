@@ -33,6 +33,10 @@
 #define LDB_TABLE_DEFINITION_STANDARD 0
 #define LDB_TABLE_DEFINITION_ENCRYPTED 1
 #define LDB_TABLE_DEFINITION_MZ 2
+#define LDB_TABLE_DEFINITION_COMPRESSED 4
+
+/* Raised by ldb_node_read on a disk read failure; checked by ldb_fetch_recordset */
+extern bool ldb_read_failure;
 
 bool ldb_file_exists(char *path);
 bool ldb_dir_exists(char *path);
@@ -58,7 +62,7 @@ uint64_t ldb_list_pointer(FILE *ldb_sector, uint8_t *key);
 uint64_t ldb_last_node_pointer(FILE *ldb_sector, uint64_t list_pointer);
 void ldb_update_list_pointers(FILE *ldb_sector, uint8_t *key, uint64_t list, uint64_t new_node);
 int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint8_t *data, uint32_t dataln, uint16_t records);
-uint64_t ldb_node_read (uint8_t *sector, struct ldb_table table, FILE *ldb_sector, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size);
+uint64_t ldb_node_read(ldb_sector_t *sector, struct ldb_table table, uint64_t ptr, uint8_t *key, uint32_t *bytes_read, uint8_t **out, int max_node_size);
 char *ldb_sector_path (struct ldb_table table, uint8_t *key, char *mode);
 FILE *ldb_open (struct ldb_table table, uint8_t *key, char *mode);
 bool ldb_close(FILE * sector);
@@ -72,7 +76,7 @@ struct ldb_table ldb_read_cfg(char *db_table);
 void ldb_write_cfg(char *db, char *table, int keylen, int reclen, int keys, int definitions);
 bool ldb_valid_table(char *table);
 bool ldb_syntax_check(char *command, int *command_nr, int *word_nr);
-void ldb_version();
+void ldb_version(char **version);
 bool ldb_database_exists(char *db);
 bool ldb_table_exists(char *db, char*table);
 bool ldb_create_table_new(char *db, char *table, int keylen, int reclen, int keys, int definitions);
@@ -80,13 +84,13 @@ bool ldb_create_table(char *db, char *table, int keylen, int reclen);
 bool ldb_create_database(char *database);
 struct ldb_recordset ldb_recordset_init(char *db, char *table, uint8_t *key);
 void ldb_list_unlink(FILE *ldb_sector, uint8_t *key);
-uint8_t *ldb_load_sector (struct ldb_table table, uint8_t *key);
+ldb_sector_t ldb_load_sector(struct ldb_table table, uint8_t *key);
 bool ldb_validate_node(uint8_t *node, uint32_t node_size, int subkey_ln);
 //bool uint32_is_zero(uint8_t *n);
 bool ldb_key_exists(struct ldb_table table, uint8_t *key);
 bool ldb_key_in_recordset(uint8_t *rs, uint32_t rs_len, uint8_t *subkey, uint8_t subkey_ln);
-uint32_t ldb_fetch_recordset(uint8_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, bool (*ldb_record_handler) (uint8_t *, uint8_t *, int, uint8_t *, uint32_t, int, void *), void *void_ptr);
-bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t size, int iteration, void *ptr);
+uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t ldb_record_handler, void *void_ptr);
+bool ldb_hexprint_width(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t size, int iteration, void *ptr);
 void ldb_sector_update(struct ldb_table table, uint8_t *key);
 void ldb_sector_erase(struct ldb_table table, uint8_t *key);
 void ldb_dump(struct ldb_table table, int hex_bytes, int sector);

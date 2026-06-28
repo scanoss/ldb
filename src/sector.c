@@ -246,23 +246,36 @@ bool ldb_create_database(char *database)
  * @param key   Key of the sector to load.
  * @return uint8_t* Pointer to the block of memory with the sector loaded.
  */
-uint8_t *ldb_load_sector(struct ldb_table table, uint8_t *key) {
+ldb_sector_t ldb_load_sector(struct ldb_table table, uint8_t *key) {
+
+	ldb_sector_t sector = {.data = NULL, .id = *key, .size = 0};
 
 	FILE *ldb_sector = ldb_open(table, key, "r");
-	if (!ldb_sector) return NULL;
+	if (!ldb_sector) return sector;
 
 	fseeko64(ldb_sector, 0, SEEK_END);
 	uint64_t size = ftello64(ldb_sector);
 
 	uint8_t *out = malloc(size);
 	if (!out)
-		 return NULL;
-		 
+	{
+		fclose(ldb_sector);
+		return sector;
+	}
+
 	fseeko64(ldb_sector, 0, SEEK_SET);
-	if (!fread(out, 1, size, ldb_sector)) printf("Warning: ldb_load_sector failed\n");
+	if (!fread(out, 1, size, ldb_sector))
+	{
+		printf("Warning: ldb_load_sector failed\n");
+		free(out);
+		out = NULL;
+		size = 0;
+	}
 	fclose(ldb_sector);
 
-	return out;
+	sector.data = out;
+	sector.size = size;
+	return sector;
 }
 
 /**

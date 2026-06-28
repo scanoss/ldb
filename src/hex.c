@@ -105,8 +105,9 @@ bool ldb_hexprint16(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data,
  * @param ptr Pointer to integer. Stores the number of columns to be printed.
  * @return false Always return false. It 
  */
-bool ldb_hexprint_width(uint8_t *key, uint8_t *subkey, int subkey_ln, uint8_t *data, uint32_t len, int iteration, void *ptr)
+bool ldb_hexprint_width(struct ldb_table *table, uint8_t *key, uint8_t *subkey, uint8_t *data, uint32_t len, int iteration, void *ptr)
 {
+	int subkey_ln = subkey ? (table->key_ln - LDB_KEY_LN) : 0;
 	int *width = ptr;
 	for (int i = 0; i < LDB_KEY_LN; i++) printf("%02x", key[i]);
 	for (int i = 0; i < subkey_ln; i++)  printf("%02x", subkey[i]);

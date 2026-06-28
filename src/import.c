@@ -1464,7 +1464,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 			pthread_mutex_lock(&lock);
 			struct ldb_collate_data collate;
 			uint8_t k0 = sector;
-			uint8_t *sector_mem = NULL;
+			ldb_sector_t sector_mem = {.data = NULL, .id = k0, .size = 0};
 
 			bool init_ok = ldb_collate_init(&collate, ldbtable, tmptable, max_rec_len, false, k0);
 			if (!init_ok)
@@ -1475,7 +1475,7 @@ int import_collate_sector(ldb_importation_config_t *config)
 
 			pthread_mutex_unlock(&lock);
 			if (init_ok)
-				ldb_collate_sector(&collate, sector, sector_mem);
+				ldb_collate_sector(&collate, sector, &sector_mem);
 			else
 			{
 				log_info("ERROR: failed to allocate memory to collate sector %02x\n", k0);
