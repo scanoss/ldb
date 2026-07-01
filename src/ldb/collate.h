@@ -24,7 +24,8 @@ typedef struct job_delete_tuples_t
 
 struct ldb_collate_data
 {
-	void *data; 
+	void *data;
+	size_t data_size;
 	void *tmp_data;
 	long data_ptr;
 	int table_key_ln;
