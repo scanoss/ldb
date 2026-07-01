@@ -338,6 +338,26 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	/* Add record exceeds limit, skip it */
 	if (size > collate->max_rec_ln) return false;
 
+	/* Grow the buffer on demand instead of dropping records. A single key can
+	   own far more than LDB_MAX_RECORDS records (e.g. a very common file hash),
+	   and writing past the reservation corrupts the heap. Enlarge by one more
+	   LDB_MAX_RECORDS block whenever the next record would not fit. */
+	if ((size_t)(collate->data_ptr + collate->rec_width) >= collate->data_size)
+	{
+		size_t new_data_size = collate->data_size + (size_t) LDB_MAX_RECORDS * collate->rec_width;
+		void *data_realloc = realloc(collate->data, new_data_size);
+		if (!data_realloc)
+		{
+			char key_hex[collate->in_table.key_ln * 2 + 1];
+			ldb_bin_to_hex(key, collate->in_table.key_ln, key_hex);
+			log_info("collate: no memory to grow record buffer. Key %s - size %u - key records %ld\n", key_hex, size, collate->key_rec_count);
+			return false;
+		}
+		log_info("Collate data buffer grown: %ld used, %zu to %zu bytes\n", collate->data_ptr, collate->data_size, new_data_size);
+		collate->data = data_realloc;
+		collate->data_size = new_data_size;
+	}
+
 	/* Copy main key */
 	memcpy(collate->data + collate->data_ptr, key, LDB_KEY_LN);
 	collate->data_ptr += LDB_KEY_LN;
@@ -588,19 +608,9 @@ bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey,
 		collate->key_rec_count++;
 	}
 
-	/* If we exceed LDB_MAX_RECORDS, skip it */
-	if (collate->key_rec_count > LDB_MAX_RECORDS)
-	{
-		if (collate->key_rec_count == LDB_MAX_RECORDS + 1)
-		{
-			char hex_val[(LDB_KEY_LN + subkey_ln) * 2 + 1];
-			ldb_bin_to_hex(key, LDB_KEY_LN, hex_val);
-			ldb_bin_to_hex(subkey, subkey_ln, hex_val + LDB_KEY_LN * 2);
-			log_info("%s: Max list size exceeded\n",hex_val);
-			collate->key_rec_count++;
-		}
-		return false;
-	}
+	/* No hard cap on records per key: the collate buffer grows on demand in
+	   ldb_collate_add_variable_record, so large lists are kept in full instead
+	   of being truncated (which previously overflowed the fixed buffer). */
 
 	/* Skip key if found among del_keys (DELETE command only) */
 	if (collate->del_tuples)
@@ -736,13 +746,19 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 		collate->rec_width = table.key_ln + max_rec_ln + 4;
 	}
 
-	/* Reserve space for collate data */
-	collate->data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
-	
-	if (!collate->data)
-		return false;
+	/* Reserve space for collate data. One record of slack over LDB_MAX_RECORDS;
+	   the variable-record buffer grows on demand (see ldb_collate_add_variable_record)
+	   for keys whose record list is larger than this initial reservation. */
+	collate->data_size = (size_t)(LDB_MAX_RECORDS + 1) * collate->rec_width;
+	collate->data = (char *)calloc(collate->data_size, 1);
 
-	collate->tmp_data = (char *)calloc(LDB_MAX_RECORDS * collate->rec_width, 1);
+	if (!collate->data)
+	{
+		collate->data_size = 0;
+		return false;
+	}
+
+	collate->tmp_data = (char *)calloc(collate->data_size, 1);
 
 	if (!collate->tmp_data)
 		return false;
