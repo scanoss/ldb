@@ -123,16 +123,17 @@ bool csv_sort(ldb_importation_config_t * config)
  *
  * @param file_path pointer to file path
  * @param skip_sort
+ * @param rec_ln raw record length used as sort key/record size
  * @return true
  */
-bool bin_sort(char *file_path, bool skip_sort)
+bool bin_sort(char *file_path, bool skip_sort, int rec_ln)
 {
 	if (!ldb_file_size(file_path))
 		return false;
 	if (skip_sort)
 		return true;
 	log_info("Sorting %s\n", file_path);
-	return bsort(file_path);
+	return bsort(file_path, rec_ln);
 }
 
 
@@ -234,7 +235,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	strcpy(oss_wfp.db, config->dbname);
 	strcpy(oss_wfp.table, config->table);
 	oss_wfp.key_ln = 4;
-	oss_wfp.rec_ln = 18;
+	oss_wfp.rec_ln = config->opt.params.key_size + 2; //key_size + 2 bytes for line number
 	oss_wfp.ts_ln = 2;
 	oss_wfp.tmp = config->opt.params.overwrite;
 
@@ -244,8 +245,8 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	size_t bytecounter = 0;
 	int tick = 10000; // activate progress every "tick" records
 
-	/* raw record length = wfp crc32(3) + file md5(16) + line(2) = 21 bytes */
-	int raw_ln = 21;
+	/* raw record length = wfp crc32(3) + file hash(key_size) + line(2) = 21 bytes for md5 */
+	int raw_ln = 3 + config->opt.params.key_size + 2;
 
 	/* First three bytes are bytes 2nd-4th of the wfp) */
 	int rec_ln = raw_ln - 3;
@@ -253,10 +254,10 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 	/* First byte of the wfp is the file name */
 	uint8_t key1 = first_byte(config->csv_path);
 
-	/* File should contain 21 * N bytes */
-	if (ldb_file_size(config->csv_path) % 21)
+	/* File should contain raw_ln * N bytes */
+	if (ldb_file_size(config->csv_path) % (raw_ln))
 	{
-		printf("File %s does not contain 21-byte records\n", config->csv_path);
+		printf("File %s does not contain %d-byte records\n", config->csv_path, raw_ln);
 		exit(EXIT_FAILURE);
 	}
 
@@ -351,7 +352,7 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 				/* Skip duplicated records. Since md5 records to be imported are sorted, it will be faster
 					 to compare them from last to first byte. Also, we only compare the 16 byte md5 */
 				if (record_ln > 0)
-					if (!reverse_memcmp(record + record_ln - rec_ln, rec, 16))
+					if (!reverse_memcmp(record + record_ln - rec_ln, rec, config->opt.params.key_size))
 					{
 						memcpy(record + record_ln, rec, rec_ln);
 						record_ln += rec_ln;
@@ -1563,7 +1564,9 @@ int ldb_import(ldb_importation_config_t * job)
 	}
 	else if (config.opt.params.is_wfp_table)
 	{
-		if (bin_sort(config.csv_path, !config.opt.params.sort))
+		/* raw record length = wfp crc32(3) + file hash(key_size) + line(2) */
+		int raw_ln = 3 + config.opt.params.key_size + 2;
+		if (bin_sort(config.csv_path, !config.opt.params.sort, raw_ln))
 			result = ldb_import_snippets(&config);
 	}
 	else
