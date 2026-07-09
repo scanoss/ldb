@@ -1459,11 +1459,11 @@ int import_collate_sector(ldb_importation_config_t *config)
 		tmptable.tmp = true;
 		tmptable.key_ln = LDB_KEY_LN;
 
-		int max_rec_len = config->opt.params.is_wfp_table == 1 ? 18 : config->opt.params.collate_max_rec;
+		int max_rec_len = config->opt.params.is_wfp_table == 1 ? config->opt.params.key_size + 2 : config->opt.params.collate_max_rec;
 
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max_rec_len)
 		{
-			log_info("E076 Max record length should equal fixed record length (%d)\n", ldbtable.rec_ln);
+			log_info("E076 Max record length should equal fixed record length (%d vs %d)\n", ldbtable.rec_ln, max_rec_len);
 			return LDB_ERROR_RECORD_LENGHT_INVAID;
 		}
 		else if (max_rec_len < ldbtable.key_ln)
