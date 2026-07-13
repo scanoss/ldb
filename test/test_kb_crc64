@@ -101,9 +101,39 @@ test_10_configuration() {
     assert_equals "$config" "$result"
 }
 
+#Regression: a non-default MAX_RAM_PERCENT set in the config file must survive
+#the option merge. Two bugs dropped it: (1) opt_add() handled tmp_path as
+#params_arr index IMPORT_PARAMS_NUMBER-1, which actually aliases
+#collate_max_ram_percent, so setting TMP_PATH (always set in the default config)
+#silently discarded MAX_RAM_PERCENT; (2) the UNDEFINED sentinel for
+#collate_max_ram_percent was 50 instead of -1, so empty command-line options
+#forced 50 over the file value. Both are needed for this to pass.
+test_11_max_ram_percent_from_config() {
+    config="GLOBAL: (KEYS=-1, KEY_SIZE=8, VALIDATE_FIELDS=1, FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=20, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=5, TMP_PATH=/tmp)"
+    sed -i "1s|.*|$config|" /usr/local/etc/scanoss/ldb/test_kb.conf
+
+    echo "bulk insert test_kb/file from source_crc64/mined/file with (KEY_SIZE=8)" | ../ldb -q
+    result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:" | grep -oE "MAX_RAM_PERCENT=[0-9]+")
+    assert_equals "MAX_RAM_PERCENT=5" "$result" "config-file MAX_RAM_PERCENT overwritten by default during option merge"
+}
+
+#MAX_RAM_PERCENT is a percentage: an explicit -1 (or any out-of-range value) must
+#normalize to the default (50), both in the effective value and in the logged config.
+test_11b_max_ram_percent_out_of_range() {
+    # -1 received on the command line must fall back to 50
+    echo "bulk insert test_kb/file from source_crc64/mined/file with (KEY_SIZE=8,MAX_RAM_PERCENT=-1)" | ../ldb -q
+    result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:" | grep -oE "MAX_RAM_PERCENT=[0-9]+")
+    assert_equals "MAX_RAM_PERCENT=50" "$result" "MAX_RAM_PERCENT=-1 must fall back to default 50"
+
+    # an out-of-range value (>100) must also fall back to 50
+    echo "bulk insert test_kb/file from source_crc64/mined/file with (KEY_SIZE=8,MAX_RAM_PERCENT=150)" | ../ldb -q
+    result=$(tac /var/log/scanoss/ldb/test_kb.log | grep -m 1 "file configuration:" | grep -oE "MAX_RAM_PERCENT=[0-9]+")
+    assert_equals "MAX_RAM_PERCENT=50" "$result" "MAX_RAM_PERCENT>100 must fall back to default 50"
+}
+
 #ldb_fetch_recordset documents sector as optional (NULL => open from table+key).
 #The CLI always passes a stack sector, so this C client covers the NULL path.
-test_11_null_sector_contract() {
+test_12_null_sector_contract() {
     gcc -o /tmp/null_sector_test null_sector_test.c -lldb -lm -lpthread -ldl -lz -lgcrypt 2>/tmp/null_sector_build.log
     assert "test -x /tmp/null_sector_test" "failed to build null_sector_test: $(cat /tmp/null_sector_build.log)"
     records=$(/tmp/null_sector_test test_kb/file 0000000000000001 | grep -oE 'records=[0-9]+' | cut -d= -f2)

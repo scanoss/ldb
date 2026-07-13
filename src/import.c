@@ -1143,7 +1143,12 @@ const char * config_parameters[] = {
 										.threads = -1,\
 										.collate = -1,\
 										.collate_max_rec = -1,\
-										.collate_max_ram_percent = 50}
+										.collate_max_ram_percent = -1}
+
+/* MAX_RAM_PERCENT must be a percentage in (0,100]. Any value outside that range
+ * (e.g. an explicit -1, which is also the "unset" sentinel) falls back to this. */
+#define LDB_COLLATE_MAX_RAM_PERCENT_DEFAULT 50
+#define LDB_COLLATE_RAM_PERCENT_VALID(v) ((v) > 0 && (v) <= 100)
 
 
 bool ldb_importation_config_parse(import_params_t * opt, char * line)
@@ -1206,6 +1211,11 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
             }
             else if (sscanf(param, "=%d", &val))
             {
+                /* MAX_RAM_PERCENT is a percentage: reject out-of-range values
+                 * (including an explicit -1) and fall back to the default. */
+                if (!strcmp(config_parameters[i], "MAX_RAM_PERCENT") && !LDB_COLLATE_RAM_PERCENT_VALID(val))
+                    val = LDB_COLLATE_MAX_RAM_PERCENT_DEFAULT;
+
                 // Assign the value to the appropriate parameter
                 opt->params_arr[i] = val;
             }
@@ -1222,17 +1232,17 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
 {
 	import_params_t def = {.params = LDB_IMPORTATION_CONFIG_DEFAULT};
+	/* Merge every integer parameter. tmp_path is NOT part of params_arr (it is a
+	 * trailing char field), so it must be handled separately below; folding it
+	 * into the loop as index IMPORT_PARAMS_NUMBER-1 aliased collate_max_ram_percent
+	 * and silently dropped it whenever TMP_PATH was set. */
 	for (int i = 0; i < IMPORT_PARAMS_NUMBER; i++)
 	{
-		if (i == IMPORT_PARAMS_NUMBER -1 && strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
-		{
-			strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
-		}
-		else if (cmd_in->params_arr[i] > -1)
-		{
+		if (cmd_in->params_arr[i] > -1)
 			cfg->params_arr[i] = cmd_in->params_arr[i];
-		}
 	}
+	if (strcmp(cmd_in->params.tmp_path, def.params.tmp_path))
+		strcpy(cfg->params.tmp_path, cmd_in->params.tmp_path);
 }
 
 bool ldb_create_db_config_default(char * dbname)
@@ -1379,8 +1389,8 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
             break;
     }
 
-	if (collate_max_ram_percent <= 0 || collate_max_ram_percent > 100)
-		collate_max_ram_percent = 50;
+	if (!LDB_COLLATE_RAM_PERCENT_VALID(collate_max_ram_percent))
+		collate_max_ram_percent = LDB_COLLATE_MAX_RAM_PERCENT_DEFAULT;
 
     fclose(file);
 

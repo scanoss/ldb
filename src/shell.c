@@ -86,7 +86,9 @@ void help()
 	printf("    VERBOSE: Enable verbose mode.\n");
 	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n");
 	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
-	printf("    MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.\n");
+	printf("    MAX_RAM_PERCENT: max %% of AVAILABLE system RAM (MemAvailable) the collate process may use to load a full sector into memory.\n");
+	printf("                     If a sector plus its collate buffers do not fit within this budget it is collated in (slower) disk mode instead.\n");
+	printf("                     Valid range 1-100; values <=0 or >100 fall back to the default. Default value: 50.\n");
 	printf("    TMP_PATH: Define the temporary directory. Default value \"/tmp\".\n");
 	printf("	It is not mandatory to specify all parameters; default values will be assumed for missing parameters.\n\n");
 
