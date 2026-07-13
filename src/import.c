@@ -314,6 +314,15 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 			uint8_t *wfp = buffer + i;
 			uint8_t *rec = buffer + i + 3;
 
+			/* Update progress every "tick" raw records read (counts every record,
+			   including ignored ones, in raw_ln units to match totalbytes) */
+			if (++reccounter > tick)
+			{
+				bytecounter += (raw_ln * reccounter);
+				progress(config->csv_path,config->table, bytecounter, totalbytes, true);
+				reccounter = 0;
+			}
+
 			if (bl[wfp[0] + wfp[1] * 256 + wfp[2] * 256 * 256])
 			{
 				ignore_counter++;
@@ -358,14 +367,6 @@ int ldb_import_snippets(ldb_importation_config_t * config)
 						record_ln += rec_ln;
 						wfp_counter++;
 					}
-			}
-
-			/* Update progress every "tick" records */
-			if (++reccounter > tick)
-			{
-				bytecounter += (rec_ln * reccounter);
-				progress(config->csv_path,config->table, bytecounter, totalbytes, true);
-				reccounter = 0;
 			}
 		}
 	}
