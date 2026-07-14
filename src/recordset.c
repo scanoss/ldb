@@ -57,8 +57,9 @@ extern int  ldb_extract_record(char **msg, const uint8_t *data, uint32_t dataset
  */
 uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8_t* key, bool skip_subkey, ldb_record_handler_t ldb_record_handler, void *void_ptr)
 {
-	uint8_t *node;
+	uint8_t *node = NULL;
 	bool from_disk = false;
+	bool own_file = false;
 
 	/* The sector argument is optional: if NULL, fall back to a local sector
 	   (same init as ldb_get_first_record / ldb_key_exists) so the function
@@ -66,14 +67,23 @@ uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8
 	ldb_sector_t sector_local = {.data = NULL, .id = (key ? *key : 0), .size = 0, .file = NULL, .failure = false};
 	if (!sector) sector = &sector_local;
 
-	/* Use the in-memory sector if provided, otherwise open it from disk */
+	/* Use the in-memory sector if provided, otherwise read it from disk */
 	if (sector->data) node = sector->data;
 	else
 	{
-		sector->file = ldb_open(table, key, "r");
-		if (!sector->file) return 0;
-		node = calloc(LDB_MAX_REC_LN + 1, 1);
 		from_disk = true;
+		/* Reuse a file handle already opened by the caller (the collate sector
+		   loop opens it once for the whole 256^3 scan); only open — and later
+		   close — a handle we open ourselves. Reopening the sector file on every
+		   call turned the disk-mode collate into millions of open/close (and
+		   stat) syscalls per sector. */
+		if (!sector->file)
+		{
+			sector->file = ldb_open(table, key, "r");
+			if (!sector->file) return 0;
+			own_file = true;
+		}
+		node = calloc(LDB_MAX_REC_LN + 1, 1);
 	}
 
 	uint64_t next = 0;
@@ -152,8 +162,13 @@ uint32_t ldb_fetch_recordset(ldb_sector_t *sector, struct ldb_table table, uint8
 	if (from_disk)
 	{
 		free(node);
-		fclose(sector->file);
-		sector->file = NULL;
+		/* Only close the handle if we opened it here; a caller-provided handle
+		   (collate) is closed by the caller once the whole sector is scanned. */
+		if (own_file)
+		{
+			fclose(sector->file);
+			sector->file = NULL;
+		}
 	}
 
 	return records;

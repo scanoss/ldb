@@ -780,6 +780,15 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 	/* Read each one of the (256 ^ 3) list pointers from the map */
 	uint8_t k[LDB_KEY_LN];
 	k[0] = sector;
+
+	/* Disk mode: open the sector file once and reuse it across the whole
+	   256^3 scan. All keys in a sector share the same file (%02x.ldb, keyed by
+	   the sector id), so reopening it per key would add millions of open/stat
+	   syscalls per sector. ldb_fetch_recordset reuses this handle and leaves it
+	   open; we close it below. */
+	if (!sector_mem->data && !sector_mem->file)
+		sector_mem->file = ldb_open(collate->in_table, k, "r");
+
 	for (int k1 = 0; k1 < 256; k1++)
 		for (int k2 = 0; k2 < 256; k2++)
 			for (int k3 = 0; k3 < 256; k3++)
@@ -816,6 +825,13 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 	free(collate->data);
 	free(collate->tmp_data);
 	free(sector_mem->data);
+
+	/* Close the disk-mode handle opened above (no-op in RAM mode) */
+	if (sector_mem->file)
+	{
+		fclose(sector_mem->file);
+		sector_mem->file = NULL;
+	}
 }
 
 /**
