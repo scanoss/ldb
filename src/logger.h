@@ -18,5 +18,10 @@ void logger_set_level(log_level_t l);
 void log_debug(const char * fmt, ...);
 void logger_dbname_set(char * db);
 void logger_basic(const char * fmt, ...);
+void logger_clear_screen(void);
+/* Enable the interactive import UI (screen clear, spinner, multi-thread
+ * cursor positioning). Disabled by default so library consumers never
+ * emit terminal control sequences. */
+void logger_set_import_ui(bool enable);
 #define LOG_INF(fmt,args...) import_logger(NULL, fmt, args)
 #endif

@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 #include "ldb.h"
 #include "logger.h"
 #include <time.h>
@@ -24,9 +25,45 @@ int yi = 0;
 static bool first_cls = false;
 static bool quiet = false;
 
+/* True only while the interactive `ldb import` UI is active. Terminal UI
+ * (clear screen, spinner, cursor positioning) belongs to that command only,
+ * not to the generic library, so it defaults to OFF. */
+static bool import_ui = false;
+
+void logger_set_import_ui(bool enable)
+{
+    import_ui = enable;
+}
+
+/* True only when stderr is an interactive terminal. Terminal UI (clear
+ * screen, spinner, cursor positioning) must be emitted ONLY in that case,
+ * and always to stderr — never to stdout, which is reserved for data. */
+static inline bool logger_is_interactive(void)
+{
+    return isatty(STDERR_FILENO);
+}
+
+/* Terminal UI may be emitted only when the import UI is enabled AND stderr
+ * is an interactive terminal. */
+static inline bool logger_ui_active(void)
+{
+    return import_ui && logger_is_interactive();
+}
+
+/* Clear the screen by writing the ANSI sequence to stderr instead of
+ * shelling out to `clear`, which inherits (and pollutes) stdout. */
+void logger_clear_screen(void)
+{
+    if (logger_ui_active())
+    {
+        fprintf(stderr, "\033[H\033[2J\033[3J");
+        fflush(stderr);
+    }
+}
+
 void logger_basic(const char * fmt, ...)
 {
-    if (level != LOG_BASIC || quiet)
+    if (level != LOG_BASIC || quiet || !logger_ui_active())
         return;
     pthread_mutex_lock(&logger_lock);
     if (animation_index >= sizeof(animation))
@@ -68,9 +105,9 @@ void log_info(const char * fmt, ...)
     logger_basic(NULL);
     
     pthread_mutex_lock(&logger_lock);
-    if (!first_cls && !quiet)
+    if (!first_cls && !quiet && logger_ui_active())
     {
-        system("clear");
+        logger_clear_screen();
         first_cls = true;
     }
     
@@ -92,7 +129,7 @@ void log_info(const char * fmt, ...)
         }
     }
     //print on stderr
-    if (level > LOG_BASIC && string && !quiet)
+    if (level > LOG_BASIC && string && !quiet && logger_is_interactive())
     {
         pthread_t t = pthread_self();
         int i = 0;
@@ -111,12 +148,12 @@ void log_info(const char * fmt, ...)
         if (!found)
             i = 0;
        
-        if (threads_number > 1)
+        if (threads_number > 1 && logger_ui_active())
         {
             if (i+logger_offset+threads_number/2 > logger_window.ws_row)
             {
                 logger_offset = 0;
-                system("clear");
+                logger_clear_screen();
             }
             gotoxy(0, i + 1 + logger_offset);
             fprintf(stderr, "\33[2K\r");

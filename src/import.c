@@ -1772,8 +1772,8 @@ void signalHandler(int signal) {
 
 	if (signal == SIGINT) 
 	{
-        system("clear");
-		printf("\n\n Safe abort, waiting threads to finish\n");
+        logger_clear_screen();
+		fprintf(stderr, "\n\n Safe abort, waiting threads to finish\n");
         threads_end(threads_list);
 		exit(EXIT_FAILURE);
     }
@@ -1885,6 +1885,10 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		fprintf(stderr, "Error: file or directory %s not exist\n", path);
 		return false;
 	}
+
+	/* This is the interactive import command: enable terminal UI (clear
+	 * screen, spinner, multi-thread progress). Library consumers never do. */
+	logger_set_import_ui(true);
 
 	signal(SIGINT, signalHandler);
 	srand(time(NULL));
