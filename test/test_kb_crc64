@@ -140,6 +140,34 @@ test_12_null_sector_contract() {
     assert "[ \"${records:-0}\" -ge 1 ]" "NULL sector contract failed for CRC64 table (records=$records)"
 }
 
+#Regression: KEYS=3 file format (main key + two binary CRC64 subkeys, no ASCII
+#data field). Production ossv2/file uses KEYS=3, but the rest of this suite only
+#exercises the KEYS=2 file table (field3 = ASCII path). The import used to convert
+#only the first subkey to binary, storing the second key as ASCII text prefixed
+#with 8 zero bytes (32-byte record) instead of an 8-byte binary key (16-byte
+#record). This test locks in the correct binary layout.
+test_13_keys3_binary_subkeys() {
+    # Start from a clean state so leftovers from a prior (possibly failed) run
+    # cannot contaminate the assertion.
+    rm -rf /var/lib/ldb/test_kb3 /usr/local/etc/scanoss/ldb/test_kb3.conf /var/log/scanoss/ldb/test_kb3.log
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/k3file"
+    printf '89b71509aa39eb81,0013aa786d545365,29d0b7ae387ca14c\n89b71509aa39eb81,002325b3101f5061,3ba287571bd8b966\n' > "$tmpdir/k3file/89.csv"
+    echo "bulk insert test_kb3/file from $tmpdir/k3file/89.csv with (KEYS=3,KEY_SIZE=8,FIELDS=3,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    # Whole record must be the two subkeys in BINARY (16 bytes total),
+    # NOT the buggy 8 zero bytes + 16 ASCII chars (32 bytes).
+    result=$(echo "select from test_kb3/file key 89b71509aa39eb81 csv hex -1" | ../ldb -q | head -n1)
+    assert_equals "89b71509aa39eb81,0013aa786d54536529d0b7ae387ca14c," "$result" "keys=3: subkeys not stored as binary"
+
+    # csv hex 16 must split into main key + first subkey (hex) + second key rendered
+    # from its raw 8 binary bytes (0x29 0xd0 ... which is NOT the ASCII "29d0...").
+    result=$(echo "select from test_kb3/file key 89b71509aa39eb81 csv hex 24" | ../ldb -q | head -n1)
+    assert_equals "89b71509aa39eb81,0013aa786d54536529d0b7ae387ca14c," "$result" "keys=3: second key not decoded to binary"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kb3 /usr/local/etc/scanoss/ldb/test_kb3.conf /var/log/scanoss/ldb/test_kb3.log
+}
+
 setup_suite () {
     echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8)' | ../ldb
 }

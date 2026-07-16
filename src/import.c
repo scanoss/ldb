@@ -571,7 +571,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	int node_limit = 65536;
 
 	uint8_t *itemid = calloc(hash_len, 1);
-	uint8_t *field2 = calloc(hash_len, 1);
+	uint8_t *field2 = NULL; /* holds all (keys-1) subkeys in binary; allocated once field2_ln is known */
 	uint8_t *item_buf = malloc(LDB_MAX_NODE_LN);
 	uint8_t *item_lastid = calloc(hash_len * 2 + 1, 1);
 	uint16_t item_ptr = 0;
@@ -624,6 +624,8 @@ int ldb_import_csv(ldb_importation_config_t * job)
 		oss_bulk.tmp = true;
 
 	int field2_ln = (oss_bulk.keys - 1) * hash_len;
+	/* Buffer for all subkeys (fields 2..keys), each hash_len bytes, stored in binary */
+	field2 = calloc(field2_ln > 0 ? field2_ln : hash_len, 1);
 	char last_url_id[hash_len_hex+1];
 	last_url_id[0] = 0;
 
@@ -698,9 +700,10 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			else
 				memcpy(last_url_id, data, hash_len * 2);
 			
-			if (job->opt.params.csv_fields > 2)
+			/* Fields 1..keys are all keys; actual data (if any) starts right after them */
+			if (job->opt.params.csv_fields > oss_bulk.keys)
 			{
-				data = field_n(3, line);
+				data = field_n(oss_bulk.keys + 1, line);
 				if (!data)
 				{
 					log_debug("%s: Error in line: %d -- Skipped\n", job->csv_path, line_number);
@@ -749,12 +752,33 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			}
 		}
 
-		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
+		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields <= oss_bulk.keys))
 		{
-			/* Convert id to binary (and 2nd field too if needed (files table)) */
-			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, job->opt.params.keys_number > 1 ? true : false, hash_len))
+			/* Convert the main key (field 1) to binary. Subkeys are handled below. */
+			if (!file_id_to_bin(line, first_byte, got_1st_byte, itemid, field2, false, hash_len))
 			{
 				log_debug("%s: failed to parse key, line number: %d\n", job->csv_path, line_number);
+				skipped++;
+				continue;
+			}
+
+			/* Convert all subkeys (fields 2..keys) to binary, packed into field2.
+			   file_id_to_bin only handled the main key, so each remaining key field
+			   is decoded here into its slot instead of being stored as ASCII data. */
+			bool subkey_error = false;
+			for (int i = 1; i < oss_bulk.keys; i++)
+			{
+				char *subkey = field_n(i + 1, line);
+				if (!subkey)
+				{
+					subkey_error = true;
+					break;
+				}
+				ldb_hex_to_bin(subkey, hash_len_hex, field2 + (i - 1) * hash_len);
+			}
+			if (subkey_error)
+			{
+				log_debug("%s: failed to parse subkey, line number: %d\n", job->csv_path, line_number);
 				skipped++;
 				continue;
 			}
