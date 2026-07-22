@@ -338,6 +338,23 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	/* Add record exceeds limit, skip it */
 	if (size > collate->max_rec_ln) return false;
 
+	/* Per-key memory cap: a key's list cannot legitimately exceed its sector
+	   size. Once the buffer would grow past that bound, drop further records for
+	   this key (truncate) and log it once, so a duplicated/corrupt key cannot
+	   grow the buffer without bound and OOM the process. */
+	if (collate->max_key_bytes && (uint64_t)(collate->data_ptr + collate->rec_width) > collate->max_key_bytes)
+	{
+		if (!collate->key_truncated)
+		{
+			char key_hex[LDB_KEY_LN * 2 + 1];
+			ldb_bin_to_hex(key, LDB_KEY_LN, key_hex);
+			log_info("COLLATE-CAP: key %s reached sector-size cap (%lu bytes, %ld records so far). Truncating remaining records for this key.\n",
+			         key_hex, (unsigned long) collate->max_key_bytes, collate->key_rec_count);
+			collate->key_truncated = true;
+		}
+		return false;
+	}
+
 	/* Grow the buffer on demand instead of dropping records. A single key can
 	   own far more than LDB_MAX_RECORDS records (e.g. a very common file hash),
 	   and writing past the reservation corrupts the heap. Enlarge by one more
@@ -593,6 +610,14 @@ bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey,
 	/* If main key has changed, collate and write list and reset data_ptr */
 	if (collate->data_ptr && memcmp(key, collate->last_key, LDB_KEY_LN))
 	{
+		/* DIAG: report keys whose in-memory list is abnormally large (>1GB).
+		   A well-distributed key's list is tiny; a multi-GB flush pinpoints the
+		   key that inflates the collate buffer. */
+		if (collate->data_ptr > (1L << 30))
+			log_info("COLLATE-DIAG: key %02x%02x%02x%02x flushed %ld bytes / %ld records (rec_width=%ld, cap=%lu)\n",
+			         collate->last_key[0], collate->last_key[1], collate->last_key[2], collate->last_key[3],
+			         collate->data_ptr, collate->key_rec_count, collate->rec_width, (unsigned long) collate->max_key_bytes);
+
 		/* Sort records */
 		ldb_collate_sort(collate);
 
@@ -602,6 +627,7 @@ bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey,
 		/* Reset data pointer */
 		collate->data_ptr = 0;
 		collate->key_rec_count = 0;
+		collate->key_truncated = false;
 	}
 	else
 	{
@@ -763,8 +789,16 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	if (!collate->tmp_data)
 		return false;
 
-	/* Set global cmp width (for qsort) */
-	ldb_cmp_width = max_rec_ln;
+	/* Set global cmp width (for qsort). The comparison scans each record slot
+	   from its start (key + subkey + data), so it must cover the full record
+	   content, i.e. rec_width minus the trailing 4-byte length field. Using
+	   max_rec_ln alone under-scans once max_rec_ln is tightened to the real
+	   record size (it would miss the key/subkey-length worth of trailing data
+	   bytes and mis-dedup). Fixed-record tables keep the previous width. */
+	if (collate->table_rec_ln)
+		ldb_cmp_width = max_rec_ln;
+	else
+		ldb_cmp_width = collate->rec_width - 4;
 
 	/* Open (out) sector */
 	collate->out_sector = ldb_open(out_table, &sector, "w+");
@@ -788,6 +822,21 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 	   open; we close it below. */
 	if (!sector_mem->data && !sector_mem->file)
 		sector_mem->file = ldb_open(collate->in_table, k, "r");
+
+	/* Cap a single key's in-memory list at the sector size. A key's records are
+	   a subset of its sector, so its buffer can never legitimately exceed the
+	   sector; anything beyond that is duplicated/corrupt data. Records past this
+	   bound are dropped (see ldb_collate_add_variable_record) so a pathological
+	   key truncates instead of OOMing the process. Size comes from the sector
+	   struct (RAM mode) or the open handle (disk mode, where size is 0). */
+	collate->key_truncated = false;
+	collate->max_key_bytes = sector_mem->size;
+	if (collate->max_key_bytes == 0 && sector_mem->file)
+	{
+		fseeko64(sector_mem->file, 0, SEEK_END);
+		off_t fsz = ftello64(sector_mem->file);
+		if (fsz > 0) collate->max_key_bytes = (uint64_t) fsz;
+	}
 
 	for (int k1 = 0; k1 < 256; k1++)
 		for (int k2 = 0; k2 < 256; k2++)

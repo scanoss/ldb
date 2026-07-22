@@ -250,6 +250,21 @@ uint64_t ldb_node_read(ldb_sector_t *sector, struct ldb_table table, uint64_t pt
 	/* NN: Obtain the next node */
 	uint64_t next_node = uint40_read(buffer);
 
+	/* Sequential-read invariant: nodes are only ever appended at the end of the
+	   sector, so within a list every "next" pointer must advance to a HIGHER
+	   offset than the node we just read. A pointer that does not move forward
+	   (next <= ptr) can only be corruption or a cycle; following it would re-read
+	   the same nodes forever and grow the collate buffer without bound (observed
+	   as a single key ballooning past the whole sector size). Treat it as the end
+	   of the list so the reader terminates instead of looping. */
+	if (next_node != 0 && next_node <= ptr)
+	{
+		log_info("Warning: non-sequential next-node pointer on sector %02x (key %02x%02x%02x%02x): next %llu <= current %llu. Truncating list to avoid a read cycle.\n",
+		         sector->id, key[0], key[1], key[2], key[3],
+		         (unsigned long long) next_node, (unsigned long long) ptr);
+		next_node = 0;
+	}
+
 	/* TS: Obtain the size of the node */
 	uint32_t node_size = 0;
 	if (table.ts_ln == 2) node_size = uint16_read(buffer + LDB_PTR_LN);
@@ -355,6 +370,18 @@ void ldb_node_unlink (struct ldb_table table, uint8_t *key)
 
 					/* NN: Obtain the next node */
 					next = uint40_read(buffer);
+
+					/* Same sequential-read invariant as ldb_node_read: a next
+					   pointer must advance forward. Stop on a non-sequential
+					   pointer to avoid an unlink cycle on a corrupted list. */
+					if (next != 0 && next <= last)
+					{
+						log_info("Warning: non-sequential next-node pointer while unlinking key %02x%02x%02x%02x: next %llu <= current %llu. Stopping.\n",
+						         key[0], key[1], key[2], key[3],
+						         (unsigned long long) next, (unsigned long long) last);
+						free(buffer);
+						break;
+					}
 
 					/* TS: Obtain the size of the node */
 					uint16_t node_size = uint16_read(buffer + LDB_PTR_LN);

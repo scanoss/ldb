@@ -86,8 +86,8 @@ void help()
 	printf("    VERBOSE: Enable verbose mode.\n");
 	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n");
 	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
-	printf("    MAX_RAM_PERCENT: max %% of AVAILABLE system RAM (MemAvailable) the collate process may use to load a full sector into memory.\n");
-	printf("                     If a sector plus its collate buffers do not fit within this budget it is collated in (slower) disk mode instead.\n");
+	printf("    MAX_RAM_PERCENT: max %% of TOTAL system RAM the collate may use to hold input sectors in memory, aggregated across all threads.\n");
+	printf("                     Threads share a single budget: a sector is loaded in RAM only while the running total fits; otherwise it is collated in (slower) disk mode.\n");
 	printf("                     Valid range 1-100; values <=0 or >100 fall back to the default. Default value: 50.\n");
 	printf("    TMP_PATH: Define the temporary directory. Default value \"/tmp\".\n");
 	printf("	It is not mandatory to specify all parameters; default values will be assumed for missing parameters.\n\n");
@@ -419,14 +419,17 @@ int main(int argc, char **argv)
 	{
 		case LDB_UPDATE:
 		{
-			char cmd [LDB_MAX_PATH] = "(VALIDATE_VERSION=1";
+			/* Do not force VALIDATE_VERSION here: it defaults to 1 and forcing it
+			 * on the command line would override the value set in the .conf file,
+			 * making VALIDATE_VERSION=0 impossible to set via configuration. */
+			char cmd [LDB_MAX_PATH] = "(";
 			if (*path)
 			{
 				if (collate)
-					strcat(cmd, ",COLLATE=1");
+					strcat(cmd, "COLLATE=1,");
 
 				if (verbose)
-					strcat(cmd, ",VERBOSE=1");
+					strcat(cmd, "VERBOSE=1,");
 
 				strcat(cmd, ")");
 				if (!dbname || !*dbname)

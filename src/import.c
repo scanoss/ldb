@@ -1062,11 +1062,15 @@ bool version_import(ldb_importation_config_t *job)
 	char * monthly_date_i = version_get_monthly(vf_import);
 
 	int test_len = strlen(vf_import);
-	
-	if (daily_date_i)
-		test_len -= (strlen(daily_date_i) + strlen("\"daily\":"));
-	if (monthly_date_i)
-		test_len -= (strlen(monthly_date_i) + strlen("\"monthly\":"));
+
+	/* Subtract the recognized "key":"value" content for each field present in
+	 * the file. A field set to "N/A" makes version_get_*() return NULL, so
+	 * account for the "N/A" placeholder explicitly; otherwise its bytes stay in
+	 * test_len and wrongly trip the excess-characters check below. */
+	if (strstr(vf_import, "\"daily\":"))
+		test_len -= (strlen("\"daily\":") + (daily_date_i ? strlen(daily_date_i) : strlen("N/A")));
+	if (strstr(vf_import, "\"monthly\":"))
+		test_len -= (strlen("\"monthly\":") + (monthly_date_i ? strlen(monthly_date_i) : strlen("N/A")));
 	//exit if cannot find daily or monthly or there are am excess of characteres in the json
 	if ((!daily_date_i && !monthly_date_i) || test_len > 10)
 	{
@@ -1391,8 +1395,24 @@ static int load_import_config(ldb_importation_config_t * config, import_params_t
 		return -1;
 }
 
-static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int collate_max_ram_percent)
+/* Aggregate collate RAM budget shared across all concurrent collate threads.
+ * Guarded by `lock`. Tracks the memory (in KB) currently committed to holding
+ * input sectors in RAM, so MAX_RAM_PERCENT caps the whole process instead of
+ * being enforced per-thread. Without this, N threads each pass an instantaneous
+ * per-sector check and collectively exhaust RAM. */
+static unsigned long collate_committed_ram_kb = 0;
+
+/* Decide whether `sector` can be collated with its input loaded in RAM while
+ * honoring the aggregate MAX_RAM_PERCENT budget shared by all threads.
+ * PRECONDITION: the caller MUST hold `lock` (this reads/writes the shared
+ * collate_committed_ram_kb counter). On success the sector's estimated
+ * footprint is reserved in that counter and returned via *reserved_kb; the
+ * caller must release it (subtract under `lock`) once ldb_collate_sector()
+ * returns. On failure *reserved_kb is 0 and the sector is collated in disk mode. */
+static bool check_and_reserve_collate_ram(struct ldb_table kb, uint8_t sector, int collate_max_ram_percent, unsigned long *reserved_kb)
 {
+	*reserved_kb = 0;
+
     FILE* file = fopen("/proc/meminfo", "r");
     if (file == NULL) {
         perror("Error opening /proc/meminfo");
@@ -1403,14 +1423,14 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
 	unsigned long totalMemory = 0;
     unsigned long availableMemory = 0;
 	unsigned long freeMemory = 0;
-    
+
 	while (fgets(line, sizeof(line), file)) {
 
 		if (sscanf(line, "MemTotal: %lu", &totalMemory) == 1)
             continue;
-		if (sscanf(line, "MemFree: %lu", &freeMemory) == 1) 
+		if (sscanf(line, "MemFree: %lu", &freeMemory) == 1)
             continue;
-        if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1) 
+        if (sscanf(line, "MemAvailable: %lu", &availableMemory) == 1)
             break;
     }
 
@@ -1437,17 +1457,25 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
 	unsigned long required_memory_kb = sector_size_kb + collate_buffers_kb;
 	unsigned long required_with_margin_kb = (required_memory_kb * 120) / 100;
 
-	/* Collate may use up to collate_max_ram_percent% of the AVAILABLE memory.
-	 * availableMemory is used (not free) as it includes reclaimable cache. This
-	 * keeps the decision sensible on big shared servers, where available memory
-	 * is naturally a small fraction of the total. */
-	unsigned long budget_kb = (availableMemory * collate_max_ram_percent) / 100;
+	/* Aggregate budget: MAX_RAM_PERCENT of TOTAL system RAM, shared by every
+	 * collate thread. Total (not available) is used so the ceiling is absolute
+	 * and does not drift with the reclaimable page cache during a bulk import;
+	 * the counter below is what enforces the per-process limit across threads. */
+	unsigned long budget_kb = (totalMemory * collate_max_ram_percent) / 100;
 
-	log_debug("RAM check - sector %02x: size=%lu MB, required=%lu MB (with margin), available=%lu MB, budget=%lu MB\n",
+	log_debug("RAM check - sector %02x: size=%lu MB, required=%lu MB (with margin), committed=%lu MB, budget=%lu MB, available=%lu MB\n",
 	          sector, sector_size_kb / 1024, required_with_margin_kb / 1024,
-	          availableMemory / 1024, budget_kb / 1024);
+	          collate_committed_ram_kb / 1024, budget_kb / 1024, availableMemory / 1024);
 
-	/* 1. Enough available memory for the sector + buffers + margin? */
+	/* 1. Would loading this sector push the aggregate (all threads) over budget? */
+	if (collate_committed_ram_kb + required_with_margin_kb > budget_kb)
+	{
+		log_debug("Sector %02x would exceed aggregate RAM budget (%d%% of total). Committed: %lu MB + required: %lu MB > budget: %lu MB. Using disk mode.\n",
+		          sector, collate_max_ram_percent, collate_committed_ram_kb / 1024, required_with_margin_kb / 1024, budget_kb / 1024);
+		return false;
+	}
+
+	/* 2. Enough instantaneous available memory right now for sector + buffers + margin? */
 	if (availableMemory < required_with_margin_kb)
 	{
 		log_debug("Sector %02x too large for available RAM (%lu MB required > %lu MB available). Using disk mode.\n",
@@ -1455,25 +1483,21 @@ static bool check_system_available_ram(struct ldb_table kb, uint8_t sector, int 
 		return false;
 	}
 
-	/* 2. Does the requirement fit within the RAM budget (% of available)? */
-	if (required_with_margin_kb > budget_kb)
-	{
-		log_debug("Sector %02x would exceed RAM policy (%d%% of available). Required: %lu MB > budget: %lu MB. Using disk mode.\n",
-		          sector, collate_max_ram_percent, required_with_margin_kb / 1024, budget_kb / 1024);
-		return false;
-	}
-
-	/* 3. Sanity check: a single sector should not consume > 90% of available RAM */
-	unsigned long max_sector_size_kb = (availableMemory * 90) / 100;
+	/* 3. Sanity check: a single sector should not consume > 90% of total RAM */
+	unsigned long max_sector_size_kb = (totalMemory * 90) / 100;
 	if (sector_size_kb > max_sector_size_kb)
 	{
-		log_debug("Sector %02x extremely large (%lu MB > 90%% of available %lu MB). Using disk mode for safety.\n",
-		          sector, sector_size_kb / 1024, availableMemory / 1024);
+		log_debug("Sector %02x extremely large (%lu MB > 90%% of total %lu MB). Using disk mode for safety.\n",
+		          sector, sector_size_kb / 1024, totalMemory / 1024);
 		return false;
 	}
 
-	log_debug("Sector %02x will be loaded in RAM (%lu MB, budget %lu MB)\n",
-	          sector, sector_size_kb / 1024, budget_kb / 1024);
+	/* Reserve this sector's footprint against the shared budget. */
+	collate_committed_ram_kb += required_with_margin_kb;
+	*reserved_kb = required_with_margin_kb;
+
+	log_debug("Sector %02x will be loaded in RAM (%lu MB, committed now %lu MB / budget %lu MB)\n",
+	          sector, sector_size_kb / 1024, collate_committed_ram_kb / 1024, budget_kb / 1024);
 	return true;
 }
 
@@ -1495,7 +1519,16 @@ int import_collate_sector(ldb_importation_config_t *config)
 		tmptable.key_ln = LDB_KEY_LN;
 
 		int max_rec_len = config->opt.params.is_wfp_table == 1 ? config->opt.params.key_size + 2 : config->opt.params.collate_max_rec;
-
+		/* Multi-key table with no data field (every CSV field is a key): the record
+		   is just the (keys-1) binary subkeys concatenated, so size it exactly
+		   instead of the generic MAX_RECORD. Otherwise the collate buffer reserves
+		   ~MAX_RECORD bytes per record (2KB for a 16-byte record) and a hot key
+		   balloons to tens of GB. MAX_RECORD stays the filter for tables with data. */
+		if (config->opt.params.keys_number > 1 && config->opt.params.csv_fields == config->opt.params.keys_number)
+		{
+			max_rec_len = (config->opt.params.keys_number - 1) * config->opt.params.key_size;
+		}
+		
 		if (ldbtable.rec_ln && ldbtable.rec_ln != max_rec_len)
 		{
 			log_info("E076 Max record length should equal fixed record length (%d vs %d)\n", ldbtable.rec_ln, max_rec_len);
@@ -1535,17 +1568,29 @@ int import_collate_sector(ldb_importation_config_t *config)
 			struct ldb_collate_data collate;
 			uint8_t k0 = sector;
 			ldb_sector_t sector_mem = {.data = NULL, .id = k0, .size = 0};
+			unsigned long reserved_ram_kb = 0;
 
 			bool init_ok = ldb_collate_init(&collate, ldbtable, tmptable, max_rec_len, false, k0);
 			if (!init_ok)
 				log_info("Collate init failed for sector %d\n", k0);
 
-			if (init_ok && check_system_available_ram(ldbtable, k0, config->opt.params.collate_max_ram_percent))
+			if (init_ok && check_and_reserve_collate_ram(ldbtable, k0, config->opt.params.collate_max_ram_percent, &reserved_ram_kb))
 				sector_mem = ldb_load_sector(ldbtable, &k0);
 
 			pthread_mutex_unlock(&lock);
 			if (init_ok)
+			{
 				ldb_collate_sector(&collate, sector, &sector_mem);
+
+				/* Release this sector's reservation from the shared budget so
+				   other threads can load their sectors in RAM. */
+				if (reserved_ram_kb)
+				{
+					pthread_mutex_lock(&lock);
+					collate_committed_ram_kb -= reserved_ram_kb;
+					pthread_mutex_unlock(&lock);
+				}
+			}
 			else
 			{
 				log_info("ERROR: failed to allocate memory to collate sector %02x\n", k0);

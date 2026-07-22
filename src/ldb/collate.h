@@ -41,6 +41,13 @@ struct ldb_collate_data
 	bool merge;
 	long del_count;
 	long key_rec_count;
+	/* Upper bound (bytes) for a single key's in-memory list. A key's records are
+	   a subset of its sector, so its buffer can never legitimately exceed the
+	   sector size; anything beyond that is duplicated/corrupt data. Records past
+	   this bound are dropped (the key is truncated) to keep memory bounded. 0
+	   disables the cap. */
+	uint64_t max_key_bytes;
+	bool key_truncated; /* true once the current key has hit max_key_bytes (reset per key) */
 	job_delete_tuples_t * del_tuples;
 	collate_handler handler;
 };
