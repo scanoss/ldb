@@ -821,9 +821,9 @@ int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
 
         unsigned have = CHUNK_SIZE - strm.avail_out;
 
-        // Realloc to increase the size of data
-        *data = realloc(*data, data_size + have);
-        if (*data == NULL) 
+        // Realloc to increase the size of data (+1 so callers can NUL-terminate)
+        *data = realloc(*data, data_size + have + 1);
+        if (*data == NULL)
 		{
             fprintf(stderr, "Error reallocating memory to store decompressed data");
             inflateEnd(&strm);
@@ -837,6 +837,7 @@ int uncompress_by_chunks(uint8_t **data, uint8_t *zdata, size_t zdata_len) {
 
     // Free resources
     inflateEnd(&strm);
+	(*data)[data_size] = 0;
 	return data_size;
 }
 
@@ -844,5 +845,10 @@ void mz_deflate(struct mz_job *job)
 {
 	/* Decompress data */
 	job->data_ln = uncompress_by_chunks((uint8_t **) &job->data, job->zdata, job->zdata_ln);
-	job->data_ln--;
+
+	/* Legacy mz records embed a trailing NUL in the compressed payload (see
+	 * mz_add), current ones store the raw contents. Strip the terminator only
+	 * when it is actually part of the record, otherwise the last byte of every
+	 * file would be lost. */
+	if (job->data_ln && job->data[job->data_ln - 1] == 0) job->data_ln--;
 }
