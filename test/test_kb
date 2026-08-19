@@ -65,6 +65,25 @@ test_9_null_sector_contract() {
     assert "[ \"${records:-0}\" -ge 1 ]" "NULL sector contract failed for MD5 table (records=$records)"
 }
 
+#Imports into a dedicated scratch table so it is safe regardless of test execution order.
+test_10_log_path() {
+    custom_log="/tmp/test_kb_custom.log"
+    rm -f $custom_log
+    default_log_lines=$(wc -l < /var/log/scanoss/ldb/test_kb.log)
+
+    echo "bulk insert test_kb/logtest from source/mined/file/00.csv with (KEYS=2,FIELDS=3,VALIDATE_VERSION=0,FILE_DEL=0,LOG_PATH=$custom_log)" | ../ldb -q
+    assert "test -e $custom_log" "custom log file was not created"
+
+    result=$(head -1 $custom_log)
+    assert "echo '$result' | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'" "custom log header fails: $result"
+
+    result=$(grep -c "logtest configuration:" $custom_log)
+    assert "[ \"${result:-0}\" -ge 1 ]" "import configuration was not written to the custom log"
+
+    assert_equals "$default_log_lines" "$(wc -l < /var/log/scanoss/ldb/test_kb.log)" "default log was written despite LOG_PATH"
+    rm -f $custom_log
+}
+
 setup_suite () {
     ../ldb -u source/mined -n test_kb
 }
