@@ -53,7 +53,7 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
     TABLENAME is optional and will be derived from the directory name's file if not specified.
 
     (CONFIG) is a configuration string with the following format:
-        (FILE_DEL=1/0,KEYS=N,MZ=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp)
+        (FILE_DEL=1/0,KEYS=N,MZ=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)
         
         Where 1/0 represents "true" / "false", and N is an integer.
         FILE_DEL: Delete file after importation is completed.
@@ -71,6 +71,7 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         MAX_RECORD: Maximum record size in bytes (Default value: 2048).
         MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
         TMP_PATH: Path to the folder used for temporary files (default: /tmp).
+        LOG_PATH: Path to a custom log file (default: /var/log/scanoss/ldb/DBNAME.log).
 
 bulk insert DBNAME/TABLENAME from PATH
     Imports data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.

@@ -71,7 +71,7 @@ void help()
 	printf("Import data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.\n");
 	printf("TABLENAME is optional and will be defined from the directory name's file if not specified.\n");
 	printf("(CONFIG) is a configuration string with the following format:\n");
-	printf("    (FILE_DEL=1/0,KEYS=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp)\n");
+	printf("    (FILE_DEL=1/0,KEYS=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)\n");
 	printf("    Where 1/0 represents true/false, and N is an integer.\n");
 	printf("    FILE_DEL: Delete file after importation is complete.\n");
 	printf("    KEYS: Number of binary keys in the CSV file.\n");
@@ -88,6 +88,7 @@ void help()
 	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
 	printf("    MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.\n");
 	printf("    TMP_PATH: Define the temporary directory. Default value \"/tmp\".\n");
+	printf("    LOG_PATH: Define a custom log file. Default value \"/var/log/scanoss/ldb/DBNAME.log\".\n");
 	printf("	It is not mandatory to specify all parameters; default values will be assumed for missing parameters.\n\n");
 
 	printf("	bulk insert  DBNAME/TABLENAME from PATH\n");

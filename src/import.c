@@ -1232,6 +1232,7 @@ const char * config_parameters[] = {
 									"MAX_RECORD",
 									"MAX_RAM_PERCENT",
 									"TMP_PATH",
+									"LOG_PATH",
 									};
 
 #define CONFIG_PARAMETERS_NUMBER  (sizeof(config_parameters) / sizeof(config_parameters[0]))
@@ -1306,10 +1307,24 @@ bool ldb_importation_config_parse(import_params_t * opt, char * line)
 				*c = 0;
 			else
 			{
-				 c = strrchr(opt->params.tmp_path,')');	
+				 c = strrchr(opt->params.tmp_path,')');
 				 if (c)
 				 	*c = 0;
-			} 
+			}
+		}
+		else if (!strcmp(config_parameters[i], "LOG_PATH"))
+		{
+			strncpy(opt->params.log_path,no_spaces + (param - normalized) + 1, LDB_MAX_PATH);
+			//remove spurius ")" or "," from path TODO: improve
+			char * c = strchr(opt->params.log_path,',');
+			if (c)
+				*c = 0;
+			else
+			{
+				 c = strrchr(opt->params.log_path,')');
+				 if (c)
+				 	*c = 0;
+			}
 		}
 		else if (sscanf(param,"=%d", &val))
 		{
@@ -2150,6 +2165,8 @@ bool ldb_import_command(char * dbtable, char * path, char * config)
 		ldb_importation_config_parse(&user_opt, config);
 		if (user_opt.params.verbose > 0)
 			logger_set_level(user_opt.params.verbose);
+		if (*user_opt.params.log_path)
+			logger_set_path(user_opt.params.log_path);
 	}
 
 	if (!ldb_database_exists(job.dbname))
