@@ -132,13 +132,8 @@ void log_info(const char * fmt, ...)
 	pthread_mutex_unlock(&logger_lock);
 }
 
-void logger_dbname_set(char * db)
+static void logger_write_header(void)
 {
-    if (*import_logger_path)    
-        return;
-    
-    ldb_prepare_dir(LOGGER_DIR);
-    sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
     time_t currentTime = time(NULL);
 	struct tm *localTime = localtime(&currentTime);
 	char timeString[64];
@@ -149,6 +144,25 @@ void logger_dbname_set(char * db)
         fprintf(f, "%s\n", timeString);
         fclose(f);
     }
+}
+
+void logger_set_path(const char * path)
+{
+    if (*import_logger_path || !path || !*path)
+        return;
+
+    strncpy(import_logger_path, path, LDB_MAX_PATH - 1);
+    logger_write_header();
+}
+
+void logger_dbname_set(char * db)
+{
+    if (*import_logger_path)
+        return;
+
+    ldb_prepare_dir(LOGGER_DIR);
+    sprintf(import_logger_path, "%s/%s.log", LOGGER_DIR, db);
+    logger_write_header();
 }
 
 void logger_init(char * db, int tnumber,  pthread_t * tlist)
