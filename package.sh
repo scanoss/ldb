@@ -55,6 +55,9 @@ if [ "$1" = "rpm" ] ; then
   chmod +x ./dist/.rpmpkg/ldb
   cp libldb.so ./dist/.rpmpkg/libldb.so
   cp scripts/rpmpkg/ldb.spec dist/.rpmpkg/ldb.spec
-  sed -i 's/\LDB_VERSION/'"$2"'/g' dist/.rpmpkg/ldb.spec
+  # RPM forbids '-' in the Version field, and the crc64 release line tags carry a
+  # "-crc64" suffix (e.g. v5.0.0-crc64). Translate it to '_' for the spec file.
+  rpm_version="${2//-/_}"
+  sed -i 's/\LDB_VERSION/'"$rpm_version"'/g' dist/.rpmpkg/ldb.spec
   rpmbuild -ba --build-in-place --define "_topdir $(pwd)/dist/rpm" dist/.rpmpkg/ldb.spec
 fi

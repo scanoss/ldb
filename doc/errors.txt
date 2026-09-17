@@ -5,14 +5,15 @@ E053 Data record size exceeded
 E054 Data corruption
 E055 Data corruption
 E056 Data sector corrupted, with %lu below map_size
-E057 Map location 
+E057 Map location
+E058 Error writing node
 E059 LDB root directory %s is not accessible
 E060 Table name format should be dbname/tablename
 E061 db/table name is too long
 E062 Database does not exist
 E063 Table does not exist
 E064 Invalid characters or name is too long
-E065 Cannot create
+E065 Cannot create / cannot access ldb table (check permissions)
 E066 Syntax error
 E067 Command not implemented
 E068 Database already exists
@@ -20,5 +21,12 @@ E069 Table already exists
 E070 Cannot open LDB root directory
 E071 Key length cannot be less than 32 bits
 E072 Cannot access table
-E073 Provided key is longer than table key
-E074 Corrupted node
+E073 Provided key length is invalid
+E074 Cannot erase/update/replace sector
+E075 Key length must be 32 bits
+E076 Max record length is invalid, or merge requires tables with equal key length / record types
+E077 Unsupported node_length size (must be 2 or 4 bytes)
+E078 Collate discarded records of a key that exceeded the sector-size cap
+
+Note: E065, E074 and E076 are each raised for more than one condition of the same
+family; the message text identifies the specific one.

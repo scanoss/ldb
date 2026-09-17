@@ -1,28 +1,63 @@
 # LDB Database
 
-The LDB (Linked-list database) is a headless database management system focused in single-key, read-only application on vast amounts of data, while maintaining a minimal footprint and keeping system calls to a bare minimum. Information is structured using linked lists. 
+The LDB (Linked-list database) is a headless database management system focused in single-key, read-only application on vast amounts of data, while maintaining a minimal footprint and keeping system calls to a bare minimum. Information is structured using linked lists.
+
+---
+
+## ⚠️ Release line: CRC64-compatible (5.x)
+
+**This branch (`crc64`) holds the CRC64-compatible release line of LDB, starting at v5.0.0-crc64.**
+
+LDB is maintained as two parallel release lines:
+
+| Release line | Branch | Versions | Tag format | Key/hash support |
+|---|---|---|---|---|
+| Traditional | `main` | 4.x | `v4.1.11` | MD5 (16-byte keys) only |
+| CRC64-compatible | `crc64` | 5.x and later | `v5.0.0-crc64` | CRC64 (8-byte keys) **and** MD5 (16-byte keys) |
+
+Releases of this line carry a mandatory `-crc64` suffix, since both lines are tagged in the same repository. `ldb -v` reports
+it too, so a binary always identifies the line it came from.
+
+The 5.x line still supports the `md5` hash mode, so an MD5 knowledge base built with it keeps working. However, the internal
+changes required to support variable key sizes are deep enough that the two lines are kept separate rather than merged.
+
+### Engine compatibility
+
+> **A knowledge base built with LDB 5.x requires SCANOSS engine v6.0.0 or later.**
+>
+> Engine releases before v6.0.0 (the 5.x line and earlier) cannot read tables created by this LDB release line, and they do not
+> link against its library API. Engine v6.0.0 is released from the [`crc64` branch of scanoss/engine](https://github.com/scanoss/engine).
+>
+> If you need to stay on engine v5.x or earlier, use the traditional LDB line on the `main` branch (4.x).
+
+This constraint applies in both hash modes: it comes from the LDB on-disk table layout and the library API surface, not from the
+choice of CRC64 vs MD5.
+
+---
 
 # Build and Install
 
 ## Prerequisites
-Building LDB requires openssl and zlib. Make sure packages `zlib1g-dev` and `libssl-dev` are installed.
+Building LDB requires libgcrypt and zlib. Make sure packages `zlib1g-dev` and `libgcrypt-dev` are installed.
 
 ## Build
 Run `make all` to build the shell binary and the shared library.
 
 ## Install
-Run `make install` to copy the binary to `/usr/bin`, the shared library to `/usr/lib` and the header to `/usr/include`.
+Run `make install` to copy the binary to `/usr/bin`, the shared library to `/usr/lib` and the headers to `/usr/include`.
 
 ## Run test
-Run `./run_test.sh` to test the ldb binary.
+Run `./run_test.sh` to test the ldb binary. The suite covers both an MD5 knowledge base (`test/test_kb`) and a CRC64 one
+(`test/test_kb_crc64`).
 
 # Features
 
 Some of the features of the LDB are:
- 
-* Single, fixed size, numeric key (32-bit)
+
+* Sector map addressed by a fixed size, 32-bit numeric key (the first 4 bytes of the record key)
+* Configurable key length: 8 bytes (CRC64) or 16 bytes (MD5)
 * Single-field records
-* Larger keys also are supported by storing exceeded data keys in the data record.
+* Larger keys also are supported by storing exceeded data keys in the data record
 * No indexing: Mapping
 * Data tables define either fixed or variable-length data records
 * Read-only
@@ -32,15 +67,47 @@ Some of the features of the LDB are:
 * C library for native development
 * LDB shell allows interaction with external languages
 
+# Key size and hash mode
+
+A table's key length is fixed when the table is created and stored in its `.cfg` file. LDB derives the hash primitive used for
+that table from the stored key length:
+
+| Key length | Hash primitive | Typical use |
+|---|---|---|
+| 8 bytes | CRC64 | Knowledge bases mined with CRC64 |
+| 16 bytes | MD5 | Knowledge bases mined with MD5 |
+
+The key length is selected at import time with the `KEY_SIZE` configuration parameter (`KEY_SIZE=8` for CRC64, `KEY_SIZE=16`
+for MD5). Since the value is persisted per table, a consumer of the library does not need to be told which mode a table uses:
+`ldb_read_cfg()` reports it, and the matching primitive is selected automatically.
+
+Two different defaults apply, so it is worth being explicit:
+
+* The **auto-generated database configuration file** ships `KEY_SIZE=8` in its `GLOBAL` line, so an import driven by a default
+  `db.conf` produces a **CRC64** knowledge base.
+* The **built-in default**, used when `KEY_SIZE` is not resolved from a configuration file (for instance a `bulk insert ... with
+  (CONFIG)` string that omits it), is `KEY_SIZE=16`, i.e. **MD5**.
+
+Setting `KEY_SIZE` explicitly is therefore recommended whenever the mode matters.
+
+Tables of both kinds can coexist in the same LDB root, but every table of a single knowledge base is expected to use the same
+key size. Set `KEY_SIZE` in the `GLOBAL` section of the database configuration file so it applies to every table (see
+[Import configuration file](#import-configuration-file)).
+
 ## LDB Shell Commands
 
 ```
 create database DBNAME
     Creates an empty database
 
-create table DBNAME/TABLENAME keylen N reclen N
-    Creates an empty table in the given database with
-    the specified key length (>= 4) and record length (0=variable)
+create table DBNAME/TABLENAME keylen N reclen N seckey N
+    Creates an empty table in the given database with the specified key length
+    (8 for CRC64, 16 for MD5; >= 4), record length (0=variable) and number of
+    keys per record (1 when the record carries no secondary key)
+
+create config DBNAME
+    Creates a default import configuration file for DBNAME at
+    /usr/local/etc/scanoss/ldb/DBNAME.conf
 
 show databases
     Lists databases
@@ -53,29 +120,41 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
     TABLENAME is optional and will be derived from the directory name's file if not specified.
 
     (CONFIG) is a configuration string with the following format:
-        (FILE_DEL=1/0,KEYS=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SKIP_SORT=1/0,FIELDS=N,SKIP_FIELDS_CHECK=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)
-        
+        (FILE_DEL=1/0,KEYS=N,KEY_SIZE=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,THREADS=N,COLLATE=1/0,MAX_RECORD=N,MAX_RAM_PERCENT=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)
+
         Where 1/0 represents "true" / "false", and N is an integer.
-        FILE_DEL: Delete file after importation is completed.
-        KEYS: Number of binary keys in the CSV file.
-        MZ: MZ file indicator.
-        BIN: Binary file indicator.
-        WFP: WFP file indicator.
-        OVERWRITE: Overwrite the destination table.
-        SKIP_SORT: Skip the sorting step.
-        FIELDS: Number of CSV fields.
-        SKIP_FIELDS_CHECK: Check field quantity during importation.
-        VALIDATE_VERSION: Validate version.json.
-        VERBOSE: Enable verbose mode.
-        COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.
-        MAX_RECORD: Maximum record size in bytes (default: 1024).
-        MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
-        TMP_PATH: Path to the folder used for temporary files (default: /tmp).
-        LOG_PATH: Path to a custom log file (default: /var/log/scanoss/ldb/DBNAME.log).
+        Specifying every parameter is not mandatory; defaults are assumed for the missing ones.
+
+        FILE_DEL: Delete file after importation is completed. (Default: 0)
+        KEYS: Number of binary keys in the CSV file. (Default: 1)
+        KEY_SIZE: Key length in bytes: 8 for CRC64, 16 for MD5. (Default: 16; the auto-generated db.conf sets 8)
+        MZ: MZ file indicator. (Default: 0)
+        BIN: Binary file indicator. (Default: 0)
+        WFP: WFP file indicator. (Default: 0)
+        OVERWRITE: Overwrite the destination table. (Default: 0)
+        SORT: Sort the tuples during the import process. (Default: 1)
+        FIELDS: Number of CSV fields. (Default: 1)
+        VALIDATE_FIELDS: Check field quantity during importation. (Default: 1)
+        VALIDATE_VERSION: Validate version.json. (Default: 1)
+        VERBOSE: Enable verbose mode. (Default: 0)
+        THREADS: Number of threads used during the importation process. (Default: half of the available cores)
+        COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. (Default: 0)
+        MAX_RECORD: Maximum record size in bytes. (Default: 1024)
+                    Collate reserves one fixed slot of MAX_RECORD bytes per record, so this value drives the collate
+                    memory footprint. Lower it to match the table's real record size on tables with many records
+                    under a single key. If a key still exceeds the sector-size cap, its remaining records are
+                    DISCARDED and the import reports E078.
+        MAX_RAM_PERCENT: max % of TOTAL system RAM the collate may use to hold input sectors in memory, aggregated
+                         across all threads. Threads share a single budget: a sector is loaded in RAM only while the
+                         running total fits; otherwise it is collated in (slower) disk mode.
+                         Valid range 1-100; values <=0 or >100 fall back to the default. (Default: 50)
+        TMP_PATH: Path to the folder used for temporary files. (Default: /tmp)
+        LOG_PATH: Path to a custom log file. (Default: /var/log/scanoss/ldb/DBNAME.log)
 
 bulk insert DBNAME/TABLENAME from PATH
     Imports data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.
-    The configuration will be retrieved from the "db.conf" file located at "/etc/local/scanoss/ldb/". A default configuration file will be created if it doesn't exist.
+    The configuration will be retrieved from the "DBNAME.conf" file located at "/usr/local/etc/scanoss/ldb/".
+    A default configuration file will be created if it doesn't exist.
 
 insert into DBNAME/TABLENAME key KEY hex DATA
     Inserts data (hex) into given db/table for the given hex key
@@ -95,6 +174,14 @@ select from DBNAME/TABLENAME key KEY csv hex N
 delete from DBNAME/TABLENAME max LENGTH keys KEY_LIST
     Deletes all records for the given comma separated hex key list from the db/table. Max record length expected
 
+delete from DBNAME/TABLENAME record CSV_RECORD
+    Deletes the specific CSV record from the specified table. Fields of the CSV may be excluded from the comparison using '*'
+    Example: delete from db/url record key,madler,*,2.4,20171227,zlib,pkg:github/madler/pigz,https://github.com/madler/pigz/archive/v2.4.zip
+    All the records matching every CSV field except the third one will be removed.
+
+delete from DBNAME/TABLENAME records from PATH
+    Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH
+
 collate DBNAME/TABLENAME max LENGTH
     Collates all lists in a table, removing duplicates and records greater than LENGTH bytes
 
@@ -104,22 +191,63 @@ merge DBNAME/TABLENAME1 into DBNAME/TABLENAME2 max LENGTH
 unlink list from DBNAME/TABLENAME key KEY
     Unlinks the given list (32-bit KEY) from the sector map
 
-dump DBNAME/TABLENAME hex N
-    Dumps table contents with first N bytes in hex
+dump DBNAME/TABLENAME hex N [sector N]
+    Dumps table contents with first N bytes in hex. Use "hex -1" to print the complete record as hex.
+    The optional "sector N" limits the dump to a single sector (hex sector id).
+
+dump keys from DBNAME/TABLENAME
+    Dumps a unique list of existing keys
+
+cat KEY from DBNAME/MZTABLE
+    Shows the contents for KEY in an MZ archive
+
+version
+    Prints the LDB version
 ```
+
+## Import configuration file
+
+When `bulk insert` is used without an explicit `(CONFIG)` string, the configuration is read from
+`/usr/local/etc/scanoss/ldb/DBNAME.conf`. A default file is created if it does not exist.
+
+The file holds one line per table, plus an optional `GLOBAL` line (which must be the first one) providing the values inherited
+by every table. A table line must always define `KEYS`.
+
+The generated default targets a CRC64 knowledge base (`KEY_SIZE=8` in the `GLOBAL` line):
+
+```
+GLOBAL: (KEY_SIZE=8, VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=8, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)
+sources: (MZ=1, KEYS=1)
+url: (KEYS=1, FIELDS=8)
+file: (KEYS=2, FIELDS=3)
+wfp: (WFP=1, KEYS=1)
+```
+
+Set `KEY_SIZE=16` in the `GLOBAL` line instead to build an MD5 knowledge base.
+
 ## Other Uses
 
 ### Update Database
 ```bash
-ldb -u [--update] path -n[--name] db_name -c[--collate]
+ldb -u [--update] path -n [--name] db_name -c [--collate]
 ```
-Create or update an existing database from "path." If "db_name" is not specified, "oss" will be used by default. If the "--collate" option is present, each table will be collated during the importation process.
+Create or update an existing database from "path." If "db_name" is not specified, "oss" will be used by default. If the
+"--collate" option is present, each table will be collated during the importation process. This command is an alias of
+"bulk insert" using the configuration file of the database.
 
 ### Process Commands from File
 ```bash
 ldb -f [filename]
 ```
-Process a list of commands from a file named "filename."q
+Process a list of commands from a file named "filename."
+
+### Other command line options
+```
+-v, --version    Print the LDB version and exit
+-h, --help       Print the command list and exit
+-V, --verbose    Enable verbose output
+-q, --quiet      Suppress log output
+```
 
 # Using the shell
 
@@ -128,12 +256,22 @@ The following example explains how to create a database, a table, a record, and 
 ```
 $ echo "create database test" | ldb
 OK
-$ echo "create table test/table1 keylen 16 reclen variable" | ldb
+$ echo "create table test/table1 keylen 16 reclen 0 seckey 1" | ldb
 OK
 $ echo "insert into test/table1 key 26e3a3bd01585cde84408f01fe981f6a ascii THIS_IS_A_TEST" | ldb
 $ echo "select from test/table1 key 26e3a3bd01585cde84408f01fe981f6a" | ldb
 0000  544849535f49535f415f54455354      THIS_IS_A_TEST  
 $ echo "select from test/table1 key 26e3a3bd01585cde84408f01fe981f6a ascii" | ldb
+THIS_IS_A_TEST
+```
+
+The same example using a CRC64 (8-byte) key only differs in the declared key length:
+
+```
+$ echo "create table test/table2 keylen 8 reclen 0 seckey 1" | ldb
+OK
+$ echo "insert into test/table2 key ba80efea39f6de1c ascii THIS_IS_A_TEST" | ldb
+$ echo "select from test/table2 key ba80efea39f6de1c ascii" | ldb
 THIS_IS_A_TEST
 ```
 
@@ -143,16 +281,3 @@ The LDB is released under the GPL 2.0 license. See the LICENSE file for more inf
  
 Copyright (C) 2018-2020 SCANOSS.COM
 http://scanoss.com
-
-
-
-
-
-
-
-
-
-
-
-
-

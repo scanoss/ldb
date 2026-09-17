@@ -51,16 +51,23 @@
  */
 void help()
 {
-	printf("LDB stores information using single, 32-bit keys and single data records. Data records could be fixed in size (drastically footprint for large amounts of short, fixed-sized records). The LDB console accepts the following commands:\n");
+	printf("LDB stores information using a 32-bit sector map key and single data records. Data records could be fixed in size (drastically footprint for large amounts of short, fixed-sized records). The LDB console accepts the following commands:\n");
+	printf("\n");
+	printf("The table key length is fixed at creation time and stored in the table's .cfg file. The hash primitive is derived\n");
+	printf("from it: 8-byte keys are CRC64, 16-byte keys are MD5. See KEY_SIZE below.\n");
 	printf("\n");
 	printf("Shell Commands\n");
 	printf("	create database DBNAME\n");
 	printf("    	Creates an empty database\n\n");
-	
-	printf("	create table DBNAME/TABLENAME keylen N reclen N\n");
-	printf("    	Creates an empty table in the given database with\n");
-	printf("    	the specified key length (>= 4) and record length (0=variable)\n\n");
-	
+
+	printf("	create table DBNAME/TABLENAME keylen N reclen N seckey N\n");
+	printf("    	Creates an empty table in the given database with the specified key length\n");
+	printf("    	(8 for CRC64, 16 for MD5; >= 4), record length (0=variable) and number of\n");
+	printf("    	keys per record (1 when the record carries no secondary key)\n\n");
+
+	printf("	create config DBNAME\n");
+	printf("    	Creates a default import configuration file for DBNAME at %sDBNAME.conf\n\n", LDB_CFG_PATH);
+
 	printf("	show databases\n");
 	printf("  		Lists databases\n\n");
 	
@@ -71,21 +78,25 @@ void help()
 	printf("Import data from PATH into the specified db/table. If PATH is a directory, its files will be recursively imported.\n");
 	printf("TABLENAME is optional and will be defined from the directory name's file if not specified.\n");
 	printf("(CONFIG) is a configuration string with the following format:\n");
-	printf("    (FILE_DEL=1/0,KEYS=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SKIP_SORT=1/0,FIELDS=N,SKIP_FIELDS_CHECK=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,COLLATE=1/0,MAX_RECORD=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)\n");
+	printf("    (FILE_DEL=1/0,KEYS=N,KEY_SIZE=N,MZ=1/0,BIN=1/0,WFP=1/0,OVERWRITE=1/0,SORT=1/0,FIELDS=N,VALIDATE_FIELDS=1/0,VALIDATE_VERSION=1/0,VERBOSE=1/0,THREADS=N,COLLATE=1/0,MAX_RECORD=N,MAX_RAM_PERCENT=N,TMP_PATH=/path/to/tmp,LOG_PATH=/path/to/file.log)\n");
 	printf("    Where 1/0 represents true/false, and N is an integer.\n");
-	printf("    FILE_DEL: Delete file after importation is complete.\n");
-	printf("    KEYS: Number of binary keys in the CSV file.\n");
-	printf("    MZ: MZ file indicator.\n");
-	printf("    BIN: Binary file indicator.\n");
-	printf("    WFP: WFP file indicator.\n");
-	printf("    OVERWRITE: Overwrite the destination table.\n");
-	printf("    SKIP_SORT: Skip the sorting step.\n");
-	printf("    FIELDS: Number of CSV fields.\n");
-	printf("    SKIP_FIELDS_CHECK: Check field quantity during importation.\n");
-	printf("    VALIDATE_VERSION: Validate version.json.\n");
-	printf("    VERBOSE: Enable verbose mode.\n");
-	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes.\n");
-	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed.\n");
+	printf("    FILE_DEL: Delete file after importation is complete. Default value: 0.\n");
+	printf("    KEYS: Number of binary keys in the CSV file. Default value: 1.\n");
+	printf("    KEY_SIZE: Key length in bytes: 8 for CRC64, 16 for MD5. Default value: 16 (the auto-generated db.conf sets 8).\n");
+	printf("    MZ: MZ file indicator. Default value: 0.\n");
+	printf("    BIN: Binary file indicator. Default value: 0.\n");
+	printf("    WFP: WFP file indicator. Default value: 0.\n");
+	printf("    OVERWRITE: Overwrite the destination table. Default value: 0.\n");
+	printf("    SORT: Sort the tuples during the import process. Default value: 1.\n");
+	printf("    FIELDS: Number of CSV fields. Default value: 1.\n");
+	printf("    VALIDATE_FIELDS: Check field quantity during importation. Default value: 1.\n");
+	printf("    VALIDATE_VERSION: Validate version.json. Default value: 1.\n");
+	printf("    VERBOSE: Enable verbose mode. Default value: 0.\n");
+	printf("    THREADS: Number of threads used during the importation process. Default value: half of the available cores.\n");
+	printf("    COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. Default value: 0.\n");
+	printf("    MAX_RECORD: define the max record size, if a sector is bigger than \"MAX_RECORD\" bytes will be removed. Default value: 1024.\n");
+	printf("                Collate reserves a fixed slot of MAX_RECORD bytes per record, so this value drives the collate memory\n");
+	printf("                footprint. Lower it to match the table's real record size on tables with many records under one key.\n");
 	printf("    MAX_RAM_PERCENT: max %% of TOTAL system RAM the collate may use to hold input sectors in memory, aggregated across all threads.\n");
 	printf("                     Threads share a single budget: a sector is loaded in RAM only while the running total fits; otherwise it is collated in (slower) disk mode.\n");
 	printf("                     Valid range 1-100; values <=0 or >100 fall back to the default. Default value: 50.\n");
@@ -95,7 +106,7 @@ void help()
 
 	printf("	bulk insert  DBNAME/TABLENAME from PATH\n");
 	printf("    	Import data from PATH into given db/table. If PATH is a directory, the files inside will be recursively imported.\n");
-	printf("    	The configuration will be taken from the file \"db.conf\" at %s. A default configuration file will be created if it does not exist\n", LDB_CFG_PATH);
+	printf("    	The configuration will be taken from the file \"DBNAME.conf\" at %s. A default configuration file will be created if it does not exist\n\n", LDB_CFG_PATH);
 	
 	printf("	insert into DBNAME/TABLENAME key KEY hex DATA\n");
 	printf("    	Inserts data (hex) into given db/table for the given hex key\n\n");
@@ -116,9 +127,9 @@ void help()
 	printf("    	Deletes all records for the given comma separated hex key list from the db/table. Max record length expected\n\n");
 
 	printf("	delete from DBNAME/TABLENAME record CSV_RECORD\n");
-	printf("    	Deletes the specific CSV record from the specified table. Some field of the CSV may be skippet from the comparation using '*'\n");
-	printf("    	Example 1: delete from db/url record key,madler,*,2.4,20171227,zlib,pkg:github/madler/pigz,https://github.com/madler/pigz/archive/v2.4.zip\n");
-	printf("    	All the records matching the all the csv's field with exception of the second thirdone will be removed\n\n");
+	printf("    	Deletes the specific CSV record from the specified table. Fields of the CSV may be excluded from the comparison using '*'\n");
+	printf("    	Example: delete from db/url record key,madler,*,2.4,20171227,zlib,pkg:github/madler/pigz,https://github.com/madler/pigz/archive/v2.4.zip\n");
+	printf("    	All the records matching every csv field except the third one will be removed\n\n");
 
 	printf("	delete from DBNAME/TABLENAME records from PATH\n");
 	printf("    	Similar to the previous command, but the records (may be more than one) will be loaded from a csv file in PATH\n\n");
@@ -136,7 +147,7 @@ void help()
 	printf("    	Dumps table contents with first N bytes in hex\n\n");
 	
 	printf("	dump keys from DBNAME/TABLENAME\n");
-	printf("    	Dumps a unique list of existing keys (binary output)\n\n");
+	printf("    	Dumps a unique list of existing keys (hex, one per line)\n\n");
 	
 	printf("	cat KEY from DBNAME/MZTABLE\n");
 	printf("		Shows the contents for KEY in MZ archive\n");
@@ -147,6 +158,10 @@ void help()
 	printf("		If \"--collate\" option is present, each table will be collated during the importation process.\n");
 	printf("		This command is an alias of \"bulk insert\" using the default parameters of an standar ldb\n");
 	printf("	ldb -f [filename]	Process a list of commands from a file named filename\n");
+	printf("	ldb -v [--version]	Print the LDB version\n");
+	printf("	ldb -V [--verbose]	Enable verbose output\n");
+	printf("	ldb -q [--quiet]	Suppress log output\n");
+	printf("	ldb -h [--help]		Print this command list\n");
 
 
 
