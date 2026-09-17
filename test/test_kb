@@ -85,9 +85,16 @@ test_10_log_path() {
 }
 
 setup_suite () {
+    # This suite covers the MD5 (16-byte key) mode. The default generated
+    # configuration targets CRC64 (KEY_SIZE=8), so pin KEY_SIZE=16 in the db
+    # config before importing: both the setup import and test_6 ("ldb -u")
+    # take their key size from this file.
+    echo "create config test_kb" | ../ldb -q
+    sed -i 's/KEY_SIZE=8/KEY_SIZE=16/' /usr/local/etc/scanoss/ldb/test_kb.conf
     ../ldb -u source/mined -n test_kb
 }
 teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
+    rm -f /usr/local/etc/scanoss/ldb/test_kb.conf
     rm -f /tmp/null_sector_test /tmp/null_sector_build.log
 }
