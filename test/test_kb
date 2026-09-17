@@ -102,6 +102,27 @@ test_10_configuration() {
     assert_equals "$config" "$result"
 }
 
+test_11_log_path() {
+    custom_log="/tmp/test_kb_custom.log"
+    rm -f $custom_log
+    default_log_lines=$(wc -l < /var/log/scanoss/ldb/test_kb.log)
+
+    echo "bulk insert test_kb/file from source/mined/file with (TMP_PATH=/var,FILE_DEL=0,LOG_PATH=$custom_log)" | ../ldb -q
+    assert "test -e $custom_log" "custom log file was not created"
+
+    result=$(head -1 $custom_log)
+    assert_equals "Exec Time:" "$(echo $result | cut -d' ' -f1-2)" "custom log header fails"
+
+    cores=$(nproc)
+    threads=$((cores / 2))
+    config="file configuration: (KEYS=2, VALIDATE_FIELDS=1, FIELDS=3, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=$threads, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/var)"
+    result=$(tac $custom_log | grep -m 1 "file configuration:")
+    assert_equals "$config" "$result" "custom log content fails"
+
+    assert_equals "$default_log_lines" "$(wc -l < /var/log/scanoss/ldb/test_kb.log)" "default log was written despite LOG_PATH"
+    rm -f $custom_log
+}
+
 setup_suite () {
     ../ldb -u source/mined -n test_kb
 }
