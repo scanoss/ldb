@@ -168,6 +168,66 @@ test_13_keys3_binary_subkeys() {
     rm -rf "$tmpdir" /var/lib/ldb/test_kb3 /usr/local/etc/scanoss/ldb/test_kb3.conf /var/log/scanoss/ldb/test_kb3.log
 }
 
+#Regression: the collate must not silently discard records of a key that owns
+#many of them. ldb_collate_add_variable_record() caps a key's list at the input
+#sector size (max_key_bytes), but it measures the list with collate->data_ptr,
+#which advances by a FIXED rec_width slot per record (key_ln + MAX_RECORD + 4 =
+#2060 B for KEY_SIZE=8 / MAX_RECORD=2048) regardless of the record's real size.
+#Comparing slot bytes against a byte size taken from the sector file makes the
+#cap fire after sector_size/2060 records instead of at sector_size worth of real
+#data - more than 10x too early for typical records - and every further record of
+#that key is dropped while the import still reports success.
+#
+#60000 distinct 27-byte records under one key: the sector file is ~86 MB (mostly
+#the fixed 256^3 x 5-byte pointer map), so the buggy cap trips at ~41770 records
+#and ~18000 valid records disappear.
+test_14_collate_keeps_all_records_of_a_large_key() {
+    # Start from a clean state so leftovers from a prior (possibly failed) run
+    # cannot contaminate the assertion.
+    rm -rf /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
+    tmpdir=$(mktemp -d)
+    key="a7fc2c156d152b64"
+    records=60000
+    awk -v k="$key" -v n="$records" \
+        'BEGIN { for (i = 0; i < n; i++) printf "%s,CVE-2024-%06d,vuln_source_%06d\n", k, i, i }' > "$tmpdir/a7.csv"
+
+    echo "bulk insert test_kbcap/vulnerability from $tmpdir/a7.csv with (KEYS=1,KEY_SIZE=8,FIELDS=3,SORT=0,COLLATE=1,MAX_RECORD=2048,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    # Sanity: the loss must come from the collate, not from the CSV import.
+    imported=$(grep -oE "[0-9]+ records imported" /var/log/scanoss/ldb/test_kbcap.log | tail -n1 | cut -d' ' -f1)
+    assert_equals "$records" "$imported" "csv was not fully imported, the rest of this test is meaningless"
+
+    result=$(echo "select from test_kbcap/vulnerability key $key csv hex 8" | ../ldb -q | wc -l)
+    assert_equals "$records" "$result" "collate dropped records of a large key (per-key cap counts fixed rec_width slots instead of real record bytes)"
+
+    # A truncated key means data was discarded: it must never be silent.
+    assert "! grep -q 'COLLATE-CAP' /var/log/scanoss/ldb/test_kbcap.log" "collate hit the per-key cap on legitimate data"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
+}
+
+#Regression: the per-key cap is applied while records are read, i.e. BEFORE
+#ldb_eliminate_duplicates(), so a key whose raw records are mostly duplicates was
+#truncated on the raw count and the survivors were then deduplicated down to a
+#small fraction of the real data. 20000 distinct records repeated 6 times each:
+#the buggy cap kept ~45000 of the 120000 raw records, which deduplicate to ~7500
+#distinct ones - 62% of the real data gone.
+test_14b_collate_cap_not_applied_before_dedup() {
+    rm -rf /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
+    tmpdir=$(mktemp -d)
+    key="c3fc2c156d152b64"
+    distinct=20000
+    awk -v k="$key" -v n="$distinct" \
+        'BEGIN { for (i = 0; i < n; i++) for (r = 0; r < 6; r++) printf "%s,CVE-2024-%06d,pkg:github/imagemagick/imagemagick,advisory_source_%06d\n", k, i, i }' > "$tmpdir/c3.csv"
+
+    echo "bulk insert test_kbcap/vulnerability from $tmpdir/c3.csv with (KEYS=1,KEY_SIZE=8,FIELDS=4,SORT=0,COLLATE=1,MAX_RECORD=2048,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    result=$(echo "select from test_kbcap/vulnerability key $key csv hex 8" | ../ldb -q | wc -l)
+    assert_equals "$distinct" "$result" "collate truncated a duplicate-heavy key before deduplicating it"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
+}
+
 setup_suite () {
     echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8)' | ../ldb
 }
@@ -175,4 +235,6 @@ teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
     rm -rf /usr/local/etc/scanoss/ldb/test_kb.conf
     rm -f /tmp/null_sector_test /tmp/null_sector_build.log
+    # test_14 leaves an ~86 MB sector behind when it fails before its own cleanup
+    rm -rf /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
 }

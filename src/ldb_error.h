@@ -8,6 +8,7 @@
 #define LDB_ERROR_NODE_WRITE_FAILS -58//E058 Error writing node
 #define LDB_ERROR_NODE_SIZE_INVALID -60 //E060 Unsupported node_length size (must be 2 or 4 bytes)
 #define LDB_ERROR_RECORD_LENGHT_INVAID -76//E076 Max record length should equal fixed record length
+#define LDB_ERROR_COLLATE_TRUNCATED -78 //E078 Collate discarded records of a key that exceeded the sector-size cap
 
 #define LDB_ERROR_MEM_NOMEM -200 //no memory available
 #endif

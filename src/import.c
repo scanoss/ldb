@@ -1607,6 +1607,11 @@ int import_collate_sector(ldb_importation_config_t *config)
 					collate_committed_ram_kb -= reserved_ram_kb;
 					pthread_mutex_unlock(&lock);
 				}
+
+				/* The collate dropped records of at least one key. The sector is
+				   incomplete, so the import must not report success. */
+				if (collate.truncated_keys)
+					return LDB_ERROR_COLLATE_TRUNCATED;
 			}
 			else
 			{
