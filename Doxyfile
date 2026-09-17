@@ -5,7 +5,7 @@
 #---------------------------------------------------------------------------
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "LDB"
-PROJECT_NUMBER         = 3.1.1
+PROJECT_NUMBER         = 5.0.0-crc64
 PROJECT_BRIEF          = "Linked-list database"
 PROJECT_LOGO           = doc/scanoss-logo.png
 OUTPUT_DIRECTORY       = doc

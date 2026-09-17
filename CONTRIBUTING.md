@@ -24,6 +24,25 @@ When reviewing your pull request, we will follow a checklist similar to this one
 
 We will also verify that the functionality implemented change serves the general public and not a particular interest group. 
 
+### Release lines and tagging
+
+LDB is maintained as two parallel release lines, and a pull request must target the right one:
+
+| Release line | Branch | Versions | Tag format |
+|---|---|---|---|
+| Traditional | `main` | 4.x | `vMAJOR.MINOR.PATCH` (e.g. `v4.1.11`) |
+| CRC64-compatible | `crc64` | 5.x and later | `vMAJOR.MINOR.PATCH-crc64` (e.g. `v5.0.0-crc64`) |
+
+The `-crc64` suffix is mandatory on the CRC64 line: both lines are tagged in the same repository, and the suffix is what keeps
+their tags, release artifacts and installed package versions distinguishable. It is also carried by `LDB_VERSION`, so
+`ldb -v` identifies which line a binary comes from.
+
+Because RPM does not allow `-` in the `Version` field, `package.sh` translates the suffix to `_` for the spec file
+(`5.0.0-crc64` becomes `5.0.0_crc64`). Debian packages keep the tag spelling as is.
+
+A fix that applies to both lines should be submitted against `main` and then ported to `crc64`; the two branches are not merged
+into each other.
+
 ### Licensing
 
 The SCANOSS Platform is released under the GPL-2.0 license. If you wish to contribute, you must accept that you are aware of the license under which the project is released, and that your contribution will be released under the same license. Sometimes the GPL-2.0 license is incompatible with other licenses chosen by other projects. Therefore, you must accept that your contribution can also be released under the MIT license, which is the license we choose for those situations. Unless you expressly request otherwise, we may use your name, email address, username or URL for your attribution notice text. The submission of your contribution implies that you agree with these licensing terms.
