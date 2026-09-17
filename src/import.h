@@ -24,6 +24,7 @@ typedef union import_params {
 		int collate_max_rec;
 		int collate_max_ram_percent;
 		char tmp_path[LDB_MAX_PATH];
+		char log_path[LDB_MAX_PATH];
 	} params;
 	int params_arr[IMPORT_PARAMS_NUMBER];
 } import_params_t;
