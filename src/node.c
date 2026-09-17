@@ -155,7 +155,7 @@ int ldb_node_write (struct ldb_table table, FILE *ldb_sector, uint8_t *key, uint
 	}
 	else 
 	{
-		log_info("E060 Unsupported node_length size (must be 2 or 4 bytes)\n");
+		log_info("E077 Unsupported node_length size (must be 2 or 4 bytes)\n");
 		return LDB_ERROR_NODE_SIZE_INVALID;
 	}
 
