@@ -1293,7 +1293,7 @@ static void opt_add(const import_params_t * cmd_in, import_params_t * cfg)
 
 bool ldb_create_db_config_default(char * dbname)
 {
-	#define DEFAULT_CONFIG_STRING "GLOBAL: (VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=%d, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"\
+	#define DEFAULT_CONFIG_STRING "GLOBAL: (KEY_SIZE=8, VALIDATE_FIELDS=1, VALIDATE_VERSION=1, SORT=1, FILE_DEL=0, OVERWRITE=0, WFP=0, MZ=0, VERBOSE=0, THREADS=%d, COLLATE=0, MAX_RECORD=2048, MAX_RAM_PERCENT=50, TMP_PATH=/tmp)\n"\
 					"sources: (MZ=1, KEYS=1)\n"\
 					"notices: (MZ=1, KEYS=1)\n"\
 					"attribution: (KEYS=1, FIELDS=2)\n"\
@@ -1607,6 +1607,11 @@ int import_collate_sector(ldb_importation_config_t *config)
 					collate_committed_ram_kb -= reserved_ram_kb;
 					pthread_mutex_unlock(&lock);
 				}
+
+				/* The collate dropped records of at least one key. The sector is
+				   incomplete, so the import must not report success. */
+				if (collate.truncated_keys)
+					return LDB_ERROR_COLLATE_TRUNCATED;
 			}
 			else
 			{

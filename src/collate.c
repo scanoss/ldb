@@ -338,19 +338,34 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	/* Add record exceeds limit, skip it */
 	if (size > collate->max_rec_ln) return false;
 
-	/* Per-key memory cap: a key's list cannot legitimately exceed its sector
-	   size. Once the buffer would grow past that bound, drop further records for
-	   this key (truncate) and log it once, so a duplicated/corrupt key cannot
-	   grow the buffer without bound and OOM the process. */
-	if (collate->max_key_bytes && (uint64_t)(collate->data_ptr + collate->rec_width) > collate->max_key_bytes)
+	/* Per-key memory cap: a key's records cannot legitimately exceed its sector
+	   size. Once that bound is passed, drop further records for this key
+	   (truncate) and log it once, so a duplicated/corrupt key cannot grow the
+	   buffer without bound and OOM the process.
+
+	   The comparison must be made in REAL bytes, which is what max_key_bytes
+	   measures (the size of the input sector file). collate->data_ptr is not a
+	   byte count of the data: it advances by a fixed rec_width slot per record
+	   (key_ln + MAX_RECORD + 4, e.g. 2060 bytes for KEY_SIZE=8/MAX_RECORD=2048)
+	   whatever the record's real size. Comparing it against max_key_bytes made
+	   the cap fire after max_key_bytes/rec_width records instead of at
+	   max_key_bytes worth of data - over 10x too early for typical records, and
+	   sooner still because the sector file size is dominated by the fixed
+	   256^3 pointer map - silently discarding valid records of any key holding
+	   more than a few tens of thousands of them. */
+	uint64_t rec_bytes = (uint64_t) LDB_KEY_LN + subkey_ln + size + 4;
+
+	if (collate->max_key_bytes && collate->key_bytes + rec_bytes > collate->max_key_bytes)
 	{
 		if (!collate->key_truncated)
 		{
 			char key_hex[LDB_KEY_LN * 2 + 1];
 			ldb_bin_to_hex(key, LDB_KEY_LN, key_hex);
-			log_info("COLLATE-CAP: key %s reached sector-size cap (%lu bytes, %ld records so far). Truncating remaining records for this key.\n",
-			         key_hex, (unsigned long) collate->max_key_bytes, collate->key_rec_count);
+			log_info("COLLATE-CAP: key %s reached sector-size cap (%lu bytes, %ld records / %lu bytes so far). Truncating remaining records for this key.\n",
+			         key_hex, (unsigned long) collate->max_key_bytes, collate->key_rec_count,
+			         (unsigned long) collate->key_bytes);
 			collate->key_truncated = true;
+			collate->truncated_keys++;
 		}
 		return false;
 	}
@@ -391,6 +406,7 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	uint32_write(collate->data + collate->data_ptr, size);
 	collate->data_ptr += 4;
 
+	collate->key_bytes += rec_bytes;
 	collate->rec_count++;
 	return true;
 }
@@ -627,12 +643,11 @@ bool ldb_collate_handler(struct ldb_table *table, uint8_t *key, uint8_t *subkey,
 		/* Reset data pointer */
 		collate->data_ptr = 0;
 		collate->key_rec_count = 0;
+		collate->key_bytes = 0;
 		collate->key_truncated = false;
 	}
-	else
-	{
-		collate->key_rec_count++;
-	}
+
+	collate->key_rec_count++;
 
 	/* No hard cap on records per key: the collate buffer grows on demand in
 	   ldb_collate_add_variable_record, so large lists are kept in full instead
@@ -754,6 +769,10 @@ bool ldb_collate_init(struct ldb_collate_data * collate, struct ldb_table table,
 	collate->max_rec_ln = max_rec_ln;
 	collate->rec_count = 0;
 	collate->key_rec_count = 0;
+	collate->key_bytes = 0;
+	collate->max_key_bytes = 0;
+	collate->key_truncated = false;
+	collate->truncated_keys = 0;
 	collate->del_count = 0;
 	collate->in_table = table;
 	collate->out_table = out_table;
@@ -823,13 +842,16 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 	if (!sector_mem->data && !sector_mem->file)
 		sector_mem->file = ldb_open(collate->in_table, k, "r");
 
-	/* Cap a single key's in-memory list at the sector size. A key's records are
-	   a subset of its sector, so its buffer can never legitimately exceed the
-	   sector; anything beyond that is duplicated/corrupt data. Records past this
-	   bound are dropped (see ldb_collate_add_variable_record) so a pathological
-	   key truncates instead of OOMing the process. Size comes from the sector
-	   struct (RAM mode) or the open handle (disk mode, where size is 0). */
+	/* Cap a single key's records at the sector size. A key's records are a
+	   subset of its sector, so they can never legitimately exceed it; anything
+	   beyond that is duplicated/corrupt data. Records past this bound are
+	   dropped (see ldb_collate_add_variable_record, which accounts in real
+	   bytes) so a pathological key truncates instead of OOMing the process.
+	   Size comes from the sector struct (RAM mode) or the open handle (disk
+	   mode, where size is 0). */
 	collate->key_truncated = false;
+	collate->key_bytes = 0;
+	collate->truncated_keys = 0;
 	collate->max_key_bytes = sector_mem->size;
 	if (collate->max_key_bytes == 0 && sector_mem->file)
 	{
@@ -868,6 +890,12 @@ void ldb_collate_sector(struct ldb_collate_data *collate, uint8_t sector, ldb_se
 
 	if (collate->del_count)
 		log_info("%s - sector %02X: %'ld records deleted\n", collate->in_table.table, sector, collate->del_count);
+
+	/* Hitting the cap means records were discarded: report it as an error, never
+	   as a plain "completed". The caller turns this into a non-zero status. */
+	if (collate->truncated_keys)
+		log_info("E078 Table %s - sector %2x: %'ld key(s) exceeded the sector-size cap (%lu bytes); their remaining records were DISCARDED\n",
+		         collate->in_table.table, sector, collate->truncated_keys, (unsigned long) collate->max_key_bytes);
 
 	log_info("Table %s - sector %2x: collate completed with %'ld records\n", collate->in_table.table , sector, collate->rec_count);
 
