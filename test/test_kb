@@ -123,10 +123,32 @@ test_11_log_path() {
     rm -f $custom_log
 }
 
+#Regression: the collate must write the record group header for the first record
+#of a sector slot even when its subkey is all zeros. last_key starts zeroed, so an
+#all-zero subkey was taken as "same subkey", the group header was never written
+#and the whole node was lost (including the following keys of the same slot).
+test_12_collate_zero_subkey_first_record() {
+    rm -rf /var/lib/ldb/test_kbzero /usr/local/etc/scanoss/ldb/test_kbzero.conf /var/log/scanoss/ldb/test_kbzero.log
+    tmpdir=$(mktemp -d)
+    zero_key="11223344000000000000000000000000"
+    next_key="11223344000000000000000000000001"
+    printf '%s,zero_subkey_a\n%s,zero_subkey_b\n%s,next_subkey\n' $zero_key $zero_key $next_key > "$tmpdir/11.csv"
+
+    echo "bulk insert test_kbzero/t1 from $tmpdir/11.csv with (KEYS=1,FIELDS=2,COLLATE=1,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    result=$(echo "select from test_kbzero/t1 key $zero_key csv hex 32" | ../ldb -q | wc -l)
+    assert_equals "2" "$result" "collate lost the records of an all-zero subkey"
+    result=$(echo "select from test_kbzero/t1 key $next_key csv hex 32" | ../ldb -q | wc -l)
+    assert_equals "1" "$result" "collate lost the key following an all-zero subkey"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbzero /usr/local/etc/scanoss/ldb/test_kbzero.conf /var/log/scanoss/ldb/test_kbzero.log
+}
+
 setup_suite () {
     ../ldb -u source/mined -n test_kb
 }
 teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
     rm -rf /usr/local/etc/scanoss/ldb/test_kb.conf
+    rm -rf /var/lib/ldb/test_kbzero /usr/local/etc/scanoss/ldb/test_kbzero.conf /var/log/scanoss/ldb/test_kbzero.log
 }

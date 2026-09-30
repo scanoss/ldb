@@ -178,6 +178,7 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 	/* Last record checksum to skip duplicates */
 	uint8_t *last_data = calloc(collate->rec_width, 1);
 	uint16_t last_rec_size = 0;
+	bool first_record = true;
 
 	if (!buffer || !last_key || !last_data)
 	{
@@ -197,8 +198,11 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		if (collate->table_rec_ln) rec_size = collate->table_rec_ln;
 		else rec_size = uint32_read(rec_key + collate->rec_width - LDB_KEY_LN);
 
-		/* Check if key is different than the last one */
-		new_subkey = (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+		/* Check if key is different than the last one (always start a group on the
+		   first record: an all-zero subkey would otherwise collide with the zeroed
+		   last_key and the record group header would never be written) */
+		new_subkey = first_record || (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+		first_record = false;
 
 		/* If record is duplicated (same subkey and same data), skip it */
 		if (!new_subkey && rec_size == last_rec_size && !memcmp(data, last_data, rec_size)) continue;
