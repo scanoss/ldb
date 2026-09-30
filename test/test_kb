@@ -84,6 +84,23 @@ test_10_log_path() {
     rm -f $custom_log
 }
 
+#Regression (#61), MD5 (16-byte key) mode: the collate must not drop the record
+#of a key whose previous key in the same map slot carries the same data.
+test_11_collate_keeps_records_of_adjacent_keys_with_same_data() {
+    rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+    tmpdir=$(mktemp -d)
+    printf '11223344000000000000000000000001,0,3\n11223344000000000000000000000001,0,3\n11223344000000000000000000000002,0,3\n11223344000000000000000000000003,0,2\n11223344000000000000000000000004,0,3\n55667788000000000000000000000001,0,3\n' > "$tmpdir/11.csv"
+
+    echo "bulk insert test_kbdup/t1 from $tmpdir/11.csv with (KEYS=1,KEY_SIZE=16,FIELDS=3,COLLATE=1,MAX_RECORD=2048,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    for k in 11223344000000000000000000000001 11223344000000000000000000000002 11223344000000000000000000000003 11223344000000000000000000000004 55667788000000000000000000000001; do
+        result=$(echo "select from test_kbdup/t1 key $k csv hex 16" | ../ldb -q | wc -l)
+        assert_equals "1" "$result" "collate lost (or did not deduplicate) the record of key $k"
+    done
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+}
+
 setup_suite () {
     # This suite covers the MD5 (16-byte key) mode. The default generated
     # configuration targets CRC64 (KEY_SIZE=8), so pin KEY_SIZE=16 in the db
@@ -97,4 +114,5 @@ teardown_suite () {
     rm -rf /var/lib/ldb/test_kb
     rm -f /usr/local/etc/scanoss/ldb/test_kb.conf
     rm -f /tmp/null_sector_test /tmp/null_sector_build.log
+    rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
 }

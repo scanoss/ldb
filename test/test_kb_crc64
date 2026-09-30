@@ -228,6 +228,46 @@ test_14b_collate_cap_not_applied_before_dedup() {
     rm -rf "$tmpdir" /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
 }
 
+#Regression (#61): the collate deduplicated records comparing only their data
+#with the previous record, whatever key it belonged to. All the keys sharing the
+#4-byte main key are collated together and sorted by key then data, so when the
+#last record of a key and the first one of the next key carried the same data,
+#the second key lost its record while the import still reported success.
+test_15_collate_keeps_records_of_adjacent_keys_with_same_data() {
+    rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+    tmpdir=$(mktemp -d)
+    # 1122334400000001 is duplicated on purpose: real duplicates must still go
+    printf '1122334400000001,0,3\n1122334400000001,0,3\n1122334400000002,0,3\n1122334400000003,0,2\n1122334400000004,0,3\n5566778800000001,0,3\n' > "$tmpdir/11.csv"
+
+    echo "bulk insert test_kbdup/t1 from $tmpdir/11.csv with (KEYS=1,KEY_SIZE=8,FIELDS=3,COLLATE=1,MAX_RECORD=2048,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    for k in 1122334400000001 1122334400000002 1122334400000003 1122334400000004 5566778800000001; do
+        result=$(echo "select from test_kbdup/t1 key $k csv hex 8" | ../ldb -q | wc -l)
+        assert_equals "1" "$result" "collate lost (or did not deduplicate) the record of key $k"
+    done
+    result=$(echo "select from test_kbdup/t1 key 1122334400000002 csv hex 8" | ../ldb -q)
+    assert_equals "1122334400000002,0,3" "$result"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+}
+
+#Regression: the collate buffer is reused for every main key of a sector, and a
+#record only overwrites the first bytes of its fixed-width slot. The sort compares
+#the whole slot, so bytes left by a previous key's longer records could sort two
+#identical records apart (around "0,3,m") and they escaped deduplication.
+test_16_collate_dedup_ignores_stale_slot_bytes() {
+    rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+    tmpdir=$(mktemp -d)
+    printf '11aaaaaa00000001,0,3,aaaaaa\n11aaaaaa00000001,0,3,zzzzzz\n11bbbbbb00000001,0,3\n11bbbbbb00000001,0,3\n11bbbbbb00000001,0,3,m\n' > "$tmpdir/11.csv"
+
+    echo "bulk insert test_kbdup/t1 from $tmpdir/11.csv with (KEYS=1,KEY_SIZE=8,FIELDS=4,VALIDATE_FIELDS=0,SORT=0,COLLATE=1,MAX_RECORD=2048,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    result=$(echo "select from test_kbdup/t1 key 11bbbbbb00000001 csv hex 8" | ../ldb -q | wc -l)
+    assert_equals "2" "$result" "collate kept a duplicate separated by stale slot bytes"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+}
+
 setup_suite () {
     echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8)' | ../ldb
 }
@@ -237,4 +277,5 @@ teardown_suite () {
     rm -f /tmp/null_sector_test /tmp/null_sector_build.log
     # test_14 leaves an ~86 MB sector behind when it fails before its own cleanup
     rm -rf /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
+    rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
 }

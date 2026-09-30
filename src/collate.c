@@ -188,8 +188,18 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 		if (collate->table_rec_ln) rec_size = collate->table_rec_ln;
 		else rec_size = uint32_read(rec_key + collate->rec_width - LDB_KEY_LN);
 
-		/* If record is duplicated, skip it */
-		if (rec_size == last_rec_size) if (!memcmp(data, last_data, rec_size)) continue;
+		/* Check if key is different than the last one (always start a group on the
+		   first record: an all-zero subkey would otherwise collide with the zeroed
+		   last_key and the record group header would never be written) */
+		new_subkey = first_record || (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
+
+		/* If record is duplicated, skip it. Only a record of the same subkey can
+		   be a duplicate: the buffer holds every subkey sharing the 4-byte main
+		   key, sorted by key then data, so the last record of a subkey and the
+		   first one of the next subkey can carry identical data and still be
+		   two distinct records */
+		if (!new_subkey && rec_size == last_rec_size && !memcmp(data, last_data, rec_size)) continue;
+		first_record = false;
 
 		/* Update last record */
 		memcpy(last_data, data, rec_size);
@@ -197,11 +207,6 @@ bool ldb_import_list_variable_records(struct ldb_collate_data *collate)
 
 		uint32_t projected_size = buffer_ptr + rec_size  + collate->table_key_ln + (2 * LDB_PTR_LN) + out_table.ts_ln;
 
-		/* Check if key is different than the last one (always start a group on the
-		   first record: an all-zero subkey would otherwise collide with the zeroed
-		   last_key and the record group header would never be written) */
-		new_subkey = first_record || (memcmp(rec_key+LDB_KEY_LN, last_key+LDB_KEY_LN, subkey_ln) != 0);
-		first_record = false;
 		/* If node size is exceeded, initialize buffer */
 		if (projected_size >= LDB_MAX_REC_LN)
 		{
@@ -398,8 +403,12 @@ bool ldb_collate_add_variable_record(struct ldb_collate_data *collate, uint8_t *
 	memcpy(collate->data + collate->data_ptr, subkey, subkey_ln);
 	collate->data_ptr += subkey_ln;
 
-	/* Copy record */
+	/* Copy record and zero the rest of its slot. The buffer is reused for every
+	   key (and grown with realloc), so the tail would otherwise keep bytes of a
+	   previous record. The sort compares the whole slot, and stale tails can keep
+	   identical records from ending up adjacent, so they escape deduplication */
 	memcpy(collate->data + collate->data_ptr, data, size);
+	memset(collate->data + collate->data_ptr + size, 0, collate->max_rec_ln - size);
 	collate->data_ptr += collate->max_rec_ln;
 
 	/* Copy record length */
