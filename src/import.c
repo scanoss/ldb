@@ -1308,7 +1308,11 @@ bool ldb_create_db_config_default(char * dbname)
 					"file: (KEYS=2, FIELDS=3)\n"\
 					"pivot: (KEYS=2, FIELDS=2, VALIDATE_FIELDS=0)\n"\
 					"semgrep: (KEYS=1, FIELDS=5)\n"\
-					"wfp: (WFP=1, KEYS=1)\n"
+					"wfp: (WFP=1, KEYS=1)\n"\
+					"path: (KEYS=1, FIELDS=2)\n"\
+					"metadata: (MZ=1, KEYS=1)\n"\
+					"license_hints: (KEYS=1, FIELDS=6)\n"\
+					"copyright_hints: (KEYS=1, FIELDS=6)\n"
 	
 	char config_path[LDB_MAX_PATH] = "";
 	
