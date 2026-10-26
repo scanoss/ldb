@@ -101,6 +101,51 @@ test_11_collate_keeps_records_of_adjacent_keys_with_same_data() {
     rm -rf "$tmpdir" /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
 }
 
+#Regression (#67): csv bulk import silently dropped every line longer than 1,023
+#bytes (a fixed MAX_CSV_LINE_LEN cap on the whole getline() line), ignoring
+#MAX_RECORD. The limit must instead follow MAX_RECORD and apply to the record
+#data size, consistent with collate, and an oversized record must be counted and
+#logged rather than dropped in silence.
+test_12_import_respects_max_record_not_fixed_line_len() {
+    rm -rf /var/lib/ldb/test_kbmax /usr/local/etc/scanoss/ldb/test_kbmax.conf /var/log/scanoss/ldb/test_kbmax.log
+    tmpdir=$(mktemp -d)
+    # key(32 hex) + "," + data  -> record data size = line length - 33.
+    # With MAX_RECORD=2048: the first three must import (data <= 2048), the last
+    # one must be skipped (data 2967 > 2048). The 1100/2000-byte records are the
+    # ones the old fixed 1 KB cap dropped.
+    awk 'BEGIN {
+        split("1000 1100 2000 3000", N, " ")
+        for (i = 1; i <= 4; i++) {
+            key = sprintf("%032x", i)
+            d = ""; for (j = 0; j < N[i] - 33; j++) d = d "a"
+            printf "%s,%s\n", key, d
+        }
+    }' > "$tmpdir/00.csv"
+
+    echo "bulk insert test_kbmax/t from $tmpdir/00.csv with (KEYS=1,KEY_SIZE=16,FIELDS=2,MAX_RECORD=2048,SORT=0,VALIDATE_VERSION=0,OVERWRITE=1)" | ../ldb -q
+
+    imported=$(grep -oE "[0-9]+ records imported" /var/log/scanoss/ldb/test_kbmax.log | tail -n1 | cut -d' ' -f1)
+    assert_equals "3" "$imported" "import dropped records that fit within MAX_RECORD"
+
+    # Records whose data fits MAX_RECORD must be present, including the >1 KB ones.
+    for i in 1 2 3; do
+        k=$(printf '%032x' $i)
+        result=$(echo "select from test_kbmax/t key $k csv hex 16" | ../ldb -q | wc -l)
+        assert_equals "1" "$result" "import dropped a record within MAX_RECORD (key $k)"
+    done
+
+    # The record larger than MAX_RECORD must be skipped, not stored.
+    over=$(echo "select from test_kbmax/t key $(printf '%032x' 4) csv hex 16" | ../ldb -q | wc -l)
+    assert_equals "0" "$over" "import stored a record larger than MAX_RECORD"
+
+    # The skip must be visible: counted in the summary and logged (not silent).
+    skipped=$(grep -oE "[0-9]+ skipped" /var/log/scanoss/ldb/test_kbmax.log | tail -n1 | cut -d' ' -f1)
+    assert_equals "1" "$skipped" "oversized record was not counted as skipped"
+    assert "grep -q 'exceeds MAX_RECORD' /var/log/scanoss/ldb/test_kbmax.log" "oversized record skip was not logged"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kbmax /usr/local/etc/scanoss/ldb/test_kbmax.conf /var/log/scanoss/ldb/test_kbmax.log
+}
+
 setup_suite () {
     # This suite covers the MD5 (16-byte key) mode. The default generated
     # configuration targets CRC64 (KEY_SIZE=8), so pin KEY_SIZE=16 in the db

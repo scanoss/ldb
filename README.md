@@ -140,10 +140,12 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         THREADS: Number of threads used during the importation process. (Default: half of the available cores)
         COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. (Default: 0)
         MAX_RECORD: Maximum record size in bytes. (Default: 1024)
-                    Collate reserves one fixed slot of MAX_RECORD bytes per record, so this value drives the collate
-                    memory footprint. Lower it to match the table's real record size on tables with many records
-                    under a single key. If a key still exceeds the sector-size cap, its remaining records are
-                    DISCARDED and the import reports E078.
+                    Applied at two stages. At import, a CSV record whose data exceeds MAX_RECORD is skipped
+                    (counted in the import summary and logged), instead of the old fixed 1 KB limit on the whole
+                    CSV line. At collate, it reserves one fixed slot of MAX_RECORD bytes per record, so this
+                    value also drives the collate memory footprint. Lower it to match the table's real record
+                    size on tables with many records under a single key. If a key still exceeds the sector-size
+                    cap, its remaining records are DISCARDED and the import reports E078.
         MAX_RAM_PERCENT: max % of TOTAL system RAM the collate may use to hold input sectors in memory, aggregated
                          across all threads. Threads share a single budget: a sector is loaded in RAM only while the
                          running total fits; otherwise it is collated in (slower) disk mode.
