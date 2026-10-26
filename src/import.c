@@ -587,6 +587,14 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	/* Node size is a 16-bit int */
 	int node_limit = 65536;
 
+	/* Maximum data record size accepted on import. Follows MAX_RECORD, keeping
+	   import consistent with collate (which drops records with size > max_rec_ln)
+	   instead of the old fixed 1 KB cap on the whole CSV line. Hard-capped by the
+	   2-byte record-size field. */
+	int max_record = job->opt.params.collate_max_rec;
+	if (max_record <= 0 || max_record > LDB_MAX_REC_LN)
+		max_record = LDB_MAX_REC_LN;
+
 	uint8_t *itemid = calloc(MD5_LEN, 1);
 	uint8_t *field2 = calloc(MD5_LEN, 1);
 	uint8_t *item_buf = malloc(LDB_MAX_NODE_LN);
@@ -602,6 +610,11 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	uint32_t imported = 0;
 	uint32_t skipped = 0;
 	uint32_t skipped_invalid = 0;
+
+	/* Decode buffer for binary (base64) records. Grows with the line buffer so a
+	   record is never truncated to a fixed size; replaces the old 1 KB array. */
+	unsigned char *data_bin = NULL;
+	size_t data_bin_size = 0;
 
 	uint64_t totalbytes = ldb_file_size(job->csv_path);
 	size_t bytecounter = 0;
@@ -681,6 +694,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				free(item_buf);
 				free(item_lastid);
 				free(field2);
+				free(data_bin);
 				if (item_sector) ldb_close_unlock(item_sector);
 				return LDB_ERROR_THREAD_ABORT;
 			}
@@ -694,6 +708,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				free(item_buf);
 				free(item_lastid);
 				free(field2);
+				free(data_bin);
 				if (item_sector) ldb_close_unlock(item_sector);
 				return LDB_ERROR_CSV_TOO_MANY_SKIPPED;
 			}
@@ -730,10 +745,12 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			skipped_invalid++;
 			continue;
 		}
-		/* Skip records with sizes out of range */
-		if (lineln > MAX_CSV_LINE_LEN || lineln < min_line_size)
+		/* Skip malformed lines too short to hold a key and the field separators.
+		   The upper bound is no longer a fixed line length: it is enforced on the
+		   record data size against MAX_RECORD, below (consistent with collate). */
+		if (lineln < min_line_size)
 		{
-			log_debug("%s: Line %d -- Skipped, %ld exceed MAX line size %d.\n", job->csv_path, line_number, lineln, MAX_CSV_LINE_LEN);
+			log_debug("%s: Line %d -- Skipped, %ld below min line size %d.\n", job->csv_path, line_number, lineln, min_line_size);
 			skipped_invalid++;
 			continue;
 		}
@@ -803,13 +820,19 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 		/* Calculate record size */
 		int r_size = 0;
-		unsigned char data_bin[MAX_CSV_LINE_LEN];
 		if (data)
 		{
 			if (bin_mode)
-			{	
+			{
 				if (decode)
 				{
+					/* Grow the decode buffer to hold the whole line if needed; the
+					   base64 output is never larger than its input. */
+					if (len > data_bin_size)
+					{
+						data_bin_size = len;
+						data_bin = realloc(data_bin, data_bin_size);
+					}
 					r_size = decode(DECODE_BASE64,NULL, NULL, data, strlen(data), data_bin);
 					if (r_size <= 0)
 					{
@@ -833,6 +856,15 @@ int ldb_import_csv(ldb_importation_config_t * job)
 				continue;
 			}
 
+			/* Enforce MAX_RECORD on the data size, consistent with collate's
+			   max_rec_ln filter. Logged at info level (and counted) so an
+			   oversized record is no longer dropped silently. */
+			if (r_size > max_record)
+			{
+				log_info("%s: Line %d -- Skipped, record size %d exceeds MAX_RECORD %d.\n", job->csv_path, line_number, r_size, max_record);
+				skipped++;
+				continue;
+			}
 		}
 
 		if (data || (oss_bulk.keys > 1 && job->opt.params.csv_fields < 3))
@@ -881,6 +913,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 							free(item_buf);
 							free(item_lastid);
 							free(field2);
+							free(data_bin);
 							if (item_sector) ldb_close_unlock(item_sector);
 							return error;
 						}
@@ -981,6 +1014,7 @@ int ldb_import_csv(ldb_importation_config_t * job)
 			free(item_buf);
 			free(item_lastid);
 			free(field2);
+			free(data_bin);
 			if (item_sector) ldb_close_unlock(item_sector);
 			return error;
 		}
@@ -1005,8 +1039,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 	free(item_buf);
 	free(item_lastid);
 	free(field2);
+	free(data_bin);
 
-	
+
 	if (job->opt.params.overwrite)
 	{
 		for (int i=0; i < 256; i++)

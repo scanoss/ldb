@@ -542,7 +542,7 @@ bool key_in_delete_list(struct ldb_collate_data *collate, uint8_t *key, uint8_t 
 							result = true;
 						else
 						{
-							unsigned char tuple_bin[MAX_CSV_LINE_LEN];
+							unsigned char tuple_bin[LDB_MAX_REC_LN];
 							if(!decode && !ldb_decoder_lib_load())
 								return false;
 
