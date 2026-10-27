@@ -68,7 +68,9 @@ bulk insert DBNAME/TABLENAME from PATH with (CONFIG)
         VERBOSE: Enable verbose mode. (Default: 0).
         THREADS: Define the number of threads to be used during the importation process. Defaul value: half of system available.
         COLLATE: Perform collation after import, removing data larger than MAX_RECORD bytes. (Default: 0).
-        MAX_RECORD: Maximum record size in bytes (Default value: 2048).
+        MAX_RECORD: Maximum record size in bytes (Default value: 2048). Applied at import too: a CSV record whose
+                    data exceeds MAX_RECORD is skipped (counted and logged), instead of the old fixed 1 KB limit
+                    on the whole CSV line.
         MAX_RAM_PERCENT: limit the system RAM usage during collate process. Default value: 50.
         TMP_PATH: Path to the folder used for temporary files (default: /tmp).
         LOG_PATH: Path to a custom log file (default: /var/log/scanoss/ldb/DBNAME.log).
