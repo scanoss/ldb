@@ -268,6 +268,28 @@ test_16_collate_dedup_ignores_stale_slot_bytes() {
     rm -rf "$tmpdir" /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
 }
 
+#The files of a table folder are imported in alphabetical order, whatever order
+#the filesystem lists them in (readdir: creation order or hash order), so an
+#interrupted import leaves a clear boundary. The files are created in a mixed
+#order and imported one at a time (THREADS=1): the log shows the start order.
+test_17_import_files_in_alphabetical_order() {
+    rm -rf /var/lib/ldb/test_kborder /usr/local/etc/scanoss/ldb/test_kborder.conf /var/log/scanoss/ldb/test_kborder.log
+    tmpdir=$(mktemp -d)
+    mkdir -p "$tmpdir/t1"
+    for s in 80 ff 00 10 0a; do
+        printf '%s00000000000001,record_%s\n' "$s" "$s" > "$tmpdir/t1/$s.csv"
+    done
+
+    echo "bulk insert test_kborder from $tmpdir with (KEYS=1,KEY_SIZE=8,FIELDS=2,SORT=0,THREADS=1,FILE_DEL=0,VALIDATE_VERSION=0)" | ../ldb -q
+
+    order=$(grep -oE "t1/[0-9a-f]{2}\.csv: 1 records imported" /var/log/scanoss/ldb/test_kborder.log | cut -c4-5 | paste -sd' ')
+    assert_equals "00 0a 10 80 ff" "$order" "the files of the table were not imported in alphabetical order"
+    result=$(echo "select from test_kborder/t1 key 0a00000000000001 csv hex 8" | ../ldb -q)
+    assert_equals "0a00000000000001,record_0a" "$result"
+
+    rm -rf "$tmpdir" /var/lib/ldb/test_kborder /usr/local/etc/scanoss/ldb/test_kborder.conf /var/log/scanoss/ldb/test_kborder.log
+}
+
 setup_suite () {
     echo 'bulk insert test_kb from source_crc64/mined with (KEY_SIZE=8)' | ../ldb
 }
@@ -278,4 +300,5 @@ teardown_suite () {
     # test_14 leaves an ~86 MB sector behind when it fails before its own cleanup
     rm -rf /var/lib/ldb/test_kbcap /usr/local/etc/scanoss/ldb/test_kbcap.conf /var/log/scanoss/ldb/test_kbcap.log
     rm -rf /var/lib/ldb/test_kbdup /usr/local/etc/scanoss/ldb/test_kbdup.conf /var/log/scanoss/ldb/test_kbdup.log
+    rm -rf /var/lib/ldb/test_kborder /usr/local/etc/scanoss/ldb/test_kborder.conf /var/log/scanoss/ldb/test_kborder.log
 }
