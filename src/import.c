@@ -1932,8 +1932,7 @@ pthread_t thread_start(ldb_importation_config_t * job, pthread_t * tlist)
 }
 
 bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
-    DIR *dir;
-    struct dirent *ent;
+    struct dirent **ents;
 
 	/*Process one file with multiples sectors inside*/
 	if (*job->csv_path)
@@ -1953,25 +1952,25 @@ bool process_sectors(ldb_importation_config_t * job, pthread_t * tlist) {
 		}
 	}
 	
-	/*Process a directory with one sector per file*/
-    if ((dir = opendir(job->path)) != NULL) 
+	/*Process a directory with one sector per file, in alphabetical order
+	  (readdir returns the filesystem's order, e.g. hash order on ext4)*/
+	int n = scandir(job->path, &ents, NULL, alphasort);
+    if (n >= 0)
 	{
-		while ((ent = readdir(dir)) != NULL) 
+		for (int i = 0; i < n; i++)
 		{
-            if (!strcmp(ent->d_name,".") || !strcmp(ent->d_name,"..")) 
-				continue;
-
-			if (ent->d_type == DT_REG) 
+			if (ents[i]->d_type == DT_REG)
 			{
-				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ent->d_name);
+				snprintf(job->csv_path, LDB_MAX_PATH, "%s/%s", job->path, ents[i]->d_name);
 				pthread_t tid = thread_start(job, tlist);
 				if (tid == 0)
 					ldb_import(job);
-            } 
+            }
+			free(ents[i]);
         }
 
-        closedir(dir);
-    } 
+        free(ents);
+    }
 	else 
 	{
        	log_info("Cannot open directory: %s\n", job->path);
