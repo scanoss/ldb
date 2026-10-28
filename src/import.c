@@ -923,8 +923,9 @@ int ldb_import_csv(ldb_importation_config_t * job)
 
 	log_info("%s: %u records imported, %u skipped\n", job->csv_path, imported, skipped);
 
+	int fd = fileno(fp);
 	if (fclose(fp))
-		fprintf(stderr,"error closing %d\n", fileno(fp));
+		fprintf(stderr,"error closing %d\n", fd);
 	
 	if (job->opt.params.delete_after_import)
 		unlink(job->csv_path);
