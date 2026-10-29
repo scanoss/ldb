@@ -48,7 +48,7 @@ jobs:
           echo "Produced artifact at ${PWD}/artifacts/ldb"
 
       - name: 'Tar files'
-        run: tar czvf ldb-${{ github.ref_name }}-linux-amd64.tar.gz -C artifacts/ .
+        run: tar czvf "ldb-${GITHUB_REF_NAME//\//-}-linux-amd64.tar.gz" -C artifacts/ .
 
       - name: Prepare deb package
         id: build_deb
